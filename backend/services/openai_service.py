@@ -8,11 +8,17 @@ client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )
 
-def generate_chat_response(messages):
+def generate_streaming_response(messages):
 
-    response = client.chat.completions.create(
+    stream = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=messages
+        messages=messages,
+        stream=True
     )
 
-    return response.choices[0].message.content
+    for chunk in stream:
+
+        content = chunk.choices[0].delta.content
+
+        if content:
+            yield content

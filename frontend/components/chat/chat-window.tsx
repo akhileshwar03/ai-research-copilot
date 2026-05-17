@@ -1,7 +1,7 @@
 "use client";
-
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useState } from "react";
-import axios from "axios";
 
 type Message = {
   role: "user" | "assistant";
@@ -21,7 +21,6 @@ export default function ChatWindow() {
   const [loading, setLoading] = useState(false);
 
   const handleSendMessage = async () => {
-
     if (!input.trim()) return;
 
     const userMessage: Message = {
@@ -29,52 +28,76 @@ export default function ChatWindow() {
       content: input,
     };
 
-    // Build updated conversation history
     const updatedMessages = [
       ...messages,
       userMessage,
     ];
 
-    // Update UI immediately
     setMessages(updatedMessages);
 
-    // Clear input
-    setInput("");
+    const currentInput = input;
 
-    // Show loading state
+    setInput("");
     setLoading(true);
+
+    const assistantMessage: Message = {
+      role: "assistant",
+      content: "",
+    };
+
+    setMessages((prev) => [
+      ...prev,
+      assistantMessage,
+    ]);
 
     try {
 
-      const response = await axios.post(
+      const response = await fetch(
         "http://127.0.0.1:8000/chat",
         {
-          messages: updatedMessages,
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            messages: updatedMessages,
+          }),
         }
       );
 
-      const aiMessage: Message = {
-        role: "assistant",
-        content: response.data.response,
-      };
+      const reader = response.body?.getReader();
 
-      // Add AI response to conversation
-      setMessages((prev) => [
-        ...prev,
-        aiMessage,
-      ]);
+      if (!reader) return;
+
+      const decoder = new TextDecoder();
+
+      let streamedText = "";
+
+      while (true) {
+
+        const { done, value } =
+          await reader.read();
+
+        if (done) break;
+
+        streamedText += decoder.decode(value);
+
+        setMessages((prev) => {
+
+          const updated = [...prev];
+
+          updated[updated.length - 1] = {
+            role: "assistant",
+            content: streamedText,
+          };
+
+          return updated;
+        });
+      }
 
     } catch (error) {
 
       console.error(error);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Something went wrong.",
-        },
-      ]);
 
     }
 
@@ -99,15 +122,17 @@ export default function ChatWindow() {
           {messages.map((message, index) => (
             <div
               key={index}
-              className={`rounded-2xl p-4 ${
+              className={`rounded-2xl p-4 border border-zinc-800 ${
                 message.role === "user"
                   ? "bg-white text-black"
                   : "bg-zinc-900 text-zinc-200"
               }`}
             >
-              <p className="whitespace-pre-wrap text-sm leading-7">
-                {message.content}
-              </p>
+              <div className="prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.content}
+                </ReactMarkdown>
+              </div>
             </div>
           ))}
 

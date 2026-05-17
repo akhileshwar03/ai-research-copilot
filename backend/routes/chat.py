@@ -1,7 +1,8 @@
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from models.chat_models import ChatRequest
-from services.openai_service import generate_chat_response
+from services.openai_service import generate_streaming_response
 
 router = APIRouter()
 
@@ -16,10 +17,7 @@ def chat(request: ChatRequest):
         for msg in request.messages
     ]
 
-    ai_response = generate_chat_response(
-        formatted_messages
+    return StreamingResponse(
+        generate_streaming_response(formatted_messages),
+        media_type="text/plain"
     )
-
-    return {
-        "response": ai_response
-    }
