@@ -1,39 +1,16 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
-from openai import OpenAI
-from dotenv import load_dotenv
-import os
+from fastapi.middleware.cors import CORSMiddleware
 
-load_dotenv()
+from routes.chat import router as chat_router
 
 app = FastAPI()
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-class ChatRequest(BaseModel):
-    message: str
-
-@app.get("/")
-def root():
-    return {"message": "AI Research Copilot Backend Running"}
-
-@app.post("/chat")
-def chat(request: ChatRequest):
-
-    response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=[
-            {
-                "role": "user",
-                "content": request.message
-            }
-        ]
-    )
-
-    ai_response = response.choices[0].message.content
-
-    return {
-        "response": ai_response
-    }
+app.include_router(chat_router)

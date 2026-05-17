@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import axios from "axios";
 
 type Message = {
   role: "user" | "assistant";
@@ -8,6 +9,7 @@ type Message = {
 };
 
 export default function ChatWindow() {
+
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -16,18 +18,67 @@ export default function ChatWindow() {
   ]);
 
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
+
     if (!input.trim()) return;
 
-    const newMessage: Message = {
+    const userMessage: Message = {
       role: "user",
       content: input,
     };
 
-    setMessages((prev) => [...prev, newMessage]);
+    // Build updated conversation history
+    const updatedMessages = [
+      ...messages,
+      userMessage,
+    ];
 
+    // Update UI immediately
+    setMessages(updatedMessages);
+
+    // Clear input
     setInput("");
+
+    // Show loading state
+    setLoading(true);
+
+    try {
+
+      const response = await axios.post(
+        "http://127.0.0.1:8000/chat",
+        {
+          messages: updatedMessages,
+        }
+      );
+
+      const aiMessage: Message = {
+        role: "assistant",
+        content: response.data.response,
+      };
+
+      // Add AI response to conversation
+      setMessages((prev) => [
+        ...prev,
+        aiMessage,
+      ]);
+
+    } catch (error) {
+
+      console.error(error);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "Something went wrong.",
+        },
+      ]);
+
+    }
+
+    setLoading(false);
   };
 
   return (
@@ -54,11 +105,17 @@ export default function ChatWindow() {
                   : "bg-zinc-900 text-zinc-200"
               }`}
             >
-              <p className="text-sm leading-7">
+              <p className="whitespace-pre-wrap text-sm leading-7">
                 {message.content}
               </p>
             </div>
           ))}
+
+          {loading && (
+            <div className="rounded-2xl bg-zinc-900 p-4 text-zinc-400">
+              AI is thinking...
+            </div>
+          )}
 
         </div>
 
@@ -84,7 +141,8 @@ export default function ChatWindow() {
 
           <button
             onClick={handleSendMessage}
-            className="rounded-xl bg-white px-4 py-2 font-medium text-black hover:bg-zinc-200 transition"
+            disabled={loading}
+            className="rounded-xl bg-white px-4 py-2 font-medium text-black disabled:opacity-50"
           >
             Send
           </button>

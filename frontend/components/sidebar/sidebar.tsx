@@ -13,7 +13,7 @@ export default function Sidebar() {
       </div>
 
       <div className="mt-8">
-        <button className="w-full rounded-xl bg-white px-4 py-3 text-black font-medium hover:bg-zinc-200 transition">
+        <button className="w-full rounded-xl bg-white px-4 py-3 text-black font-medium">
           + New Chat
         </button>
       </div>
