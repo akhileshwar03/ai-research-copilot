@@ -1,3 +1,4 @@
+import UploadBox from "../upload/upload-box";
 export default function Sidebar() {
   return (
     <div className="flex h-full flex-col p-4">
@@ -16,6 +17,10 @@ export default function Sidebar() {
         <button className="w-full rounded-xl bg-white px-4 py-3 text-black font-medium">
           + New Chat
         </button>
+      </div>
+
+      <div className="mt-6">
+        <UploadBox />
       </div>
 
       <div className="mt-8 flex-1">
