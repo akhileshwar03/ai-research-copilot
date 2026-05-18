@@ -1,26 +1,87 @@
 "use client";
+
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useState } from "react";
 
-type Message = {
-  role: "user" | "assistant";
-  content: string;
-};
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import { Message } from "@/types/chat";
+
+import {
+  saveSessions,
+  loadSessions,
+  ChatSession,
+} from "@/lib/chat-storage";
 
 export default function ChatWindow() {
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content: "Welcome to AI Research Copilot.",
-    },
-  ]);
+  const [sessions, setSessions] =
+    useState<ChatSession[]>([]);
 
-  const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [activeSessionId, setActiveSessionId] =
+    useState(1);
+
+  const [selectedDocument, setSelectedDocument] =
+    useState("");
+
+  const [input, setInput] =
+    useState("");
+
+  const [loading, setLoading] =
+    useState(false);
+
+  useEffect(() => {
+
+    const storedSessions =
+      loadSessions();
+
+    if (storedSessions.length > 0) {
+
+      setSessions(storedSessions);
+
+    } else {
+
+      setSessions([
+        {
+          id: 1,
+          title: "New Chat",
+          messages: [
+            {
+              role: "assistant",
+              content:
+                "Welcome to AI Research Copilot.",
+            },
+          ],
+        },
+      ]);
+    }
+
+  }, []);
+
+  useEffect(() => {
+
+    if (sessions.length > 0) {
+
+      saveSessions(sessions);
+
+    }
+
+  }, [sessions]);
+
+  const activeSession =
+    sessions.find(
+      (session) =>
+        session.id === activeSessionId
+    );
+
+  const messages =
+    activeSession?.messages || [];
 
   const handleSendMessage = async () => {
+
     if (!input.trim()) return;
 
     const userMessage: Message = {
@@ -33,22 +94,44 @@ export default function ChatWindow() {
       userMessage,
     ];
 
-    setMessages(updatedMessages);
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === activeSessionId
+          ? {
+              ...session,
+              messages: updatedMessages,
+            }
+          : session
+      )
+    );
 
     const currentInput = input;
 
     setInput("");
+
     setLoading(true);
 
-    const assistantMessage: Message = {
-      role: "assistant",
-      content: "",
-    };
+    setSessions((prev) =>
+      prev.map((session) => {
 
-    setMessages((prev) => [
-      ...prev,
-      assistantMessage,
-    ]);
+        if (
+          session.id !== activeSessionId
+        ) {
+          return session;
+        }
+
+        return {
+          ...session,
+          messages: [
+            ...updatedMessages,
+            {
+              role: "assistant",
+              content: "",
+            },
+          ],
+        };
+      })
+    );
 
     try {
 
@@ -57,42 +140,71 @@ export default function ChatWindow() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
           },
           body: JSON.stringify({
             messages: updatedMessages,
+            document_id:
+              selectedDocument,
           }),
         }
       );
 
-      const reader = response.body?.getReader();
+      const reader =
+        response.body?.getReader();
 
       if (!reader) return;
 
-      const decoder = new TextDecoder();
+      const decoder =
+        new TextDecoder();
 
       let streamedText = "";
 
       while (true) {
 
-        const { done, value } =
-          await reader.read();
+        const {
+          done,
+          value,
+        } = await reader.read();
 
         if (done) break;
 
-        streamedText += decoder.decode(value);
+        streamedText +=
+          decoder.decode(value);
 
-        setMessages((prev) => {
+        setSessions((prevSessions) =>
+          prevSessions.map((session) => {
 
-          const updated = [...prev];
+            if (
+              session.id !==
+              activeSessionId
+            ) {
+              return session;
+            }
 
-          updated[updated.length - 1] = {
-            role: "assistant",
-            content: streamedText,
-          };
+            const updatedMessages = [
+              ...session.messages,
+            ];
 
-          return updated;
-        });
+            updatedMessages[
+              updatedMessages.length - 1
+            ] = {
+              role: "assistant",
+              content: streamedText,
+              sources:
+                response.headers.get(
+                  "X-Sources"
+                ) || "",
+            };
+
+            return {
+              ...session,
+              messages:
+                updatedMessages,
+            };
+          })
+        );
       }
 
     } catch (error) {
@@ -109,9 +221,11 @@ export default function ChatWindow() {
 
       {/* Header */}
       <header className="border-b border-zinc-800 p-4">
+
         <h2 className="text-lg font-semibold">
           Research Session
         </h2>
+
       </header>
 
       {/* Messages */}
@@ -119,22 +233,46 @@ export default function ChatWindow() {
 
         <div className="mx-auto max-w-3xl space-y-4">
 
-          {messages.map((message, index) => (
-            <div
-              key={index}
-              className={`rounded-2xl p-4 border border-zinc-800 ${
-                message.role === "user"
-                  ? "bg-white text-black"
-                  : "bg-zinc-900 text-zinc-200"
-              }`}
-            >
-              <div className="prose prose-invert max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {message.content}
-                </ReactMarkdown>
+          {messages.map(
+            (message, index) => (
+              <div
+                key={index}
+                className={`rounded-2xl border border-zinc-800 p-4 ${
+                  message.role === "user"
+                    ? "bg-white text-black"
+                    : "bg-zinc-900 text-zinc-200"
+                }`}
+              >
+
+                <div className="prose prose-invert max-w-none prose-pre:border prose-pre:border-zinc-800 prose-pre:bg-zinc-950">
+
+                  <ReactMarkdown
+                    remarkPlugins={[
+                      remarkGfm,
+                    ]}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
+
+                  {message.sources && (
+                    <div className="mt-4 border-t border-zinc-800 pt-3">
+
+                      <p className="text-xs text-zinc-500">
+                        Sources
+                      </p>
+
+                      <p className="mt-1 text-xs text-zinc-400">
+                        {message.sources}
+                      </p>
+
+                    </div>
+                  )}
+
+                </div>
+
               </div>
-            </div>
-          ))}
+            )
+          )}
 
           {loading && (
             <div className="rounded-2xl bg-zinc-900 p-4 text-zinc-400">
@@ -155,17 +293,29 @@ export default function ChatWindow() {
             type="text"
             placeholder="Ask anything..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) =>
+              setInput(
+                e.target.value
+              )
+            }
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+
+              if (
+                e.key === "Enter"
+              ) {
+
                 handleSendMessage();
+
               }
+
             }}
             className="flex-1 bg-transparent outline-none"
           />
 
           <button
-            onClick={handleSendMessage}
+            onClick={
+              handleSendMessage
+            }
             disabled={loading}
             className="rounded-xl bg-white px-4 py-2 font-medium text-black disabled:opacity-50"
           >

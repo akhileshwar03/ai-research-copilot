@@ -25,6 +25,11 @@ def ingest_pdf(file_path):
     split_docs = text_splitter.split_documents(
         documents
     )
+    for doc in split_docs:
+
+        filename = file_path.split("/")[-1]
+        doc.metadata["source"] = filename
+        doc.metadata["document_id"] = filename
 
     Chroma.from_documents(
         documents=split_docs,
@@ -32,21 +37,64 @@ def ingest_pdf(file_path):
         persist_directory=VECTOR_DB_PATH
     )
 
-def retrieve_context(query):
+def retrieve_context(
+    query,
+    document_id=None
+):
 
     vectorstore = Chroma(
         persist_directory=VECTOR_DB_PATH,
         embedding_function=embedding_model
     )
 
+    search_filter = None
+
+    if document_id:
+
+        search_filter = {
+            "document_id": document_id
+        }
+
     retriever = vectorstore.as_retriever(
-        search_kwargs={"k": 4}
+        search_kwargs={
+            "k": 4,
+            "filter": search_filter
+        }
     )
 
     retrieved_docs = retriever.invoke(query)
 
-    context = "\n\n".join(
-        [doc.page_content for doc in retrieved_docs]
-    )
+    context_parts = []
 
-    return context
+    sources = []
+
+    for doc in retrieved_docs:
+
+        source = doc.metadata.get(
+            "source",
+            "Unknown"
+        )
+
+        page = doc.metadata.get(
+            "page",
+            "N/A"
+        )
+
+        context_parts.append(
+            f"""
+Source: {source}
+Page: {page}
+
+Content:
+{doc.page_content}
+"""
+        )
+
+        sources.append({
+            "source": source,
+            "page": page
+        })
+
+    context = "\n\n".join(context_parts)
+
+    return context, sources

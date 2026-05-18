@@ -15,8 +15,8 @@ def chat(request: ChatRequest):
         request.messages[-1].content
     )
 
-    retrieved_context = retrieve_context(
-        latest_user_message
+    retrieved_context, sources = retrieve_context(
+        latest_user_message,request.document_id
     )
 
     formatted_messages = [
@@ -42,9 +42,13 @@ Retrieved Context:
         for msg in request.messages
     ])
 
-    return StreamingResponse(
+    response = StreamingResponse(
         generate_streaming_response(
             formatted_messages
         ),
         media_type="text/plain"
     )
+
+    response.headers["X-Sources"] = str(sources)
+
+    return response

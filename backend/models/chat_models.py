@@ -6,3 +6,4 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
+    document_id: str | None = None
