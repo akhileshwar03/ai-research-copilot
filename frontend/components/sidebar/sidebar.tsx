@@ -16,11 +16,11 @@ export default function Sidebar({
 }: {
   sessions: ChatSession[];
 
-  activeSessionId: number;
+  activeSessionId: number | null;
 
   setActiveSessionId:
     React.Dispatch<
-      React.SetStateAction<number>
+      React.SetStateAction<number | null>
     >;
 
   setSessions:
