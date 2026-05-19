@@ -64,7 +64,7 @@ export default function Home() {
 
     } else {
 
-      const defaultSession = {
+      const defaultSession: ChatSession = {
         id: 1,
         title: "New Chat",
         messages: [
