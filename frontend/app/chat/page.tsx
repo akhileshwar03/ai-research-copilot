@@ -24,18 +24,28 @@ export default function Home() {
 
   const [sessions, setSessions] =
     useState<ChatSession[]>([]);
-    
-  const [activeSessionId,
-    setActiveSessionId] =
-    useState(1);
-  const [documents, setDocuments] =
-  useState<string[]>([]);
 
-  const [selectedDocument,
-  setSelectedDocument] =
-  useState("");
+  const [
+    activeSessionId,
+    setActiveSessionId,
+  ] = useState<number | null>(
+    null
+  );
+
+  const [documents, setDocuments] =
+    useState<string[]>([]);
+
+  const [
+    selectedDocument,
+    setSelectedDocument,
+  ] = useState("");
+
+  const [mounted, setMounted] =
+    useState(false);
 
   useEffect(() => {
+
+    setMounted(true);
 
     const storedSessions =
       loadSessions();
@@ -48,54 +58,63 @@ export default function Home() {
         storedSessions
       );
 
+      setActiveSessionId(
+        storedSessions[0].id
+      );
+
     } else {
 
+      const defaultSession = {
+        id: 1,
+        title: "New Chat",
+        messages: [
+          {
+            role: "assistant",
+            content:
+              "Welcome to AI Research Copilot.",
+          },
+        ],
+      };
+
       setSessions([
-        {
-          id: 1,
-          title: "New Chat",
-          messages: [
-            {
-              role: "assistant",
-              content:
-                "Welcome to AI Research Copilot.",
-            },
-          ],
-        },
+        defaultSession,
       ]);
+
+      setActiveSessionId(
+        defaultSession.id
+      );
     }
 
   }, []);
-
 
   useEffect(() => {
 
     async function fetchDocuments() {
 
-        try {
+      try {
 
-            const response =
-                await fetch(
-                `${process.env.NEXT_PUBLIC_API_URL}/documents`
-                );
+        const response =
+          await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/documents`
+          );
 
-            const data =
-                await response.json();
+        const data =
+          await response.json();
 
-            setDocuments(
-                data.documents
-            );
+        setDocuments(
+          data.documents || []
+        );
 
-            } catch (error) {
+      } catch (error) {
 
-            console.error(error);
+        console.error(error);
 
-            }
-        }
+      }
+    }
 
-        fetchDocuments();
+    fetchDocuments();
 
-    }, []);
+  }, []);
 
   useEffect(() => {
 
@@ -111,13 +130,29 @@ export default function Home() {
 
   }, [sessions]);
 
+  if (
+    !mounted ||
+    activeSessionId === null
+  ) {
+
+    return (
+      <div className="flex h-screen items-center justify-center bg-black text-white">
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <MainLayout
       sidebar={
         <Sidebar
-        documents={documents}
-          selectedDocument={selectedDocument}
-          setSelectedDocument={setSelectedDocument}
+          documents={documents}
+          selectedDocument={
+            selectedDocument
+          }
+          setSelectedDocument={
+            setSelectedDocument
+          }
           sessions={sessions}
           activeSessionId={
             activeSessionId
@@ -132,13 +167,16 @@ export default function Home() {
       }
     >
       <ChatWindow
-        selectedDocument={selectedDocument}
+        selectedDocument={
+          selectedDocument
+        }
         sessions={sessions}
-        setSessions={setSessions}
+        setSessions={
+          setSessions
+        }
         activeSessionId={
           activeSessionId
         }
-        
       />
     </MainLayout>
   );
