@@ -147,21 +147,55 @@ export default function Sidebar({
             }`}
           >
 
-            {/* Session Select */}
-            <button
+            {/* Session Area */}
+            <div
               onClick={() =>
                 setActiveSessionId(
                   session.id
                 )
               }
-              className="flex-1 truncate text-left"
+              className="flex flex-1 cursor-pointer items-center"
             >
-              {session.title}
-            </button>
+
+              <input
+                value={session.title}
+                onClick={(e) =>
+                  e.stopPropagation()
+                }
+                onChange={(e) => {
+
+                  setSessions((prev) =>
+                    prev.map((s) =>
+
+                      s.id ===
+                      session.id
+                        ? {
+                            ...s,
+                            title:
+                              e.target.value,
+                          }
+                        : s
+                    )
+                  );
+
+                }}
+                className="w-full truncate bg-transparent outline-none"
+              />
+
+            </div>
 
             {/* Delete */}
             <button
               onClick={() => {
+
+                const confirmed =
+                  window.confirm(
+                    "Delete this chat?"
+                  );
+
+                if (!confirmed) {
+                  return;
+                }
 
                 const remaining =
                   sessions.filter(
@@ -175,13 +209,24 @@ export default function Sidebar({
 
                 if (
                   activeSessionId ===
-                  session.id &&
-                  remaining.length > 0
+                  session.id
                 ) {
 
-                  setActiveSessionId(
-                    remaining[0].id
-                  );
+                  if (
+                    remaining.length > 0
+                  ) {
+
+                    setActiveSessionId(
+                      remaining[0].id
+                    );
+
+                  } else {
+
+                    setActiveSessionId(
+                      null
+                    );
+
+                  }
 
                 }
 
