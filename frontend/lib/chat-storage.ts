@@ -7,6 +7,12 @@ export function saveSessions(
   sessions: ChatSession[]
 ) {
 
+  if (
+    typeof window === "undefined"
+  ) {
+    return;
+  }
+
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify(sessions)
@@ -16,12 +22,27 @@ export function saveSessions(
 export function loadSessions():
   ChatSession[] {
 
+  if (
+    typeof window === "undefined"
+  ) {
+    return [];
+  }
+
   const stored =
     localStorage.getItem(
       STORAGE_KEY
     );
 
-  if (!stored) return [];
+  if (!stored) {
+    return [];
+  }
 
-  return JSON.parse(stored);
+  try {
+
+    return JSON.parse(stored);
+
+  } catch {
+
+    return [];
+  }
 }
