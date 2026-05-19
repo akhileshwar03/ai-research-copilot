@@ -3,26 +3,28 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import { Message } from "@/types/chat";
+import { useState } from "react";
 
 import {
-  saveSessions,
-  loadSessions,
+  Message,
   ChatSession,
-} from "@/lib/chat-storage";
+} from "@/types/chat";
 
-export default function ChatWindow() {
+export default function ChatWindow({
+  sessions,
+  setSessions,
+  activeSessionId,
+}: {
+  sessions: ChatSession[];
 
-  const [sessions, setSessions] =
-    useState<ChatSession[]>([]);
+  setSessions: React.Dispatch<
+    React.SetStateAction<ChatSession[]>
+  >;
 
-  const [activeSessionId, setActiveSessionId] =
-    useState(1);
+  activeSessionId: number;
+
+  selectedDocument: string;
+}) {
 
   const [selectedDocument, setSelectedDocument] =
     useState("");
@@ -32,44 +34,6 @@ export default function ChatWindow() {
 
   const [loading, setLoading] =
     useState(false);
-
-  useEffect(() => {
-
-    const storedSessions =
-      loadSessions();
-
-    if (storedSessions.length > 0) {
-
-      setSessions(storedSessions);
-
-    } else {
-
-      setSessions([
-        {
-          id: 1,
-          title: "New Chat",
-          messages: [
-            {
-              role: "assistant",
-              content:
-                "Welcome to AI Research Copilot.",
-            },
-          ],
-        },
-      ]);
-    }
-
-  }, []);
-
-  useEffect(() => {
-
-    if (sessions.length > 0) {
-
-      saveSessions(sessions);
-
-    }
-
-  }, [sessions]);
 
   const activeSession =
     sessions.find(
@@ -88,7 +52,7 @@ export default function ChatWindow() {
       role: "user",
       content: input,
     };
-
+    const currentInput = input;
     const updatedMessages = [
       ...messages,
       userMessage,
@@ -99,13 +63,16 @@ export default function ChatWindow() {
         session.id === activeSessionId
           ? {
               ...session,
+              title:
+                session.messages.length <= 1
+                  ? currentInput.slice(0, 30)
+                  : session.title,
+
               messages: updatedMessages,
             }
           : session
       )
     );
-
-    const currentInput = input;
 
     setInput("");
 
@@ -139,10 +106,12 @@ export default function ChatWindow() {
         "http://127.0.0.1:8000/chat",
         {
           method: "POST",
+
           headers: {
             "Content-Type":
               "application/json",
           },
+
           body: JSON.stringify({
             messages: updatedMessages,
             document_id:
@@ -174,36 +143,37 @@ export default function ChatWindow() {
           decoder.decode(value);
 
         setSessions((prevSessions) =>
-          prevSessions.map((session) => {
+          prevSessions.map(
+            (session) => {
 
-            if (
-              session.id !==
-              activeSessionId
-            ) {
-              return session;
+              if (
+                session.id !==
+                activeSessionId
+              ) {
+                return session;
+              }
+
+              const updated =
+                [...session.messages];
+
+              updated[
+                updated.length - 1
+              ] = {
+                role: "assistant",
+                content: streamedText,
+
+                sources:
+                  response.headers.get(
+                    "X-Sources"
+                  ) || "",
+              };
+
+              return {
+                ...session,
+                messages: updated,
+              };
             }
-
-            const updatedMessages = [
-              ...session.messages,
-            ];
-
-            updatedMessages[
-              updatedMessages.length - 1
-            ] = {
-              role: "assistant",
-              content: streamedText,
-              sources:
-                response.headers.get(
-                  "X-Sources"
-                ) || "",
-            };
-
-            return {
-              ...session,
-              messages:
-                updatedMessages,
-            };
-          })
+          )
         );
       }
 
@@ -222,9 +192,29 @@ export default function ChatWindow() {
       {/* Header */}
       <header className="border-b border-zinc-800 p-4">
 
-        <h2 className="text-lg font-semibold">
-          Research Session
-        </h2>
+        <div className="flex items-center justify-between">
+
+          <h2 className="text-lg font-semibold">
+            Research Session
+          </h2>
+
+          <select
+            value={selectedDocument}
+            onChange={(e) =>
+              setSelectedDocument(
+                e.target.value
+              )
+            }
+            className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-300"
+          >
+
+            <option value="">
+              All Documents
+            </option>
+
+          </select>
+
+        </div>
 
       </header>
 
@@ -235,6 +225,7 @@ export default function ChatWindow() {
 
           {messages.map(
             (message, index) => (
+
               <div
                 key={index}
                 className={`rounded-2xl border border-zinc-800 p-4 ${
@@ -255,6 +246,7 @@ export default function ChatWindow() {
                   </ReactMarkdown>
 
                   {message.sources && (
+
                     <div className="mt-4 border-t border-zinc-800 pt-3">
 
                       <p className="text-xs text-zinc-500">
@@ -266,18 +258,24 @@ export default function ChatWindow() {
                       </p>
 
                     </div>
+
                   )}
 
                 </div>
 
               </div>
+
             )
           )}
 
           {loading && (
+
             <div className="rounded-2xl bg-zinc-900 p-4 text-zinc-400">
+
               AI is thinking...
+
             </div>
+
           )}
 
         </div>

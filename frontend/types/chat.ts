@@ -3,3 +3,9 @@ export type Message = {
   content: string;
   sources?: string;
 };
+
+export type ChatSession = {
+  id: number;
+  title: string;
+  messages: Message[];
+};
