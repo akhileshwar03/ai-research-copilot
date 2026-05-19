@@ -139,8 +139,7 @@ export default function ChatWindow({
 
         if (done) break;
 
-        streamedText +=
-          decoder.decode(value);
+        streamedText += decoder.decode(value,{ stream: true });
 
         setSessions((prevSessions) =>
           prevSessions.map(
