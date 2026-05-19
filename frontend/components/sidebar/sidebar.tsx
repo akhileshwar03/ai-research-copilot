@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 import UploadBox from "../upload/upload-box";
 
 import {
@@ -39,6 +43,48 @@ export default function Sidebar({
       React.SetStateAction<string>
     >;
 }) {
+
+  const [
+    documentSearch,
+    setDocumentSearch,
+  ] = useState("");
+
+  const [
+    sortOption,
+    setSortOption,
+  ] = useState("latest");
+
+  const filteredDocuments =
+    [...documents]
+
+      .filter((doc) =>
+        doc
+          .toLowerCase()
+          .includes(
+            documentSearch.toLowerCase()
+          )
+      )
+
+      .sort((a, b) => {
+
+        if (
+          sortOption === "a-z"
+        ) {
+
+          return a.localeCompare(b);
+
+        }
+
+        if (
+          sortOption === "z-a"
+        ) {
+
+          return b.localeCompare(a);
+
+        }
+
+        return 0;
+      });
 
   const handleNewChat = () => {
 
@@ -108,23 +154,111 @@ export default function Sidebar({
           Documents
         </p>
 
-        <div className="space-y-2">
+        {/* Search */}
+        <div className="mb-3">
 
-          {documents.map((doc) => (
+          <input
+            type="text"
+            placeholder="Search documents..."
+            value={documentSearch}
+            onChange={(e) =>
+              setDocumentSearch(
+                e.target.value
+              )
+            }
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none"
+          />
 
-            <button
+        </div>
+
+        {/* Sort */}
+        <div className="mb-4">
+
+          <select
+            value={sortOption}
+            onChange={(e) =>
+              setSortOption(
+                e.target.value
+              )
+            }
+            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none"
+          >
+
+            <option value="latest">
+              Latest Upload
+            </option>
+
+            <option value="a-z">
+              A-Z
+            </option>
+
+            <option value="z-a">
+              Z-A
+            </option>
+
+          </select>
+
+        </div>
+
+        {/* Documents List */}
+        <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+
+          {filteredDocuments.map((doc) => (
+
+            <div
               key={doc}
               onClick={() =>
                 setSelectedDocument(doc)
               }
-              className={`w-full rounded-xl p-3 text-left text-sm transition ${
+              className={`flex cursor-pointer items-center justify-between rounded-xl p-3 text-sm transition ${
                 selectedDocument === doc
                   ? "bg-white text-black"
                   : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
               }`}
             >
-              {doc}
-            </button>
+
+              <span className="truncate">
+                {doc}
+              </span>
+
+              <button
+                onClick={async (e) => {
+
+                  e.stopPropagation();
+
+                  const confirmed =
+                    window.confirm(
+                      "Delete this document?"
+                    );
+
+                  if (!confirmed) {
+                    return;
+                  }
+
+                  try {
+
+                    await fetch(
+                      `${process.env.NEXT_PUBLIC_API_URL}/documents/${doc}`,
+                      {
+                        method: "DELETE",
+                      }
+                    );
+
+                    window.location.reload();
+
+                  } catch (error) {
+
+                    console.error(error);
+
+                  }
+
+                }}
+                className="ml-3 text-xs text-zinc-500 transition hover:text-red-400"
+              >
+                ✕
+              </button>
+
+            </div>
 
           ))}
 
