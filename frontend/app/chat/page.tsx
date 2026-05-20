@@ -43,6 +43,30 @@ export default function Home() {
   const [mounted, setMounted] =
     useState(false);
 
+  const fetchDocuments =
+    async () => {
+
+      try {
+
+        const response =
+          await fetch(
+            `${process.env.NEXT_PUBLIC_API_URL}/documents`
+          );
+
+        const data =
+          await response.json();
+
+        setDocuments(
+          data.documents || []
+        );
+
+      } catch (error) {
+
+        console.error(error);
+
+      }
+    };
+
   useEffect(() => {
 
     setMounted(true);
@@ -67,6 +91,7 @@ export default function Home() {
       const defaultSession: ChatSession = {
         id: 1,
         title: "New Chat",
+        pinned: false,
         messages: [
           {
             role: "assistant",
@@ -83,33 +108,6 @@ export default function Home() {
       setActiveSessionId(
         defaultSession.id
       );
-    }
-
-  }, []);
-
-  useEffect(() => {
-
-    async function fetchDocuments() {
-
-      try {
-
-        const response =
-          await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/documents`
-          );
-
-        const data =
-          await response.json();
-
-        setDocuments(
-          data.documents || []
-        );
-
-      } catch (error) {
-
-        console.error(error);
-
-      }
     }
 
     fetchDocuments();
@@ -146,6 +144,9 @@ export default function Home() {
     <MainLayout
       sidebar={
         <Sidebar
+          fetchDocuments={
+            fetchDocuments
+          }
           documents={documents}
           selectedDocument={
             selectedDocument
@@ -166,18 +167,42 @@ export default function Home() {
         />
       }
     >
-      <ChatWindow
-        selectedDocument={
-          selectedDocument
-        }
-        sessions={sessions}
-        setSessions={
-          setSessions
-        }
-        activeSessionId={
-          activeSessionId
-        }
-      />
+      <div className="flex h-full">
+
+        {/* Chat */}
+        <div className="flex-1">
+
+          <ChatWindow
+            selectedDocument={
+              selectedDocument
+            }
+            sessions={sessions}
+            setSessions={
+              setSessions
+            }
+            activeSessionId={
+              activeSessionId
+            }
+          />
+
+        </div>
+
+        {/* PDF Preview */}
+        {selectedDocument && (
+
+          <div className="hidden w-[420px] border-l border-zinc-800 bg-zinc-950 xl:block">
+
+            <iframe
+              src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${selectedDocument}`}
+              className="h-full w-full"
+            />
+
+          </div>
+
+        )}
+
+      </div>
+
     </MainLayout>
   );
 }
