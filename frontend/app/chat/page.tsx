@@ -169,7 +169,6 @@ export default function Home() {
     >
       <div className="flex h-full">
 
-        {/* Chat */}
         <div className="flex-1">
 
           <ChatWindow
@@ -187,13 +186,14 @@ export default function Home() {
 
         </div>
 
-        {/* PDF Preview */}
         {selectedDocument && (
 
           <div className="hidden w-[420px] border-l border-zinc-800 bg-zinc-950 xl:block">
 
             <iframe
-              src={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${selectedDocument}`}
+              src={`https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(
+                `${process.env.NEXT_PUBLIC_API_URL}/uploads/${selectedDocument}`
+              )}`}
               className="h-full w-full"
             />
 

@@ -127,6 +127,16 @@ export default function Sidebar({
 
   const handleNewChat = () => {
 
+    setShowDocMenu(false);
+
+    setShowSearch(false);
+
+    setSelectMode(false);
+
+    setSelectedDocs([]);
+
+    setOpenChatMenuId(null);
+
     const newSession: ChatSession = {
       id: Date.now(),
 
@@ -201,11 +211,17 @@ export default function Sidebar({
           <div className="relative">
 
             <button
-              onClick={() =>
+              onClick={() => {
+
+                setOpenChatMenuId(
+                  null
+                );
+
                 setShowDocMenu(
                   !showDocMenu
-                )
-              }
+                );
+
+              }}
               className="text-zinc-500 hover:text-white"
             >
               ⋯
@@ -224,6 +240,10 @@ export default function Sidebar({
 
                     setSelectMode(
                       false
+                    );
+
+                    setSelectedDocs(
+                      []
                     );
 
                     setShowDocMenu(
@@ -251,6 +271,10 @@ export default function Sidebar({
                       false
                     );
 
+                    setSelectedDocs(
+                      []
+                    );
+
                     setShowDocMenu(
                       false
                     );
@@ -276,6 +300,10 @@ export default function Sidebar({
                       false
                     );
 
+                    setSelectedDocs(
+                      []
+                    );
+
                     setShowDocMenu(
                       false
                     );
@@ -299,6 +327,10 @@ export default function Sidebar({
 
                     setSelectMode(
                       false
+                    );
+
+                    setSelectedDocs(
+                      []
                     );
 
                     setShowDocMenu(
@@ -411,6 +443,10 @@ export default function Sidebar({
                     false
                   );
 
+                  setShowDocMenu(
+                    false
+                  );
+
                 } catch (error) {
 
                   console.error(error);
@@ -456,13 +492,15 @@ export default function Sidebar({
                   doc
                 );
 
-                setShowSearch(
-                  false
-                );
+                setShowSearch(false);
 
-                setSelectMode(
-                  false
-                );
+                setSelectMode(false);
+
+                setSelectedDocs([]);
+
+                setShowDocMenu(false);
+
+                setOpenChatMenuId(null);
 
               }}
               className={`flex cursor-pointer items-center justify-between rounded-xl p-3 text-sm transition ${
@@ -533,13 +571,15 @@ export default function Sidebar({
                   session.id
                 );
 
-                setShowSearch(
-                  false
-                );
+                setShowSearch(false);
 
-                setSelectMode(
-                  false
-                );
+                setSelectMode(false);
+
+                setSelectedDocs([]);
+
+                setShowDocMenu(false);
+
+                setOpenChatMenuId(null);
 
               }}
               className="flex flex-1 cursor-pointer items-center"
@@ -600,6 +640,14 @@ export default function Sidebar({
                 onClick={(e) => {
 
                   e.stopPropagation();
+
+                  setShowDocMenu(false);
+
+                  setShowSearch(false);
+
+                  setSelectMode(false);
+
+                  setSelectedDocs([]);
 
                   setOpenChatMenuId(
 
