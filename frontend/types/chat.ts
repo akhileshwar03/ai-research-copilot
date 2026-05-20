@@ -8,4 +8,5 @@ export type ChatSession = {
   id: number;
   title: string;
   messages: Message[];
+  pinned?: boolean;
 };

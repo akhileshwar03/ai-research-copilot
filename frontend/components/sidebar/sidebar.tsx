@@ -16,15 +16,19 @@ export default function Sidebar({
   documents,
   selectedDocument,
   setSelectedDocument,
+  fetchDocuments,
 
 }: {
   sessions: ChatSession[];
 
-  activeSessionId: number | null;
+  activeSessionId:
+    number | null;
 
   setActiveSessionId:
     React.Dispatch<
-      React.SetStateAction<number | null>
+      React.SetStateAction<
+        number | null
+      >
     >;
 
   setSessions:
@@ -42,7 +46,42 @@ export default function Sidebar({
     React.Dispatch<
       React.SetStateAction<string>
     >;
+
+  fetchDocuments:
+    () => Promise<void>;
 }) {
+
+  const [showDocMenu,
+    setShowDocMenu] =
+    useState(false);
+
+  const [showSearch,
+    setShowSearch] =
+    useState(false);
+
+  const [selectMode,
+    setSelectMode] =
+    useState(false);
+
+  const [selectedDocs,
+    setSelectedDocs] =
+    useState<string[]>([]);
+
+  const [editingChatId,
+    setEditingChatId] =
+    useState<number | null>(
+      null
+    );
+
+  const [editingTitle,
+    setEditingTitle] =
+    useState("");
+
+  const [openChatMenuId,
+    setOpenChatMenuId] =
+    useState<number | null>(
+      null
+    );
 
   const [
     documentSearch,
@@ -92,6 +131,8 @@ export default function Sidebar({
       id: Date.now(),
 
       title: "New Chat",
+
+      pinned: false,
 
       messages: [
         {
@@ -150,113 +191,294 @@ export default function Sidebar({
       {/* Documents */}
       <div className="mt-8">
 
-        <p className="mb-3 text-xs uppercase tracking-wide text-zinc-500">
-          Documents
-        </p>
+        {/* Header */}
+        <div className="mb-3 flex items-center justify-between">
+
+          <p className="text-xs uppercase tracking-wide text-zinc-500">
+            Documents
+          </p>
+
+          <div className="relative">
+
+            <button
+              onClick={() =>
+                setShowDocMenu(
+                  !showDocMenu
+                )
+              }
+              className="text-zinc-500 hover:text-white"
+            >
+              ⋯
+            </button>
+
+            {showDocMenu && (
+
+              <div className="absolute right-0 z-50 mt-2 w-48 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
+
+                <button
+                  onClick={() => {
+
+                    setShowSearch(
+                      true
+                    );
+
+                    setSelectMode(
+                      false
+                    );
+
+                    setShowDocMenu(
+                      false
+                    );
+
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                >
+                  Search
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setSortOption(
+                      "a-z"
+                    );
+
+                    setShowSearch(
+                      false
+                    );
+
+                    setSelectMode(
+                      false
+                    );
+
+                    setShowDocMenu(
+                      false
+                    );
+
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                >
+                  Sort A-Z
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setSortOption(
+                      "z-a"
+                    );
+
+                    setShowSearch(
+                      false
+                    );
+
+                    setSelectMode(
+                      false
+                    );
+
+                    setShowDocMenu(
+                      false
+                    );
+
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                >
+                  Sort Z-A
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setSortOption(
+                      "latest"
+                    );
+
+                    setShowSearch(
+                      false
+                    );
+
+                    setSelectMode(
+                      false
+                    );
+
+                    setShowDocMenu(
+                      false
+                    );
+
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                >
+                  Latest Upload
+                </button>
+
+                <button
+                  onClick={() => {
+
+                    setSelectMode(
+                      true
+                    );
+
+                    setShowSearch(
+                      false
+                    );
+
+                    setShowDocMenu(
+                      false
+                    );
+
+                  }}
+                  className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                >
+                  Select Documents
+                </button>
+
+              </div>
+
+            )}
+
+          </div>
+
+        </div>
 
         {/* Search */}
-        <div className="mb-3">
+        {showSearch && (
 
-          <input
-            type="text"
-            placeholder="Search documents..."
-            value={documentSearch}
-            onChange={(e) =>
-              setDocumentSearch(
-                e.target.value
-              )
-            }
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none"
-          />
+          <div className="mb-3">
 
-        </div>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search documents..."
+              value={documentSearch}
+              onChange={(e) =>
+                setDocumentSearch(
+                  e.target.value
+                )
+              }
+              onBlur={() => {
 
-        {/* Sort */}
-        <div className="mb-4">
+                setShowSearch(
+                  false
+                );
 
-          <select
-            value={sortOption}
-            onChange={(e) =>
-              setSortOption(
-                e.target.value
-              )
-            }
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none"
-          >
+              }}
+              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm outline-none"
+            />
 
-            <option value="latest">
-              Latest Upload
-            </option>
+          </div>
 
-            <option value="a-z">
-              A-Z
-            </option>
+        )}
 
-            <option value="z-a">
-              Z-A
-            </option>
+        {/* Floating Delete */}
+        {selectMode &&
+          selectedDocs.length > 0 && (
 
-          </select>
+          <div className="mb-3 flex justify-end">
 
-        </div>
+            <button
+              onClick={async () => {
 
-        {/* Documents List */}
+                const confirmed =
+                  window.confirm(
+                    `Delete ${selectedDocs.length} documents?`
+                  );
+
+                if (!confirmed) {
+                  return;
+                }
+
+                try {
+
+                  await Promise.all(
+
+                    selectedDocs.map(
+                      (doc) =>
+
+                        fetch(
+                          `${process.env.NEXT_PUBLIC_API_URL}/documents/${doc}`,
+                          {
+                            method: "DELETE",
+                          }
+                        )
+                    )
+                  );
+
+                  await fetchDocuments();
+
+                  setSelectedDocs([]);
+
+                  setSelectMode(
+                    false
+                  );
+
+                } catch (error) {
+
+                  console.error(error);
+
+                }
+
+              }}
+              className="rounded-lg bg-red-500 px-3 py-2 text-xs font-medium text-white hover:bg-red-600"
+            >
+              Delete
+            </button>
+
+          </div>
+
+        )}
+
+        {/* Documents */}
         <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
 
           {filteredDocuments.map((doc) => (
 
             <div
               key={doc}
-              onClick={() =>
-                setSelectedDocument(doc)
-              }
+              onClick={() => {
+
+                if (selectMode) {
+
+                  setSelectedDocs(
+                    (prev) =>
+
+                      prev.includes(doc)
+                        ? prev.filter(
+                            (d) =>
+                              d !== doc
+                          )
+                        : [...prev, doc]
+                  );
+
+                  return;
+                }
+
+                setSelectedDocument(
+                  doc
+                );
+
+                setShowSearch(
+                  false
+                );
+
+                setSelectMode(
+                  false
+                );
+
+              }}
               className={`flex cursor-pointer items-center justify-between rounded-xl p-3 text-sm transition ${
                 selectedDocument === doc
                   ? "bg-white text-black"
                   : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"
+              } ${
+                selectedDocs.includes(doc)
+                  ? "ring-2 ring-white"
+                  : ""
               }`}
             >
 
               <span className="truncate">
                 {doc}
               </span>
-
-              <button
-                onClick={async (e) => {
-
-                  e.stopPropagation();
-
-                  const confirmed =
-                    window.confirm(
-                      "Delete this document?"
-                    );
-
-                  if (!confirmed) {
-                    return;
-                  }
-
-                  try {
-
-                    await fetch(
-                      `${process.env.NEXT_PUBLIC_API_URL}/documents/${doc}`,
-                      {
-                        method: "DELETE",
-                      }
-                    );
-
-                    window.location.reload();
-
-                  } catch (error) {
-
-                    console.error(error);
-
-                  }
-
-                }}
-                className="ml-3 text-xs text-zinc-500 transition hover:text-red-400"
-              >
-                ✕
-              </button>
 
             </div>
 
@@ -266,10 +488,32 @@ export default function Sidebar({
 
       </div>
 
-      {/* Chat Sessions */}
+      {/* Chats */}
       <div className="mt-8 flex-1 space-y-2 overflow-y-auto">
 
-        {sessions.map((session) => (
+        {[...sessions]
+
+          .sort((a, b) => {
+
+            if (
+              a.pinned &&
+              !b.pinned
+            ) {
+              return -1;
+            }
+
+            if (
+              !a.pinned &&
+              b.pinned
+            ) {
+              return 1;
+            }
+
+            return 0;
+
+          })
+
+          .map((session) => (
 
           <div
             key={session.id}
@@ -281,94 +525,189 @@ export default function Sidebar({
             }`}
           >
 
-            {/* Session Area */}
+            {/* Open Chat */}
             <div
-              onClick={() =>
+              onClick={() => {
+
                 setActiveSessionId(
                   session.id
-                )
-              }
+                );
+
+                setShowSearch(
+                  false
+                );
+
+                setSelectMode(
+                  false
+                );
+
+              }}
               className="flex flex-1 cursor-pointer items-center"
             >
 
-              <input
-                value={session.title}
-                onClick={(e) =>
-                  e.stopPropagation()
-                }
-                onChange={(e) => {
+              {editingChatId ===
+              session.id ? (
 
-                  setSessions((prev) =>
-                    prev.map((s) =>
-
-                      s.id ===
-                      session.id
-                        ? {
-                            ...s,
-                            title:
-                              e.target.value,
-                          }
-                        : s
+                <input
+                  autoFocus
+                  value={editingTitle}
+                  onChange={(e) =>
+                    setEditingTitle(
+                      e.target.value
                     )
-                  );
+                  }
+                  onBlur={() => {
 
-                }}
-                className="w-full truncate bg-transparent outline-none"
-              />
+                    setSessions((prev) =>
+                      prev.map((s) =>
 
-            </div>
-
-            {/* Delete */}
-            <button
-              onClick={() => {
-
-                const confirmed =
-                  window.confirm(
-                    "Delete this chat?"
-                  );
-
-                if (!confirmed) {
-                  return;
-                }
-
-                const remaining =
-                  sessions.filter(
-                    (s) =>
-                      s.id !== session.id
-                  );
-
-                setSessions(
-                  remaining
-                );
-
-                if (
-                  activeSessionId ===
-                  session.id
-                ) {
-
-                  if (
-                    remaining.length > 0
-                  ) {
-
-                    setActiveSessionId(
-                      remaining[0].id
+                        s.id ===
+                        session.id
+                          ? {
+                              ...s,
+                              title:
+                                editingTitle,
+                            }
+                          : s
+                      )
                     );
 
-                  } else {
-
-                    setActiveSessionId(
+                    setEditingChatId(
                       null
                     );
 
-                  }
+                  }}
+                  className="w-full bg-transparent outline-none"
+                />
 
-                }
+              ) : (
 
-              }}
-              className="ml-3 text-xs text-zinc-500 transition hover:text-red-400"
-            >
-              ✕
-            </button>
+                <span className="truncate">
+                  {session.pinned
+                    ? "📌 "
+                    : ""}
+                  {session.title}
+                </span>
+
+              )}
+
+            </div>
+
+            {/* Menu */}
+            <div className="relative">
+
+              <button
+                onClick={(e) => {
+
+                  e.stopPropagation();
+
+                  setOpenChatMenuId(
+
+                    openChatMenuId ===
+                    session.id
+                      ? null
+                      : session.id
+                  );
+
+                }}
+                className="ml-2 text-xs text-zinc-500 hover:text-white"
+              >
+                ⋯
+              </button>
+
+              {openChatMenuId ===
+                session.id && (
+
+                <div className="absolute right-0 z-50 mt-2 w-40 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
+
+                  <button
+                    onClick={() => {
+
+                      setEditingChatId(
+                        session.id
+                      );
+
+                      setEditingTitle(
+                        session.title
+                      );
+
+                      setOpenChatMenuId(
+                        null
+                      );
+
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                  >
+                    Rename
+                  </button>
+
+                  <button
+                    onClick={() => {
+
+                      setSessions((prev) =>
+
+                        prev.map((s) =>
+
+                          s.id ===
+                          session.id
+                            ? {
+                                ...s,
+                                pinned:
+                                  !s.pinned,
+                              }
+                            : s
+                        )
+                      );
+
+                      setOpenChatMenuId(
+                        null
+                      );
+
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-zinc-900"
+                  >
+                    {session.pinned
+                      ? "Unpin"
+                      : "Pin"}
+                  </button>
+
+                  <button
+                    onClick={() => {
+
+                      const confirmed =
+                        window.confirm(
+                          "Delete this chat?"
+                        );
+
+                      if (!confirmed) {
+                        return;
+                      }
+
+                      const remaining =
+                        sessions.filter(
+                          (s) =>
+                            s.id !== session.id
+                        );
+
+                      setSessions(
+                        remaining
+                      );
+
+                      setOpenChatMenuId(
+                        null
+                      );
+
+                    }}
+                    className="w-full rounded-lg px-3 py-2 text-left text-sm text-red-400 hover:bg-zinc-900"
+                  >
+                    Delete
+                  </button>
+
+                </div>
+
+              )}
+
+            </div>
 
           </div>
 
