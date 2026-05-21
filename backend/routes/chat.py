@@ -4,20 +4,18 @@ from pydantic import BaseModel
 
 from langchain_openai import ChatOpenAI
 
-from dotenv import load_dotenv
+from core.config import (
+    OPENAI_API_KEY
+)
 
-from pypdf import PdfReader
-
-import os
-
-load_dotenv()
+from services.rag_service import (
+    retrieve_context
+)
 
 router = APIRouter()
 
-UPLOADS_DIR = "uploads"
-
 llm = ChatOpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
+    api_key=OPENAI_API_KEY,
     model="gpt-3.5-turbo",
     temperature=0.3,
     streaming=True,
@@ -28,17 +26,19 @@ You are AI Research Copilot.
 
 You are an intelligent AI assistant.
 
-You must:
-- answer every user question
-- never ignore questions
-- never return empty responses
-- help with coding, AI, research, engineering, debugging, learning, and explanations
-- use provided document context when available
-- respond conversationally
-- use markdown formatting when useful
+Use retrieved document context
+when available.
 
-If a question is unclear:
-ask for clarification.
+If the answer exists in the
+document context, prioritize it.
+
+Do not hallucinate missing facts.
+
+If information is unavailable,
+say clearly that the document
+does not contain the answer.
+
+Answer clearly and accurately.
 """
 
 class Message(BaseModel):
@@ -49,41 +49,6 @@ class ChatRequest(BaseModel):
     messages: list[Message]
     document_id: str | None = None
 
-def extract_pdf_text(
-    filename: str
-):
-
-    try:
-
-        filepath = os.path.join(
-            UPLOADS_DIR,
-            filename
-        )
-
-        reader = PdfReader(
-            filepath
-        )
-
-        text = ""
-
-        for page in reader.pages:
-
-            extracted = (
-                page.extract_text()
-            )
-
-            if extracted:
-
-                text += extracted
-
-        return text[:12000]
-
-    except Exception as e:
-
-        return (
-            f"Failed to read PDF: {str(e)}"
-        )
-
 @router.post("/chat")
 async def chat(
     request: ChatRequest
@@ -93,40 +58,58 @@ async def chat(
 
         try:
 
+            latest_user_message = ""
+
+            for msg in reversed(
+                request.messages
+            ):
+
+                if (
+                    msg.role == "user"
+                ):
+
+                    latest_user_message = (
+                        msg.content
+                    )
+
+                    break
+
+            context = ""
+            sources = []
+
+            if request.document_id:
+
+                retrieval = retrieve_context(
+                    latest_user_message,
+                    request.document_id
+                )
+
+                context = retrieval["context"]
+
+                sources = retrieval["sources"]
+            else:
+                retrieval = retrieve_context(
+                    latest_user_message
+                )
+
+                context = retrieval["context"]
+
+                sources = retrieval["sources"]
+
             formatted_messages = [
 
                 (
                     "system",
-                    SYSTEM_PROMPT
+
+                    f"""
+{SYSTEM_PROMPT}
+
+DOCUMENT CONTEXT:
+{context}
+"""
                 )
 
             ]
-
-            if request.document_id:
-
-                document_text = (
-                    extract_pdf_text(
-                        request.document_id
-                    )
-                )
-
-                formatted_messages.append(
-
-                    (
-                        "system",
-
-                        f"""
-DOCUMENT CONTEXT:
-
-Filename:
-{request.document_id}
-
-Document Content:
-{document_text}
-"""
-                    )
-
-                )
 
             formatted_messages.extend(
 
@@ -144,26 +127,13 @@ Document Content:
                 formatted_messages
             )
 
-            streamed_anything = False
-
             async for chunk in response:
 
                 if (
                     chunk.content
-                    and
-                    chunk.content.strip()
                 ):
 
-                    streamed_anything = True
-
                     yield chunk.content
-
-            if not streamed_anything:
-
-                yield (
-                    "I apologize. "
-                    "Please ask again."
-                )
 
         except Exception as e:
 
@@ -174,4 +144,7 @@ Document Content:
     return StreamingResponse(
         stream(),
         media_type="text/plain",
+        headers={
+            "X-Sources": ""
+        }
     )

@@ -1,100 +1,159 @@
-from dotenv import load_dotenv
-import os
+from langchain_text_splitters import (
+    RecursiveCharacterTextSplitter
+)
+
 from langchain_openai import OpenAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_community.document_loaders import PyPDFLoader
-load_dotenv()
-embedding_model = OpenAIEmbeddings(
-    model="text-embedding-3-small"
+
+from pypdf import PdfReader
+
+from db.chroma import collection
+
+from core.config import (
+    OPENAI_API_KEY
 )
 
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=200
+import uuid
+import os
+
+embeddings = OpenAIEmbeddings(
+    api_key=OPENAI_API_KEY
 )
 
-VECTOR_DB_PATH = "chroma_db"
+UPLOADS_DIR = "uploads"
 
-def ingest_pdf(file_path):
+def process_pdf(
+    filename: str
+):
 
-    loader = PyPDFLoader(file_path)
-
-    documents = loader.load()
-
-    split_docs = text_splitter.split_documents(
-        documents
+    filepath = os.path.join(
+        UPLOADS_DIR,
+        filename
     )
-    for doc in split_docs:
 
-        filename = file_path.split("/")[-1]
-        doc.metadata["source"] = filename
-        doc.metadata["document_id"] = filename
+    reader = PdfReader(
+        filepath
+    )
 
-    Chroma.from_documents(
-        documents=split_docs,
-        embedding=embedding_model,
-        persist_directory=VECTOR_DB_PATH
+    text = ""
+
+    for page in reader.pages:
+
+        extracted = (
+            page.extract_text()
+        )
+
+        if extracted:
+
+            text += extracted
+
+    splitter = (
+        RecursiveCharacterTextSplitter(
+            chunk_size=700,
+            chunk_overlap=120,
+        )
+    )
+
+    chunks = splitter.split_text(
+        text
+    )
+
+    vectors = embeddings.embed_documents(
+        chunks
+    )
+
+    ids = [
+        str(uuid.uuid4())
+        for _ in chunks
+    ]
+
+    collection.add(
+        ids=ids,
+        documents=chunks,
+        embeddings=vectors,
+        metadatas=[
+            {
+                "source": filename,
+                "chunk": i
+            }
+            for i in range(len(chunks))
+        ]
     )
 
 def retrieve_context(
-    query,
-    document_id=None
+    query: str,
+    filename: str | None = None,
 ):
 
-    vectorstore = Chroma(
-        persist_directory=VECTOR_DB_PATH,
-        embedding_function=embedding_model
+    query_embedding = (
+        embeddings.embed_query(
+            query
+        )
     )
 
-    search_filter = None
+    query_args = {
+        "query_embeddings": [
+            query_embedding
+        ],
+        "n_results": 6,
+    }
 
-    if document_id:
+    if filename:
 
-        search_filter = {
-            "document_id": document_id
+        query_args["where"] = {
+            "source": filename
         }
 
-    retriever = vectorstore.as_retriever(
-        search_kwargs={
-            "k": 4,
-            "filter": search_filter
-        }
+    results = collection.query(
+        **query_args
     )
 
-    retrieved_docs = retriever.invoke(query)
+    documents = results[
+        "documents"
+    ][0]
 
-    context_parts = []
+    metadatas = results[
+        "metadatas"
+    ][0]
 
-    sources = []
+    formatted_chunks = []
 
-    for doc in retrieved_docs:
+    for i, doc in enumerate(
+        documents
+    ):
 
-        source = doc.metadata.get(
-            "source",
-            "Unknown"
+        source = metadatas[i][
+            "source"
+        ]
+
+        chunk_number = (
+            metadatas[i][
+                "chunk"
+            ]
         )
 
-        page = doc.metadata.get(
-            "page",
-            "N/A"
-        )
-
-        context_parts.append(
+        formatted_chunks.append(
             f"""
-Source: {source}
-Page: {page}
+        [SOURCE: {source} | CHUNK: {chunk_number}]
 
-Content:
-{doc.page_content}
-"""
+        {doc}
+        """
         )
 
-        sources.append({
-            "source": source,
-            "page": page
-        })
+    unique_sources = list(
+        set(
+            [
+                metadata["source"]
+                for metadata in metadatas
+            ]
+        )
+    )
 
-    context = "\n\n".join(context_parts)
+    return {
+        "context":
+            "\n\n".join(
+                formatted_chunks
+            ),
 
-    return context, sources
+        "sources":
+            unique_sources,
+    }

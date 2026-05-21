@@ -11,10 +11,19 @@ import {
 } from "react";
 
 import { Message } from "@/types/chat";
-
+import {
+  updateSession,
+} from "@/lib/chat-storage";
 import {
   ChatSession,
 } from "@/types/chat";
+import {
+  Prism as SyntaxHighlighter,
+} from "react-syntax-highlighter";
+
+import {
+  oneDark,
+} from "react-syntax-highlighter/dist/esm/styles/prism";
 
 export default function ChatWindow({
   sessions,
@@ -142,6 +151,26 @@ export default function ChatWindow({
 
         let streamedText = "";
 
+        setSessions((prev) =>
+          prev.map((session) =>
+
+            session.id ===
+            activeSessionId
+              ? {
+                  ...session,
+                  messages: [
+                    ...updatedMessages,
+                    {
+                      role:
+                        "assistant",
+                      content: "",
+                    },
+                  ],
+                }
+              : session
+          )
+        );
+
         while (true) {
 
           const {
@@ -154,13 +183,15 @@ export default function ChatWindow({
             break;
           }
 
-          streamedText +=
+          const chunk =
             decoder.decode(
               value,
               {
                 stream: true,
               }
             );
+
+          streamedText += chunk;
 
           setSessions((prev) =>
             prev.map((session) =>
@@ -172,11 +203,15 @@ export default function ChatWindow({
                     messages: [
                       ...updatedMessages,
                       {
-                        role:
-                          "assistant",
-                        content:
-                          streamedText,
-                      },
+                        role: "assistant",
+
+                        content: streamedText,
+
+                        sources:
+                          response.headers.get(
+                            "X-Sources"
+                          ) || "",
+                      }
                     ],
                   }
                 : session
@@ -189,8 +224,9 @@ export default function ChatWindow({
         console.error(error);
 
       }
-
-      setLoading(false);
+      finally {
+        setLoading(false);
+      }
     };
 
   return (
@@ -232,10 +268,44 @@ export default function ChatWindow({
                     remarkPlugins={[
                       remarkGfm,
                     ]}
+                    components={{
+                      code(props) {
+
+                        const {
+                          children,
+                          className,
+                        } = props;
+
+                        const match =
+                          /language-(\w+)/.exec(
+                            className || ""
+                          );
+
+                        return match ? (
+
+                          <SyntaxHighlighter
+                            style={oneDark}
+                            language={
+                              match[1]
+                            }
+                            PreTag="div"
+                          >
+                            {String(
+                              children
+                            ).replace(/\n$/, "")}
+                          </SyntaxHighlighter>
+
+                        ) : (
+
+                          <code className={className}>
+                            {children}
+                          </code>
+
+                        );
+                      },
+                    }}
                   >
-                    {
-                      message.content
-                    }
+                    {message.content}
                   </ReactMarkdown>
 
                 </div>
@@ -249,7 +319,7 @@ export default function ChatWindow({
 
             <div className="rounded-2xl bg-zinc-900 p-4 text-zinc-400">
 
-              AI is thinking...
+              Thinking...
 
             </div>
 

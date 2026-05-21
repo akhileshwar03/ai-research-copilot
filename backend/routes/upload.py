@@ -1,28 +1,48 @@
-from fastapi import APIRouter, UploadFile, File
-import shutil
+from fastapi import (
+    APIRouter,
+    UploadFile,
+    File,
+)
 
-from services.rag_service import ingest_pdf
+import os
+
+from services.rag_service import (
+    process_pdf
+)
 
 router = APIRouter()
 
-UPLOAD_DIR = "uploads"
+UPLOADS_DIR = "uploads"
+
+os.makedirs(
+    UPLOADS_DIR,
+    exist_ok=True
+)
 
 @router.post("/upload")
-
 async def upload_pdf(
     file: UploadFile = File(...)
 ):
 
-    file_path = f"{UPLOAD_DIR}/{file.filename}"
+    filepath = os.path.join(
+        UPLOADS_DIR,
+        file.filename
+    )
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(
-            file.file,
-            buffer
+    with open(
+        filepath,
+        "wb"
+    ) as f:
+
+        f.write(
+            await file.read()
         )
 
-    ingest_pdf(file_path)
+    process_pdf(
+        file.filename
+    )
 
     return {
-        "message": "PDF uploaded successfully"
+        "message":
+        "PDF uploaded successfully"
     }
