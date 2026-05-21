@@ -1,48 +1,82 @@
 import { ChatSession } from "@/types/chat";
+export async function fetchSessions(
+  userId: number
+): Promise<ChatSession[]> {
 
-const STORAGE_KEY =
-  "ai-research-copilot";
+  const response =
+    await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL}/sessions/${userId}`
+    );
 
-export function saveSessions(
-  sessions: ChatSession[]
+  return response.json();
+}
+
+export async function createSession(
+  session: ChatSession,
+  userId: number
 ) {
 
-  if (
-    typeof window === "undefined"
-  ) {
-    return;
-  }
+  await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/sessions`,
+    {
+      method: "POST",
 
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify(sessions)
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        title:
+          session.title,
+
+        user_id:
+          userId,
+
+        messages:
+          session.messages,
+      }),
+    }
   );
 }
 
-export function loadSessions():
-  ChatSession[] {
+export async function deleteSession(
+  sessionId: number
+) {
 
-  if (
-    typeof window === "undefined"
-  ) {
-    return [];
-  }
+  await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/sessions/${sessionId}`,
+    {
+      method: "DELETE",
+    }
+  );
+}
 
-  const stored =
-    localStorage.getItem(
-      STORAGE_KEY
-    );
+export async function updateSession(
+  session: ChatSession,
+  userId: number
+) {
 
-  if (!stored) {
-    return [];
-  }
+  await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/sessions/${session.id}`,
+    {
+      method: "PUT",
 
-  try {
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
 
-    return JSON.parse(stored);
+      body: JSON.stringify({
+        title:
+          session.title,
 
-  } catch {
+        user_id:
+          userId,
 
-    return [];
-  }
+        messages:
+          session.messages,
+      }),
+    }
+  );
 }
