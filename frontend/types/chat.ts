@@ -1,12 +1,16 @@
-export type Message = {
-  role: "user" | "assistant";
+export type MessageRole =
+  | "user"
+  | "assistant";
+
+export interface Message {
+  role: MessageRole;
 
   content: string;
 
   sources?: string;
-};
+}
 
-export type ChatSession = {
+export interface ChatSession {
   id: number;
 
   title: string;
@@ -14,4 +18,4 @@ export type ChatSession = {
   pinned?: boolean;
 
   messages: Message[];
-};
+}

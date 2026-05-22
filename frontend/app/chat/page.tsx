@@ -50,16 +50,21 @@ export default function Home() {
         } else {
           const defaultSession: ChatSession = {
             id: Date.now(),
+
             title: "New Chat",
+
             pinned: false,
+
             messages: [
               {
-                role: "assistant" as "assistant",
-                content: "Welcome to AI Research Copilot.",
+                role: "assistant",
+
+                content:
+                  "Welcome to AI Research Copilot.",
               },
             ],
           };
-          setSessions([defaultSession]);
+                    setSessions([defaultSession]);
           setActiveSessionId(defaultSession.id);
         }
 
