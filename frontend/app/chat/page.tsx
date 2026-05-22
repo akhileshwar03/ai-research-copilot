@@ -54,7 +54,7 @@ export default function Home() {
             pinned: false,
             messages: [
               {
-                role: "assistant" as const,
+                role: "assistant" as "assistant",
                 content: "Welcome to AI Research Copilot.",
               },
             ],
