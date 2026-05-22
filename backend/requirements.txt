@@ -14,3 +14,6 @@ langchain-openai==1.2.1
 chromadb==1.5.9
 pypdf==6.11.0
 tiktoken==0.13.0
+
+passlib[bcrypt]
+python-jose[cryptography]
