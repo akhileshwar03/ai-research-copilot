@@ -1,167 +1,258 @@
 "use client";
 
-import { useState } from "react";
+import dynamic from "next/dynamic";
 
-import { useRouter } from "next/navigation";
+import {
+  useEffect,
+  useState,
+} from "react";
 
-import Link from "next/link";
+import MainLayout from "@/components/layout/main-layout";
 
-export default function LoginPage() {
+import Sidebar from "@/components/sidebar/sidebar";
 
-  const router = useRouter();
+import ChatWindow from "@/components/chat/chat-window";
 
-  const [email, setEmail] =
-    useState("");
+import {
+  fetchSessions,
+} from "@/lib/chat-storage";
 
-  const [password, setPassword] =
-    useState("");
+import {
+  ChatSession,
+} from "@/types/chat";
 
-  const [loading, setLoading] =
+const PdfViewer =
+  dynamic(
+    () =>
+      import(
+        "@/components/pdf/pdf-viewer"
+      ),
+    {
+      ssr: false,
+    }
+  );
+
+export default function Home() {
+
+  const [
+    sessions,
+    setSessions,
+  ] = useState<
+    ChatSession[]
+  >([]);
+
+  const [
+    activeSessionId,
+    setActiveSessionId,
+  ] = useState<
+    number | null
+  >(null);
+
+  const [
+    documents,
+    setDocuments,
+  ] = useState<string[]>(
+    []
+  );
+
+  const [
+    selectedDocument,
+    setSelectedDocument,
+  ] = useState("");
+
+  const [mounted, setMounted] =
     useState(false);
 
-  const handleLogin =
+  const fetchDocuments =
     async () => {
 
       try {
-
-        setLoading(true);
 
         const API_URL =
           process.env
             .NEXT_PUBLIC_API_URL;
 
         if (!API_URL) {
-
-          alert(
-            "API URL missing"
-          );
-
           return;
         }
 
         const response =
           await fetch(
-            `${API_URL}/login`,
-            {
-              method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
-
-              body: JSON.stringify({
-                email,
-                password,
-              }),
-            }
+            `${API_URL}/documents`
           );
 
         const data =
           await response.json();
 
-        console.log(data);
-
-        if (!response.ok) {
-
-          alert(
-            data.detail ||
-            "Login failed"
-          );
-
-          return;
-        }
-
-        localStorage.setItem(
-          "token",
-          data.token
+        setDocuments(
+          data.documents || []
         );
-
-        router.push("/chat");
 
       } catch (error) {
 
         console.error(error);
 
-        alert(
-          "Cannot connect to backend"
-        );
-
-      } finally {
-
-        setLoading(false);
-
       }
     };
 
-  return (
-    <div className="flex h-screen items-center justify-center bg-black text-white">
+  useEffect(() => {
 
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-8">
+    const token =
+      localStorage.getItem(
+        "token"
+      );
 
-        <h1 className="text-3xl font-bold">
-          Login
-        </h1>
+    if (!token) {
 
-        <p className="mt-2 text-sm text-zinc-500">
-          Access your AI workspace
-        </p>
+      window.location.href =
+        "/login";
 
-        <div className="mt-8 space-y-4">
+      return;
+    }
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) =>
-              setEmail(
-                e.target.value
-              )
-            }
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 outline-none"
-          />
+    async function loadData() {
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) =>
-              setPassword(
-                e.target.value
-              )
-            }
-            className="w-full rounded-xl border border-zinc-800 bg-zinc-900 p-3 outline-none"
-          />
+      try {
 
-          <button
-            onClick={handleLogin}
-            disabled={loading}
-            className="w-full rounded-xl bg-white px-4 py-3 font-medium text-black disabled:opacity-50"
-          >
+        setMounted(true);
+
+        const userId = 1;
+
+        const backendSessions =
+          await fetchSessions(
+            userId
+          );
+
+        if (
+          backendSessions.length >
+          0
+        ) {
+
+          setSessions(
+            backendSessions
+          );
+
+          setActiveSessionId(
+            backendSessions[0].id
+          );
+
+        } else {
+
+          const defaultSession: ChatSession =
             {
-              loading
-                ? "Loading..."
-                : "Login"
+              id: Date.now(),
+
+              title: "New Chat",
+
+              pinned: false,
+
+              messages: [
+                {
+                  role:
+                    "assistant",
+
+                  content:
+                    "Welcome to AI Research Copilot.",
+                },
+              ],
+            };
+
+          setSessions([
+            defaultSession,
+          ]);
+
+          setActiveSessionId(
+            defaultSession.id
+          );
+        }
+
+        await fetchDocuments();
+
+      } catch (error) {
+
+        console.error(error);
+
+      }
+    }
+
+    loadData();
+
+  }, []);
+
+  if (
+    !mounted ||
+    activeSessionId === null
+  ) {
+
+    return (
+      <div className="flex h-screen items-center justify-center bg-black text-white">
+        Loading...
+      </div>
+    );
+  }
+
+  return (
+    <MainLayout
+      sidebar={
+        <Sidebar
+          fetchDocuments={
+            fetchDocuments
+          }
+          documents={
+            documents
+          }
+          selectedDocument={
+            selectedDocument
+          }
+          setSelectedDocument={
+            setSelectedDocument
+          }
+          sessions={sessions}
+          activeSessionId={
+            activeSessionId
+          }
+          setActiveSessionId={
+            setActiveSessionId
+          }
+          setSessions={
+            setSessions
+          }
+        />
+      }
+    >
+      <div className="flex h-full">
+
+        <div className="flex-1">
+
+          <ChatWindow
+            selectedDocument={
+              selectedDocument
             }
-          </button>
-
-          <p className="text-center text-sm text-zinc-500">
-
-            New user?{" "}
-
-            <Link
-              href="/register"
-              className="text-white underline"
-            >
-              Register
-            </Link>
-
-          </p>
+            sessions={sessions}
+            setSessions={
+              setSessions
+            }
+            activeSessionId={
+              activeSessionId
+            }
+          />
 
         </div>
 
+        {selectedDocument && (
+
+          <div className="hidden w-[420px] border-l border-zinc-800 bg-zinc-950 xl:block">
+
+            <PdfViewer
+              file={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${selectedDocument}`}
+            />
+
+          </div>
+
+        )}
+
       </div>
 
-    </div>
+    </MainLayout>
   );
 }
