@@ -3,100 +3,96 @@
 import { useState } from "react";
 
 import { useRouter } from "next/navigation";
+
 import Link from "next/link";
 
 export default function LoginPage() {
 
   const router = useRouter();
 
-  const [email,
-    setEmail] =
+  const [email, setEmail] =
     useState("");
 
-  const [password,
-    setPassword] =
+  const [password, setPassword] =
     useState("");
 
-  const [loading,
-    setLoading] =
+  const [loading, setLoading] =
     useState(false);
 
-  const handleLogin = async () => {
-    try {
-      setLoading(true);
+  const handleLogin =
+    async () => {
 
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL;
+      try {
 
-      console.log(
-        "API URL:",
-        API_URL
-      );
+        setLoading(true);
 
-      const response =
-        await fetch(
-          `${API_URL}/login`,
-          {
-            method: "POST",
+        const API_URL =
+          process.env
+            .NEXT_PUBLIC_API_URL;
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+        if (!API_URL) {
 
-            body: JSON.stringify({
-              email,
-              password,
-            }),
-          }
+          alert(
+            "API URL missing"
+          );
+
+          return;
+        }
+
+        const response =
+          await fetch(
+            `${API_URL}/login`,
+            {
+              method: "POST",
+
+              headers: {
+                "Content-Type":
+                  "application/json",
+              },
+
+              body: JSON.stringify({
+                email,
+                password,
+              }),
+            }
+          );
+
+        const data =
+          await response.json();
+
+        console.log(data);
+
+        if (!response.ok) {
+
+          alert(
+            data.detail ||
+            "Login failed"
+          );
+
+          return;
+        }
+
+        localStorage.setItem(
+          "token",
+          data.token
         );
 
-      console.log(
-        "Response:",
-        response
-      );
+        router.push("/chat");
 
-      const data =
-        await response.json();
+      } catch (error) {
 
-      console.log(
-        "Data:",
-        data
-      );
+        console.error(error);
 
-      if (!response.ok) {
         alert(
-          data.detail ||
-          "Login failed"
+          "Cannot connect to backend"
         );
 
-        return;
+      } finally {
+
+        setLoading(false);
+
       }
-
-      localStorage.setItem(
-        "token",
-        data.token
-      );
-
-      router.push("/chat");
-
-    } catch (error) {
-
-      console.error(
-        "LOGIN ERROR:",
-        error
-      );
-
-      alert(
-        "Cannot connect to backend"
-      );
-
-    } finally {
-
-      setLoading(false);
-
-    }
-  };
+    };
 
   return (
     <div className="flex h-screen items-center justify-center bg-black text-white">
@@ -138,9 +134,7 @@ export default function LoginPage() {
           />
 
           <button
-            onClick={
-              handleLogin
-            }
+            onClick={handleLogin}
             disabled={loading}
             className="w-full rounded-xl bg-white px-4 py-3 font-medium text-black disabled:opacity-50"
           >
@@ -151,23 +145,18 @@ export default function LoginPage() {
             }
           </button>
 
-        <div className="mt-6 text-center text-sm text-zinc-500">
+          <p className="text-center text-sm text-zinc-500">
 
-          New user?{" "}
+            New user?{" "}
 
-          <Link
+            <Link
+              href="/register"
+              className="text-white underline"
+            >
+              Register
+            </Link>
 
-            href="/register"
-
-            className="font-medium text-white hover:underline"
-
-          >
-
-            Register
-
-          </Link>
-
-        </div>
+          </p>
 
         </div>
 
