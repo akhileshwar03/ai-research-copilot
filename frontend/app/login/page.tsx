@@ -21,63 +21,82 @@ export default function LoginPage() {
     setLoading] =
     useState(false);
 
-  const handleLogin =
-    async () => {
+  const handleLogin = async () => {
+    try {
+      setLoading(true);
 
-      try {
+      const API_URL =
+        process.env.NEXT_PUBLIC_API_URL;
 
-        setLoading(true);
+      console.log(
+        "API URL:",
+        API_URL
+      );
 
-        const response =
-          await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/login`,
-            {
-              method: "POST",
+      const response =
+        await fetch(
+          `${API_URL}/login`,
+          {
+            method: "POST",
 
-              headers: {
-                "Content-Type":
-                  "application/json",
-              },
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
 
-              body: JSON.stringify({
-                email,
-                password,
-              }),
-            }
-          );
-
-        const data =
-          await response.json();
-          
-
-        if (!response.ok) {
-
-          alert(
-            data.detail
-          );
-
-          return;
-        }
-
-        localStorage.setItem(
-          "token",
-          data.token
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+          }
         );
 
-        router.push(
-          "/chat"
+      console.log(
+        "Response:",
+        response
+      );
+
+      const data =
+        await response.json();
+
+      console.log(
+        "Data:",
+        data
+      );
+
+      if (!response.ok) {
+        alert(
+          data.detail ||
+          "Login failed"
         );
 
-      } catch (error) {
-
-        console.error(error);
-
-      } finally {
-
-        setLoading(false);
-
+        return;
       }
-    };
+
+      localStorage.setItem(
+        "token",
+        data.token
+      );
+
+      router.push("/chat");
+
+    } catch (error) {
+
+      console.error(
+        "LOGIN ERROR:",
+        error
+      );
+
+      alert(
+        "Cannot connect to backend"
+      );
+
+    } finally {
+
+      setLoading(false);
+
+    }
+  };
 
   return (
     <div className="flex h-screen items-center justify-center bg-black text-white">
