@@ -128,3 +128,35 @@
     @apply font-sans;
   }
 }
+
+/* ── Custom scrollbar ──────────────────────────────────────────────────────── */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.07) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar { width: 4px; }
+.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+.scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.07); border-radius: 9999px; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
+
+/* ── Dropdown animations ───────────────────────────────────────────────────── */
+@keyframes dropdown-in {
+  from { opacity: 0; transform: scale(0.96) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes dropdown-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
+}
+
+.animate-in[data-state="open"]  { animation: dropdown-in 0.12s ease-out forwards; }
+.animate-out[data-state="closed"] { animation: dropdown-out 0.1s ease-in forwards; }
+
+/* Radix state-based animations */
+[data-radix-popper-content-wrapper] [data-state="open"]  { animation: dropdown-in 0.12s ease-out forwards; }
+[data-radix-popper-content-wrapper] [data-state="closed"] { animation: dropdown-out 0.1s ease-in forwards; }
+
+/* ── OTP input ─────────────────────────────────────────────────────────────── */
+.otp-digit {
+  caret-color: transparent;
+}

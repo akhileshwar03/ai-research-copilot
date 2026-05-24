@@ -1,10 +1,5 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-} from "react";
-
 import dynamic from "next/dynamic";
 
 const PdfViewerClient =
@@ -23,20 +18,6 @@ export default function PdfViewer({
 }: {
   file: string;
 }) {
-
-  const [mounted, setMounted] =
-    useState(false);
-
-  useEffect(() => {
-
-    setMounted(true);
-
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
-
   return (
     <PdfViewerClient
       file={file}

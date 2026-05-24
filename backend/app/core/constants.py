@@ -1,0 +1,1 @@
+ALLOWED_UPLOAD_EXTENSIONS = {".pdf"}
