@@ -21,6 +21,9 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [value]);
 
+  // Auto-focus when mounted
+  useEffect(() => { textareaRef.current?.focus(); }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();

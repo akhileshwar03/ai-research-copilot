@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import type { DocumentItem } from "@/shared/types/api";
 import { useDocumentStore } from "@/stores/document-store";
+import { DocumentSkeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -19,6 +20,7 @@ interface DocumentsPanelProps {
   onUpload: (file: File) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   isUploading: boolean;
+  isLoading?: boolean;
 }
 
 function SortIcon() {
@@ -77,7 +79,7 @@ function UploadIcon() {
   );
 }
 
-export function DocumentsPanel({ documents, onUpload, onDelete, isUploading }: DocumentsPanelProps) {
+export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isLoading = false }: DocumentsPanelProps) {
   const {
     selectedDocument, setSelectedDocument,
     checkedDocuments, toggleChecked, setAllChecked, clearChecked,
@@ -196,7 +198,13 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading }: D
       )}
 
       {/* Document list */}
-      {sorted.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col gap-1">
+          <DocumentSkeleton />
+          <DocumentSkeleton />
+          <DocumentSkeleton />
+        </div>
+      ) : sorted.length === 0 ? (
         <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[#0d0d0d] px-4 py-8 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02]">
           <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
           <UploadIcon />

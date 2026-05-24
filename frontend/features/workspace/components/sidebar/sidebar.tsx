@@ -15,8 +15,8 @@ interface WorkspaceSidebarProps {
 
 export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const { logout } = useAuth();
-  const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession } = useSessions(email);
-  const { documents, uploadDocument, isUploadingDocument, deleteDocument } = useDocuments();
+  const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions } = useSessions(email);
+  const { documents, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
   const upsertSession = useSessionStore((s) => s.upsertSession);
 
   const [isCreating, setIsCreating] = useState(false);
@@ -82,6 +82,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
           onUpload={async (file) => { await uploadDocument(file); }}
           onDelete={async (id) => { await deleteDocument(id); }}
           isUploading={isUploadingDocument}
+          isLoading={isLoadingDocuments}
         />
 
         {/* Divider */}
@@ -96,6 +97,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
           onRename={handleRenameSession}
           onNewSession={handleNewSession}
           isCreating={isCreating}
+          isLoading={isLoadingSessions}
         />
       </div>
 
