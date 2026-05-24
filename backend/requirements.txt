@@ -10,10 +10,16 @@ python-multipart==0.0.29
 langchain==1.3.1
 langchain-community==0.4.1
 langchain-openai==1.2.1
+langchain-text-splitters==1.1.2
 
 chromadb==1.5.9
 pypdf==6.11.0
 tiktoken==0.13.0
 
+SQLAlchemy==2.0.49
 passlib[bcrypt]
 python-jose[cryptography]
+pydantic-settings
+email-validator
+alembic
+pytest

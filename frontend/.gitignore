@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+# Temporary screenshot files from dev tools
+_private_tmp_*
+
 # dependencies
 /node_modules
 /.pnp

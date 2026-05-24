@@ -17,7 +17,7 @@ export default function MainLayout({
 
   return (
 
-    <div className="h-screen w-screen overflow-hidden bg-black text-white">
+    <div className="h-screen w-screen overflow-hidden bg-[#080808] text-white">
 
       <PanelGroup direction="horizontal">
 
@@ -28,7 +28,7 @@ export default function MainLayout({
           maxSize={30}
         >
 
-          <aside className="h-full border-r border-zinc-800 bg-zinc-950">
+          <aside className="h-full border-r border-white/[0.05]">
 
             {sidebar}
 
@@ -37,7 +37,7 @@ export default function MainLayout({
         </Panel>
 
         {/* Resize Handle */}
-        <PanelResizeHandle className="w-[2px] bg-zinc-800 hover:bg-zinc-600 transition-colors" />
+        <PanelResizeHandle className="w-px bg-white/[0.05] hover:bg-white/[0.15] transition-colors cursor-col-resize" />
 
         {/* Main */}
         <Panel defaultSize={78}>

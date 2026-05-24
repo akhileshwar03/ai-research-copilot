@@ -1,48 +1,16 @@
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-)
+from fastapi import APIRouter, Depends, File, UploadFile
 
-import os
-
-from services.rag_service import (
-    process_pdf
-)
+from app.api.dependencies.auth import get_current_user_email
+from app.api.dependencies.services import get_document_service
+from app.services.document_service import DocumentService
 
 router = APIRouter()
 
-UPLOADS_DIR = "uploads"
-
-os.makedirs(
-    UPLOADS_DIR,
-    exist_ok=True
-)
 
 @router.post("/upload")
 async def upload_pdf(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    _email: str = Depends(get_current_user_email),
+    service: DocumentService = Depends(get_document_service),
 ):
-
-    filepath = os.path.join(
-        UPLOADS_DIR,
-        file.filename
-    )
-
-    with open(
-        filepath,
-        "wb"
-    ) as f:
-
-        f.write(
-            await file.read()
-        )
-
-    process_pdf(
-        file.filename
-    )
-
-    return {
-        "message":
-        "PDF uploaded successfully"
-    }
+    return await service.upload(file)

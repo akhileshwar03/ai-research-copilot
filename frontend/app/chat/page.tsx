@@ -1,122 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import PdfViewer from "@/components/pdf/pdf-viewer";
+import dynamic from "next/dynamic";
+
+import ChatWindow from "@/features/chat/components/chat-window";
+import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { useAuthStore } from "@/stores/auth-store";
+import { useDocumentStore } from "@/stores/document-store";
 import MainLayout from "@/components/layout/main-layout";
-import Sidebar from "@/components/sidebar/sidebar";
-import ChatWindow from "@/components/chat/chat-window";
-import { fetchSessions } from "@/lib/chat-storage";
-import { ChatSession } from "@/types/chat";
+import Sidebar from "@/features/workspace/components/sidebar/sidebar";
+import { buildStaticUrl } from "@/constants/config";
 
-export default function Home() {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
-  const [documents, setDocuments] = useState<string[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState("");
-  const [mounted, setMounted] = useState(false);
+const PdfViewer = dynamic(() => import("@/components/pdf/pdf-viewer"), { ssr: false });
 
-  const fetchDocuments = async () => {
-    try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL;
-      if (!API_URL) {
-        throw new Error("NEXT_PUBLIC_API_URL missing");
-      }
+export default function ChatPage() {
+  const { isReady, isAuthenticated } = useAuthGuard();
+  const email = useAuthStore((s) => s.email);
+  const selectedDocument = useDocumentStore((s) => s.selectedDocument);
 
-      const response = await fetch(`${API_URL}/documents`);
-      const data = await response.json();
-      setDocuments(data.documents || []);
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
-      window.location.href = "/login";
-      return;
-    }
-
-    async function loadData() {
-      try {
-        setMounted(true);
-        const userId = 1;
-        const backendSessions = await fetchSessions(userId);
-
-        if (backendSessions.length > 0) {
-          setSessions(backendSessions);
-          setActiveSessionId(backendSessions[0].id);
-        } else {
-          const defaultSession: ChatSession = {
-            id: Date.now(),
-
-            title: "New Chat",
-
-            pinned: false,
-
-            messages: [
-              {
-                role: "assistant",
-
-                content:
-                  "Welcome to AI Research Copilot.",
-              },
-            ],
-          };
-                    setSessions([defaultSession]);
-          setActiveSessionId(defaultSession.id);
-        }
-
-        await fetchDocuments();
-      } catch (error) {
-        console.error(error);
-      }
-    }
-
-    loadData();
-  }, []);
-
-  if (!mounted || activeSessionId === null) {
+  if (!isReady || !isAuthenticated) {
     return (
-      <div className="flex h-screen items-center justify-center bg-black text-white">
-        Loading...
+      <div className="flex h-screen items-center justify-center bg-[#080808]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
+          <p className="text-[12px] text-zinc-600">Loading workspace…</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <MainLayout
-      sidebar={
-        <Sidebar
-          fetchDocuments={fetchDocuments}
-          documents={documents}
-          selectedDocument={selectedDocument}
-          setSelectedDocument={setSelectedDocument}
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          setActiveSessionId={setActiveSessionId}
-          setSessions={setSessions}
-        />
-      }
-    >
+    <MainLayout sidebar={<Sidebar email={email} />}>
       <div className="flex h-full">
-        <div className="flex-1">
-          <ChatWindow
-            selectedDocument={selectedDocument}
-            sessions={sessions}
-            setSessions={setSessions}
-            activeSessionId={activeSessionId}
-          />
+        <div className="flex-1 overflow-hidden">
+          <ChatWindow email={email} selectedDocument={selectedDocument} />
         </div>
 
-        {selectedDocument && (
-          <div className="hidden w-[420px] border-l border-zinc-800 bg-zinc-950 xl:block">
-            <PdfViewer
-              file={`${process.env.NEXT_PUBLIC_API_URL}/uploads/${selectedDocument}`}
-            />
+        {selectedDocument ? (
+          <div className="hidden w-[420px] shrink-0 border-l border-white/[0.05] bg-[#0a0a0a] xl:block">
+            <PdfViewer file={buildStaticUrl(`/uploads/${selectedDocument}`)} />
           </div>
-        )}
+        ) : null}
       </div>
     </MainLayout>
   );
