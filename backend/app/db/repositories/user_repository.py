@@ -13,8 +13,8 @@ class UserRepository:
     def get_by_id(self, user_id: int) -> User | None:
         return self.db.query(User).filter(User.id == user_id).first()
 
-    def create(self, email: str, hashed_password: str | None) -> User:
-        user = User(email=email, hashed_password=hashed_password)
+    def create(self, email: str, hashed_password: str | None, email_verified: bool = False) -> User:
+        user = User(email=email, hashed_password=hashed_password, email_verified=email_verified)
         self.db.add(user)
         self.db.flush()
         return user

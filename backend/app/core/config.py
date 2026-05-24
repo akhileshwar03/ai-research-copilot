@@ -34,12 +34,21 @@ class Settings(BaseSettings):
     rag_chunk_overlap: int = 120
     rag_top_k: int = 6
 
-    # Email / SMTP (optional — OTPs are logged to console when not set)
+    # Email — Resend (primary, recommended) or SMTP (fallback)
+    # Sign up at resend.com → get an API key → set RESEND_API_KEY
+    resend_api_key: str = ""
+    email_from: str = "AI Research Copilot <noreply@resend.dev>"  # change to your domain after verifying on Resend
+
+    # SMTP fallback (only used if RESEND_API_KEY is not set)
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+
+    # Backend public URL (used as OAuth redirect_uri base)
+    # Set this to your Render URL, e.g. https://ai-research-copilot-xtmd.onrender.com
+    app_base_url: str = "http://localhost:8000"
 
     # OAuth — configure these to enable social login
     google_client_id: str = ""

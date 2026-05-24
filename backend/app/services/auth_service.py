@@ -22,19 +22,68 @@ class AuthService:
         self.settings = get_settings()
 
     def register(self, email: str, password: str) -> dict:
+        """Legacy password register — kept for backward compat. Use signup_request for new flows."""
         if self.user_repo.get_by_email(email):
-            raise AppError(code="USER_EXISTS", message="User already exists", status_code=400)
+            raise AppError(code="USER_EXISTS", message="An account with this email already exists.", status_code=400)
 
         user = self.user_repo.create(email=email, hashed_password=hash_password(password))
         self.user_repo.create_identity(
-            user_id=user.id,
-            provider="password",
-            provider_subject=email,
-            email=email,
+            user_id=user.id, provider="password", provider_subject=email, email=email,
         )
         self.user_repo.db.commit()
         logger.info("user_registered email=%s", email)
         return {"message": "User created"}
+
+    def signup_request(self, email: str, password: str) -> dict:
+        """New signup: validates uniqueness, stores pending password, returns OTP gate signal.
+        Actual user creation happens in OtpService.verify_otp when email is confirmed."""
+        existing = self.user_repo.get_by_email(email)
+        if existing and existing.email_verified:
+            raise AppError(
+                code="USER_EXISTS",
+                message="An account with this email already exists. Please sign in instead.",
+                status_code=400,
+            )
+        # Return payload for OTP service to consume
+        return {"email": email, "password": password, "needs_otp": True}
+
+    def login_or_create_oauth_user(self, email: str, provider: str, provider_subject: str) -> dict:
+        """Find or create a user via OAuth, issue tokens."""
+        from datetime import timedelta
+        user = self.user_repo.get_by_email(email)
+        is_new = False
+        if not user:
+            is_new = True
+            user = self.user_repo.create(email=email, hashed_password=None, email_verified=True)
+        elif not user.email_verified:
+            # Mark verified via OAuth
+            user.email_verified = True
+
+        # Upsert OAuth identity
+        identity = next(
+            (i for i in user.identities if i.provider == provider and i.provider_subject == provider_subject),
+            None,
+        )
+        if not identity:
+            self.user_repo.create_identity(
+                user_id=user.id, provider=provider, provider_subject=provider_subject, email=email,
+            )
+
+        access_token = create_access_token(subject=user.email)
+        refresh_token = create_refresh_token(subject=user.email)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days)
+        self.user_repo.create_refresh_token(
+            user_id=user.id, token_hash=hash_token(refresh_token), expires_at=expires_at,
+        )
+        self.user_repo.db.commit()
+        logger.info("oauth_login email=%s provider=%s new=%s", email, provider, is_new)
+        return {
+            "token": access_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer",
+            "is_new_user": is_new,
+        }
 
     def login(self, email: str, password: str) -> dict:
         user = self.user_repo.get_by_email(email)

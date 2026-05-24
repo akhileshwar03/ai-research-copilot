@@ -35,3 +35,8 @@ class VerifyOtpRequest(BaseModel):
     email: EmailStr
     code: str
     password: str | None = None
+
+
+class SignupRequest(BaseModel):
+    email: EmailStr
+    password: str

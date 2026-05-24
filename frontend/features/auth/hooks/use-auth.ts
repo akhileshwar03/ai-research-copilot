@@ -55,6 +55,10 @@ export function useAuth() {
     retry: false,
   });
 
+  const signupMutation = useMutation({
+    mutationFn: (payload: { email: string; password: string }) => authApi.signup(payload),
+  });
+
   const sendOtpMutation = useMutation({
     mutationFn: (payload: SendOtpRequest) => authApi.sendOtp(payload),
   });
@@ -86,6 +90,9 @@ export function useAuth() {
     isRegistering: registerMutation.isPending,
     loginError: loginMutation.error,
     registerError: registerMutation.error,
+    // Signup
+    signup: signupMutation.mutateAsync,
+    isSigningUp: signupMutation.isPending,
     // OTP auth
     sendOtp: sendOtpMutation.mutateAsync,
     verifyOtp: verifyOtpMutation.mutateAsync,
