@@ -9,6 +9,16 @@ import { sessionsApi } from "@/services/api/sessions-api";
 
 import { useStreamingChat } from "@/features/chat/hooks/use-streaming-chat";
 
+/** Derive a session title from the first user message — instant, no API call needed. */
+function deriveTitle(message: string): string {
+  const cleaned = message.trim().replace(/\s+/g, " ");
+  if (cleaned.length <= 52) return cleaned;
+  // Break at word boundary
+  const truncated = cleaned.slice(0, 52);
+  const lastSpace = truncated.lastIndexOf(" ");
+  return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + "…";
+}
+
 export function useChat(email: string | null, selectedDocument: string) {
   const [input, setInput] = useState("");
   const [chatError, setChatError] = useState<string>("");
@@ -16,12 +26,12 @@ export function useChat(email: string | null, selectedDocument: string) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
 
+  const setSessions = useSessionStore((s) => s.setSessions);
+
   const updateMutation = useMutation({
     mutationFn: async (sessionId: number) => {
       const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
-      if (!session) {
-        return;
-      }
+      if (!session) return;
       await sessionsApi.update(sessionId, { session });
     },
   });
@@ -43,6 +53,21 @@ export function useChat(email: string | null, selectedDocument: string) {
     const baselineMessages = [...activeSession.messages, userMessage];
     updateMessages(activeSession.id, baselineMessages);
     setInput("");
+
+    // Auto-title on first real user message (session still has default "New Chat" title)
+    const isFirstMessage = activeSession.messages.filter((m) => m.role === "user").length === 0;
+    if (isFirstMessage && activeSession.title === "New Chat") {
+      const newTitle = deriveTitle(userMessage.content);
+      const { sessions } = useSessionStore.getState();
+      const updatedSessions = sessions.map((s) =>
+        s.id === activeSession.id ? { ...s, title: newTitle } : s
+      );
+      setSessions(updatedSessions);
+      // Persist in background — don't await, don't block the stream
+      sessionsApi.update(activeSession.id, {
+        session: { ...activeSession, title: newTitle, messages: baselineMessages },
+      }).catch(() => {/* silently ignore — title will revert on next load at worst */});
+    }
 
     const optimisticAssistant: Message = { role: "assistant", content: "" };
     updateMessages(activeSession.id, [...baselineMessages, optimisticAssistant]);

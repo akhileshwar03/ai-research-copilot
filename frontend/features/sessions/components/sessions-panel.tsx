@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import type { ChatSession } from "@/shared/types/chat";
 import { useSessionStore } from "@/stores/session-store";
+import { SessionSkeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -22,6 +23,7 @@ interface SessionsPanelProps {
   onRename: (id: number, title: string) => Promise<void>;
   onNewSession: () => Promise<void>;
   isCreating?: boolean;
+  isLoading?: boolean;
 }
 
 function SortIcon() {
@@ -120,12 +122,18 @@ export function SessionsPanel({
   onRename,
   onNewSession,
   isCreating = false,
+  isLoading = false,
 }: SessionsPanelProps) {
   const { sortOrder, setSortOrder, togglePin } = useSessionStore();
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
 
-  const sorted = [...sessions].sort((a, b) => {
+  const filtered = search.trim()
+    ? sessions.filter((s) => s.title.toLowerCase().includes(search.toLowerCase()))
+    : sessions;
+
+  const sorted = [...filtered].sort((a, b) => {
     const aPinned = a.pinned ?? false;
     const bPinned = b.pinned ?? false;
     if (aPinned !== bPinned) return aPinned ? -1 : 1;
@@ -288,8 +296,38 @@ export function SessionsPanel({
         </div>
       </div>
 
+      {/* Search */}
+      {sessions.length > 4 && (
+        <div className="relative">
+          <svg className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-zinc-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search sessions…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5 pl-7 pr-3 text-[11px] text-zinc-400 placeholder-zinc-700 outline-none transition focus:border-white/[0.12] focus:text-zinc-300"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-700 hover:text-zinc-400">
+              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Session list */}
-      {sorted.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col gap-1">
+          <SessionSkeleton />
+          <SessionSkeleton />
+          <SessionSkeleton />
+          <SessionSkeleton />
+        </div>
+      ) : sorted.length === 0 && !search ? (
         <button
           onClick={onNewSession}
           disabled={isCreating}
@@ -298,6 +336,8 @@ export function SessionsPanel({
           <ChatBubbleIcon />
           <span className="text-[12px] text-zinc-600">{isCreating ? "Creating…" : "Start a new chat"}</span>
         </button>
+      ) : sorted.length === 0 && search ? (
+        <p className="py-4 text-center text-[12px] text-zinc-700">No sessions match "{search}"</p>
       ) : (
         <div className="flex flex-col gap-1">
           {/* Pinned section */}

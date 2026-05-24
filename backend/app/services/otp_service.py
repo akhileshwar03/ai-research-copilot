@@ -24,6 +24,14 @@ class OtpService:
         self.settings = get_settings()
 
     def send_otp(self, email: str) -> dict:
+        from app.db.repositories.otp_repository import OTP_RATE_LIMIT
+        recent = self.otp_repo.count_recent(email)
+        if recent >= OTP_RATE_LIMIT:
+            raise AppError(
+                code="OTP_RATE_LIMITED",
+                message="Too many codes sent. Please wait before requesting another.",
+                status_code=429,
+            )
         self.otp_repo.delete_expired(email)
         token = self.otp_repo.create(email=email, purpose="auth")
         self.otp_repo.db.commit()
