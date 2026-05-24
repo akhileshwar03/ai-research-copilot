@@ -44,6 +44,7 @@ export interface OAuthProvidersResponse {
   google: boolean;
   apple: boolean;
   facebook: boolean;
+  [key: string]: boolean;
 }
 
 // ── Sessions ──────────────────────────────────────────────────────────────────

@@ -69,13 +69,18 @@ class OtpService:
         if not user:
             is_new_user = True
             hashed = hash_password(password) if password else None
-            user = self.user_repo.create(email=email, hashed_password=hashed)
+            user = self.user_repo.create(email=email, hashed_password=hashed, email_verified=True)
             self.user_repo.create_identity(
                 user_id=user.id,
                 provider="otp",
                 provider_subject=email,
                 email=email,
             )
+        else:
+            # Mark email as verified and optionally set password
+            user.email_verified = True
+            if password and not user.hashed_password:
+                user.hashed_password = hash_password(password)
 
         access_token = create_access_token(subject=user.email)
         refresh_token = create_refresh_token(subject=user.email)

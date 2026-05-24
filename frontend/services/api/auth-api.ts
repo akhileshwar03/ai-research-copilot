@@ -30,6 +30,13 @@ export const authApi = {
       skipRefresh: true,
     }),
 
+  signup: (payload: { email: string; password: string }) =>
+    apiRequest<{ email: string; needs_otp: boolean }>("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(payload),
+      skipAuth: true,
+    }),
+
   sendOtp: (payload: SendOtpRequest) =>
     apiRequest<SendOtpResponse>("/auth/send-otp", {
       method: "POST",
