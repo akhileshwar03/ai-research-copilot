@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { authApi } from "@/services/api/auth-api";
+import { useAuth } from "@/features/auth/hooks/use-auth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,8 @@ interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialSection?: ProfileSection;
+  /** Deep-link into a sub-area of the active section */
+  initialSubSection?: "password";
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,11 +40,11 @@ function NavItem({
       className={[
         "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] transition",
         active
-          ? "bg-white/[0.08] text-white font-medium"
+          ? "bg-white/[0.08] text-[var(--text-primary)] font-medium"
           : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300",
       ].join(" ")}
     >
-      <span className={active ? "text-white" : "text-zinc-600"}>{icon}</span>
+      <span className={active ? "text-[var(--text-primary)]" : "text-zinc-600"}>{icon}</span>
       {label}
     </button>
   );
@@ -51,7 +55,7 @@ function NavItem({
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="mb-8">
-      <h2 className="text-[20px] font-semibold text-white">{title}</h2>
+      <h2 className="text-[20px] font-semibold text-[var(--text-primary)]">{title}</h2>
       {subtitle && <p className="mt-1 text-[13px] text-zinc-500">{subtitle}</p>}
     </div>
   );
@@ -90,9 +94,9 @@ function TextInput({
       placeholder={placeholder}
       disabled={disabled}
       className={[
-        "w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3.5 py-2.5",
-        "text-[13px] text-white placeholder:text-zinc-600 outline-none transition",
-        "focus:border-white/20 focus:ring-1 focus:ring-white/10",
+        "w-full rounded-xl border border-[var(--border-medium)] bg-[var(--surface-1)] px-3.5 py-2.5",
+        "text-[13px] text-[var(--text-primary)] placeholder:text-zinc-600 outline-none transition",
+        "focus:border-[var(--border-strong)] focus:ring-1 focus:ring-[var(--border-medium)]",
         disabled ? "cursor-not-allowed opacity-50" : "",
       ].join(" ")}
     />
@@ -125,11 +129,11 @@ function ProfileSection({ email }: { email: string | null }) {
 
       {/* Avatar */}
       <div className="mb-8 flex items-center gap-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[28px] font-bold uppercase text-white ring-1 ring-white/10">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[28px] font-bold uppercase text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]">
           {initial}
         </div>
         <div>
-          <p className="text-[16px] font-semibold text-white">{displayName}</p>
+          <p className="text-[16px] font-semibold text-[var(--text-primary)]">{displayName}</p>
           <p className="text-[13px] text-zinc-500">{email}</p>
         </div>
       </div>
@@ -164,7 +168,7 @@ function ProfileSection({ email }: { email: string | null }) {
               "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium transition",
               saved
                 ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
-                : "bg-white text-black hover:bg-zinc-200",
+                : "bg-[var(--text-primary)] text-[var(--app-bg)] hover:opacity-90",
             ].join(" ")}
           >
             {saved ? (
@@ -186,7 +190,8 @@ function ProfileSection({ email }: { email: string | null }) {
 
 // ─── Settings section ─────────────────────────────────────────────────────────
 
-function SettingsSection() {
+function SettingsSection({ focusPassword = false }: { focusPassword?: boolean }) {
+  const { logout } = useAuth();
   const [theme, setTheme] = useState(() => ls("pf_theme", "dark"));
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -194,6 +199,26 @@ function SettingsSection() {
   const [pwError, setPwError] = useState("");
   const [pwSuccess, setPwSuccess] = useState("");
   const [isChanging, setIsChanging] = useState(false);
+  const passwordSectionRef = useRef<HTMLDivElement>(null);
+  const currentPwRef = useRef<HTMLInputElement>(null);
+
+  // Delete account state
+  const [showDeleteZone, setShowDeleteZone] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Deep-link: scroll to & focus the password form
+  useEffect(() => {
+    if (focusPassword && passwordSectionRef.current) {
+      const timer = setTimeout(() => {
+        passwordSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Focus the "Current Password" input inside the section
+        const firstInput = passwordSectionRef.current?.querySelector("input");
+        if (firstInput) (firstInput as HTMLInputElement).focus();
+      }, 120);
+      return () => clearTimeout(timer);
+    }
+  }, [focusPassword]);
 
   const handleTheme = (t: string) => {
     setTheme(t);
@@ -243,8 +268,8 @@ function SettingsSection() {
               className={[
                 "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition",
                 theme === t
-                  ? "border-white/30 bg-white/[0.08] text-white"
-                  : "border-white/[0.06] bg-white/[0.02] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300",
+                  ? "border-[var(--border-strong)] bg-white/[0.08] text-[var(--text-primary)]"
+                  : "border-[var(--border-subtle)] bg-white/[0.02] text-zinc-500 hover:border-[var(--border-medium)] hover:text-zinc-300",
               ].join(" ")}
             >
               <span className="text-[20px]">{t === "dark" ? "🌑" : "☀️"}</span>
@@ -255,8 +280,8 @@ function SettingsSection() {
                 </p>
               </div>
               {theme === t && (
-                <div className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-white">
-                  <svg className="h-2.5 w-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <div className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-[var(--text-primary)]">
+                  <svg className="h-2.5 w-2.5 text-[var(--app-bg)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
@@ -266,12 +291,12 @@ function SettingsSection() {
         </div>
       </div>
 
-      {/* Security */}
-      <div>
+      {/* Security — Change Password */}
+      <div ref={passwordSectionRef}>
         <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
           Security · Change Password
         </h3>
-        <div className="flex flex-col gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
+        <div className="flex flex-col gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
           <Field label="Current Password">
             <TextInput
               type="password"
@@ -317,7 +342,7 @@ function SettingsSection() {
           <button
             onClick={handleChangePw}
             disabled={isChanging}
-            className="flex items-center justify-center rounded-xl bg-white px-5 py-2.5 text-[13px] font-medium text-black transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center justify-center rounded-xl bg-[var(--text-primary)] px-5 py-2.5 text-[13px] font-medium text-[var(--app-bg)] transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isChanging ? (
               <span className="flex items-center gap-2">
@@ -331,6 +356,72 @@ function SettingsSection() {
               "Update Password"
             )}
           </button>
+        </div>
+      </div>
+
+      {/* ── Danger Zone ─────────────────────────────────────────────────── */}
+      <div className="mt-10">
+        <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-red-500/60">
+          Danger Zone
+        </h3>
+        <div className="overflow-hidden rounded-2xl border border-red-500/20 bg-red-500/[0.04]">
+          <div className="flex items-start justify-between p-5">
+            <div>
+              <p className="text-[13px] font-semibold text-[var(--text-primary)]">Delete Account</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">
+                Permanently remove your account, all chat sessions, and documents. This cannot be undone.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowDeleteZone((s) => !s)}
+              className="ml-4 shrink-0 rounded-xl border border-red-500/30 px-3 py-1.5 text-[12px] font-medium text-red-400 transition hover:border-red-500/50 hover:bg-red-500/10"
+            >
+              {showDeleteZone ? "Cancel" : "Delete Account"}
+            </button>
+          </div>
+
+          {showDeleteZone && (
+            <div className="border-t border-red-500/20 p-5 space-y-4">
+              <p className="text-[12px] text-zinc-500">
+                Type <span className="font-mono font-bold text-red-400">DELETE</span> below to confirm you understand this action is irreversible.
+              </p>
+              <input
+                type="text"
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="Type DELETE to confirm"
+                className="w-full rounded-xl border border-red-500/25 bg-red-500/[0.06] px-3.5 py-2.5 text-[13px] text-[var(--text-primary)] placeholder:text-zinc-700 outline-none transition focus:border-red-500/40 focus:ring-1 focus:ring-red-500/20"
+              />
+              <button
+                disabled={deleteConfirmText !== "DELETE" || isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await authApi.deleteAccount();
+                    toast.success("Account deleted");
+                    logout();
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to delete account");
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+                className="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2.5 text-[13px] font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isDeleting ? (
+                  <>
+                    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Deleting…
+                  </>
+                ) : (
+                  "Permanently Delete My Account"
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -388,13 +479,13 @@ function ShortcutsSection() {
             <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
               {group}
             </h3>
-            <div className="overflow-hidden rounded-xl border border-white/[0.06]">
+            <div className="overflow-hidden rounded-xl border border-[var(--border-subtle)]">
               {items.map(({ keys, desc }, i) => (
                 <div
                   key={desc}
                   className={[
                     "flex items-center justify-between px-4 py-3",
-                    i < items.length - 1 ? "border-b border-white/[0.04]" : "",
+                    i < items.length - 1 ? "border-b border-[var(--border-subtle)]" : "",
                   ].join(" ")}
                 >
                   <span className="text-[13px] text-zinc-300">{desc}</span>
@@ -402,7 +493,7 @@ function ShortcutsSection() {
                     {keys.map((k) => (
                       <kbd
                         key={k}
-                        className="min-w-[28px] rounded-md border border-white/[0.12] bg-white/[0.06] px-2 py-1 text-center text-[11px] font-mono text-zinc-300"
+                        className="min-w-[28px] rounded-md border border-[var(--border-medium)] bg-white/[0.06] px-2 py-1 text-center text-[11px] font-mono text-zinc-300"
                       >
                         {k}
                       </kbd>
@@ -470,7 +561,7 @@ function TutorialSection() {
         {TUTORIAL_STEPS.map(({ step, title, desc, icon }) => (
           <div
             key={step}
-            className="flex gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
+            className="flex gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
           >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-[20px]">
               {icon}
@@ -478,7 +569,7 @@ function TutorialSection() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-mono text-zinc-600">{step}</span>
-                <p className="text-[13px] font-semibold text-white">{title}</p>
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
               </div>
               <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{desc}</p>
             </div>
@@ -486,8 +577,8 @@ function TutorialSection() {
         ))}
       </div>
 
-      <div className="mt-8 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-5">
-        <p className="text-[13px] font-semibold text-white">Need more help?</p>
+      <div className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
+        <p className="text-[13px] font-semibold text-[var(--text-primary)]">Need more help?</p>
         <p className="mt-1 text-[12px] text-zinc-500">
           For questions, bugs, or feature requests, reach out at{" "}
           <span className="text-zinc-300">support@querex.app</span>
@@ -546,10 +637,10 @@ function WhatsNewSection() {
         subtitle="The features that make Querex uniquely powerful"
       />
 
-      <div className="mb-6 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-gradient-to-r from-white/[0.04] to-transparent p-4">
+      <div className="mb-6 flex items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-gradient-to-r from-white/[0.04] to-transparent p-4">
         <span className="text-[24px]">🚀</span>
         <div>
-          <p className="text-[13px] font-semibold text-white">Querex — AI Research Workspace</p>
+          <p className="text-[13px] font-semibold text-[var(--text-primary)]">Querex — AI Research Workspace</p>
           <p className="text-[12px] text-zinc-500">
             Built for researchers, students, and professionals who work with large documents and need AI that actually cites its sources.
           </p>
@@ -560,15 +651,15 @@ function WhatsNewSection() {
         {FEATURES.map(({ icon, badge, title, desc }) => (
           <div
             key={title}
-            className="flex flex-col gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4"
+            className="flex flex-col gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
           >
             <div className="flex items-center gap-2">
               <span className="text-[22px]">{icon}</span>
-              <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+              <span className="rounded-md border border-[var(--border-medium)] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                 {badge}
               </span>
             </div>
-            <p className="text-[13px] font-semibold text-white">{title}</p>
+            <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
             <p className="text-[12px] leading-relaxed text-zinc-500">{desc}</p>
           </div>
         ))}
@@ -601,19 +692,31 @@ const NAV_ITEMS: { id: ProfileSection; label: string; icon: () => React.ReactEle
   { id: "whatsnew",  label: "What's New",         icon: NavWhatsNewIcon },
 ];
 
-export function ProfileModal({ email, isOpen, onClose, initialSection = "profile" }: ProfileModalProps) {
+export function ProfileModal({
+  email,
+  isOpen,
+  onClose,
+  initialSection = "profile",
+  initialSubSection,
+}: ProfileModalProps) {
   const [active, setActive] = useState<ProfileSection>(initialSection);
+  const [subSection, setSubSection] = useState<"password" | undefined>(initialSubSection);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  // Reset to initialSection when modal opens
+  // Sync to new initialSection / initialSubSection when modal opens
   useEffect(() => {
-    if (isOpen) setActive(initialSection);
-  }, [isOpen, initialSection]);
+    if (isOpen) {
+      setActive(initialSection);
+      setSubSection(initialSubSection);
+    }
+  }, [isOpen, initialSection, initialSubSection]);
 
-  // Scroll content to top on section change
+  // Scroll content to top on section change (unless deep-linking to password)
   useEffect(() => {
-    contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
-  }, [active]);
+    if (subSection !== "password") {
+      contentRef.current?.scrollTo({ top: 0, behavior: "instant" });
+    }
+  }, [active, subSection]);
 
   // Trap escape key
   useEffect(() => {
@@ -634,10 +737,10 @@ export function ProfileModal({ email, isOpen, onClose, initialSection = "profile
       />
 
       {/* Panel */}
-      <div className="relative z-10 flex h-[88vh] w-full max-w-[860px] overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e0e0e] shadow-2xl shadow-black/60">
+      <div className="relative z-10 flex h-[88vh] w-full max-w-[860px] overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--modal-bg)] shadow-2xl shadow-black/60">
 
         {/* ── Left nav ──────────────────────────────────────────────── */}
-        <div className="flex w-[210px] shrink-0 flex-col border-r border-white/[0.05] bg-[#0a0a0a] p-3">
+        <div className="flex w-[210px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--sidebar-bg)] p-3">
           {/* Header */}
           <div className="mb-4 px-3 py-2">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
@@ -652,7 +755,11 @@ export function ProfileModal({ email, isOpen, onClose, initialSection = "profile
                 icon={<Icon />}
                 label={label}
                 active={active === id}
-                onClick={() => setActive(id)}
+                onClick={() => {
+                  setActive(id);
+                  // Clear sub-section when navigating away from settings
+                  if (id !== "settings") setSubSection(undefined);
+                }}
               />
             ))}
           </nav>
@@ -664,7 +771,7 @@ export function ProfileModal({ email, isOpen, onClose, initialSection = "profile
           className="flex-1 overflow-y-auto p-8 scrollbar-thin"
         >
           {active === "profile"   && <ProfileSection email={email} />}
-          {active === "settings"  && <SettingsSection />}
+          {active === "settings"  && <SettingsSection focusPassword={subSection === "password"} />}
           {active === "shortcuts" && <ShortcutsSection />}
           {active === "tutorial"  && <TutorialSection />}
           {active === "whatsnew"  && <WhatsNewSection />}
@@ -673,7 +780,7 @@ export function ProfileModal({ email, isOpen, onClose, initialSection = "profile
         {/* ── Close button ───────────────────────────────────────────── */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-zinc-500 transition hover:border-white/20 hover:text-zinc-200"
+          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-white/[0.04] text-zinc-500 transition hover:border-[var(--border-strong)] hover:text-zinc-200"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

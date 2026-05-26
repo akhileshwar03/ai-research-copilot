@@ -64,7 +64,7 @@ function AuthCallbackInner() {
 
   if (status === "error") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#080808] px-4">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--app-bg)] px-4">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
           <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -85,7 +85,7 @@ function AuthCallbackInner() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#080808]">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
       <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
       <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
     </div>
@@ -95,7 +95,7 @@ function AuthCallbackInner() {
 export default function AuthCallbackPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#080808]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
         <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
       </div>

@@ -130,6 +130,30 @@ class AuthService:
         logger.info("password_changed email=%s", email)
         return {"message": "Password changed successfully"}
 
+    def delete_account(self, email: str) -> dict:
+        """Permanently delete a user account and all associated data."""
+        from app.db.models.chat_models import ChatSession
+        from app.db.models.document import Document
+
+        user = self.user_repo.get_by_email(email)
+        if not user:
+            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
+
+        db = self.user_repo.db
+
+        # Delete chat sessions (cascade deletes ChatMessages via relationship)
+        db.query(ChatSession).filter(ChatSession.user_id == user.id).delete(synchronize_session=False)
+
+        # Delete documents (user_email is a plain string column, no FK cascade)
+        db.query(Document).filter(Document.user_email == email).delete(synchronize_session=False)
+
+        # Delete the user (cascade deletes UserIdentity and RefreshToken via ORM)
+        db.delete(user)
+        db.commit()
+
+        logger.info("account_deleted email=%s", email)
+        return {"message": "Account deleted successfully"}
+
     def refresh(self, refresh_token: str) -> dict:
         payload = decode_refresh_token(refresh_token)
         email = payload.get("sub")

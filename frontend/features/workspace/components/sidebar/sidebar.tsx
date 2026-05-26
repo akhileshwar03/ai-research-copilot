@@ -18,16 +18,24 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const { logout } = useAuth();
   const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions } = useSessions(email);
   const { documents, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
-  const upsertSession = useSessionStore((s) => s.upsertSession);
-
   const [isCreating, setIsCreating] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSection, setProfileSection] = useState<ProfileSection>("profile");
+  const [profileSubSection, setProfileSubSection] = useState<"password" | undefined>(undefined);
 
-  const openProfile = (section: ProfileSection) => {
+  const openProfile = (section: ProfileSection, subSection?: "password") => {
     setProfileSection(section);
+    setProfileSubSection(subSection);
     setProfileOpen(true);
   };
+
+  // Listen for ⌘+, "open-settings" event dispatched by chat/page.tsx
+  useEffect(() => {
+    const handler = () => openProfile("settings");
+    window.addEventListener("open-settings", handler);
+    return () => window.removeEventListener("open-settings", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleNewSession = async () => {
     setIsCreating(true);
@@ -66,17 +74,17 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
 
   return (
     <>
-      <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
+      <div className="flex h-full flex-col overflow-hidden bg-[var(--sidebar-bg)]">
         {/* ── Brand header ──────────────────────────────── */}
-        <div className="shrink-0 border-b border-white/[0.05] px-4 py-4">
+        <div className="shrink-0 border-b border-[var(--border-subtle)] px-4 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] ring-1 ring-white/[0.08]">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] ring-1 ring-[var(--border-medium)]">
               <svg className="h-4 w-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             </div>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-semibold text-white/90 leading-tight">Querex</p>
+              <p className="truncate text-[13px] font-semibold text-[var(--text-primary)] leading-tight">Querex</p>
               <p className="text-[10px] text-zinc-600 leading-tight">AI workspace</p>
             </div>
           </div>
@@ -94,7 +102,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
           />
 
           {/* Divider */}
-          <div className="h-px bg-white/[0.05]" />
+          <div className="h-px bg-[var(--border-subtle)]" />
 
           {/* Sessions */}
           <SessionsPanel
@@ -119,6 +127,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
         initialSection={profileSection}
+        initialSubSection={profileSubSection}
       />
     </>
   );
@@ -133,7 +142,7 @@ function UserFooter({
 }: {
   email: string | null;
   logout: () => void;
-  onOpenProfile: (section: ProfileSection) => void;
+  onOpenProfile: (section: ProfileSection, subSection?: "password") => void;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -151,24 +160,24 @@ function UserFooter({
   const initial = email ? email[0].toUpperCase() : "?";
   const joinedDate = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
 
-  const openSection = (section: ProfileSection) => {
+  const openSection = (section: ProfileSection, subSection?: "password") => {
     setOpen(false);
-    onOpenProfile(section);
+    onOpenProfile(section, subSection);
   };
 
   return (
-    <div ref={ref} className="relative shrink-0 border-t border-white/[0.05] px-3 py-3">
+    <div ref={ref} className="relative shrink-0 border-t border-[var(--border-subtle)] px-3 py-3">
       {/* Pop-up menu */}
       {open && (
-        <div className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#141414] shadow-2xl shadow-black/60 ring-1 ring-black/20">
+        <div className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--surface-2)] shadow-2xl shadow-black/60 ring-1 ring-black/20">
           {/* Account info */}
-          <div className="px-4 py-3.5 border-b border-white/[0.06]">
+          <div className="px-4 py-3.5 border-b border-[var(--border-subtle)]">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold uppercase text-white ring-1 ring-white/[0.1]">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[13px] font-bold uppercase text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]">
                 {initial}
               </div>
               <div className="min-w-0">
-                <p className="truncate text-[13px] font-medium text-white">{email}</p>
+                <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">{email}</p>
                 <p className="text-[11px] text-zinc-600">Member since {joinedDate}</p>
               </div>
             </div>
@@ -177,13 +186,13 @@ function UserFooter({
           {/* Menu items */}
           <div className="py-1.5">
             <MenuItem icon={<SettingsIcon />} label="Settings" onClick={() => openSection("settings")} />
-            <MenuItem icon={<KeyIcon />} label="Change Password" onClick={() => openSection("settings")} />
+            <MenuItem icon={<KeyIcon />} label="Change Password" onClick={() => openSection("settings", "password")} />
             <MenuItem icon={<ShortcutsIcon />} label="Keyboard Shortcuts" hint="⌘K" onClick={() => openSection("shortcuts")} />
             <MenuItem icon={<TutorialIcon />} label="Tutorial & Help" onClick={() => openSection("tutorial")} />
             <MenuItem icon={<WhatsNewIcon />} label="What's New" onClick={() => openSection("whatsnew")} />
           </div>
 
-          <div className="border-t border-white/[0.06] py-1.5">
+          <div className="border-t border-[var(--border-subtle)] py-1.5">
             <MenuItem
               icon={<SignOutIcon />}
               label="Sign Out"
@@ -202,7 +211,7 @@ function UserFooter({
           open ? "bg-white/[0.05]" : "hover:bg-white/[0.03]",
         ].join(" ")}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-bold uppercase text-zinc-300 ring-1 ring-white/[0.06]">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[11px] font-bold uppercase text-zinc-300 ring-1 ring-[var(--border-subtle)]">
           {initial}
         </div>
         <div className="min-w-0 flex-1 text-left">
@@ -237,7 +246,7 @@ function MenuItem({
     >
       <span className={destructive ? "text-red-400/70" : "text-zinc-500"}>{icon}</span>
       <span className="flex-1 text-left">{label}</span>
-      {hint && <kbd className="rounded-md border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-zinc-600">{hint}</kbd>}
+      {hint && <kbd className="rounded-md border border-[var(--border-medium)] bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-zinc-600">{hint}</kbd>}
     </button>
   );
 }

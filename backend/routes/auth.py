@@ -8,7 +8,7 @@ from app.api.dependencies.services import get_auth_service, get_otp_service
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.api.dependencies.auth import get_current_user_email
-from app.schemas.auth import AuthRequest, ChangePasswordRequest, RefreshRequest, SendOtpRequest, VerifyOtpRequest, SignupRequest
+from app.schemas.auth import AuthRequest, ChangePasswordRequest, RefreshRequest, ResetPasswordRequest, SendOtpRequest, VerifyOtpRequest, SignupRequest
 from app.services.auth_service import AuthService
 from app.services.otp_service import OtpService
 
@@ -55,6 +55,25 @@ def change_password(
         current_password=request.current_password,
         new_password=request.new_password,
     )
+
+
+@router.post("/auth/reset-password")
+def reset_password(request: ResetPasswordRequest, service: OtpService = Depends(get_otp_service)):
+    """Forgot-password flow: OTP has been sent; verify it and set a new password."""
+    return service.reset_password(
+        email=request.email,
+        code=request.code,
+        new_password=request.new_password,
+    )
+
+
+@router.delete("/auth/account")
+def delete_account(
+    email: str = Depends(get_current_user_email),
+    service: AuthService = Depends(get_auth_service),
+):
+    """Permanently delete the authenticated user's account and all data."""
+    return service.delete_account(email=email)
 
 
 # ── OTP auth ───────────────────────────────────────────────────────────────────

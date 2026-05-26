@@ -9,7 +9,7 @@ import { useSessionStore } from "@/stores/session-store";
 
 const initialAssistantMessage = {
   role: "assistant" as const,
-  content: "Welcome to AI Research Copilot.",
+  content: "Welcome to Querex.",
 };
 
 export function makeDefaultSession(): ChatSession {

@@ -178,7 +178,7 @@ export function SessionsPanel({
           "group relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
           isActive
             ? "border-white/20 bg-white/[0.07]"
-            : "border-white/[0.06] bg-[#111] hover:border-white/[0.10] hover:bg-white/[0.04]",
+            : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)] hover:bg-white/[0.04]",
           isDeleting ? "opacity-40 pointer-events-none" : "",
         ].join(" ")}
       >
@@ -307,7 +307,7 @@ export function SessionsPanel({
             placeholder="Search sessions…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-white/[0.06] bg-white/[0.02] py-1.5 pl-7 pr-3 text-[11px] text-zinc-400 placeholder-zinc-700 outline-none transition focus:border-white/[0.12] focus:text-zinc-300"
+            className="w-full rounded-lg border border-[var(--border-subtle)] bg-white/[0.02] py-1.5 pl-7 pr-3 text-[11px] text-zinc-400 placeholder-zinc-700 outline-none transition focus:border-[var(--border-strong)] focus:text-zinc-300"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-700 hover:text-zinc-400">
@@ -331,7 +331,7 @@ export function SessionsPanel({
         <button
           onClick={onNewSession}
           disabled={isCreating}
-          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[#0d0d0d] px-4 py-6 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02] disabled:opacity-50"
+          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[var(--surface-0)] px-4 py-6 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02] disabled:opacity-50"
         >
           <ChatBubbleIcon />
           <span className="text-[12px] text-zinc-600">{isCreating ? "Creating…" : "Start a new chat"}</span>

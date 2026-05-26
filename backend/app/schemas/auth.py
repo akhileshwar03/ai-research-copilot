@@ -45,3 +45,10 @@ class SignupRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    """Forgot-password flow: OTP code + new password (no current password needed)."""
+    email: EmailStr
+    code: str
+    new_password: str

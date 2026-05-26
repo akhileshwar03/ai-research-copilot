@@ -160,3 +160,80 @@
 .otp-digit {
   caret-color: transparent;
 }
+
+/* ── App color token system ────────────────────────────────────────────────── */
+/* Dark values (default). Toggling html.light-theme flips them.                */
+:root {
+  --app-bg:        #080808;
+  --sidebar-bg:    #0a0a0a;
+  --surface-0:     #0d0d0d;   /* empty states, code header */
+  --surface-1:     #111111;   /* cards, AI bubble, inputs  */
+  --surface-2:     #141414;   /* popovers, elevated panels */
+  --surface-3:     #1a1a1a;   /* batch bars                */
+  --modal-bg:      #0e0e0e;   /* settings modal            */
+  --login-card:    #0f0f0f;   /* login card                */
+  --code-bg:       #0d0d0d;   /* syntax-highlighted blocks */
+
+  --bubble-user-bg:   #ffffff;
+  --bubble-user-text: rgb(15 23 42);
+  --bubble-ai-bg:     #111111;
+  --bubble-ai-text:   rgb(228 228 231);
+
+  --border-subtle:  rgba(255, 255, 255, 0.06);
+  --border-medium:  rgba(255, 255, 255, 0.08);
+  --border-strong:  rgba(255, 255, 255, 0.15);
+
+  --text-primary:   rgba(255, 255, 255, 0.9);
+
+  --resize-handle:       rgba(255, 255, 255, 0.05);
+  --resize-handle-hover: rgba(255, 255, 255, 0.15);
+}
+
+html.light-theme {
+  color-scheme: light;
+
+  --app-bg:        #f8fafc;
+  --sidebar-bg:    #f0f4f8;
+  --surface-0:     #e8ecf1;
+  --surface-1:     #ffffff;
+  --surface-2:     #f2f5f8;
+  --surface-3:     #e2e8f0;
+  --modal-bg:      #ffffff;
+  --login-card:    #ffffff;
+  --code-bg:       #1e1e2e;   /* keep code dark in light mode */
+
+  --bubble-user-bg:   rgb(15 23 42);   /* dark navy on light bg */
+  --bubble-user-text: #ffffff;
+  --bubble-ai-bg:     #ffffff;
+  --bubble-ai-text:   rgb(39 39 42);
+
+  --border-subtle:  rgba(0, 0, 0, 0.07);
+  --border-medium:  rgba(0, 0, 0, 0.10);
+  --border-strong:  rgba(0, 0, 0, 0.18);
+
+  --text-primary:   rgba(15, 23, 42, 0.9);
+
+  --resize-handle:       rgba(0, 0, 0, 0.08);
+  --resize-handle-hover: rgba(0, 0, 0, 0.20);
+}
+
+/* ── Light theme text corrections ──────────────────────────────────────────── */
+/* These sit outside @layer so they outrank Tailwind utility classes.          */
+html.light-theme .text-white      { color: rgb(15 23 42); }
+html.light-theme .text-zinc-200   { color: rgb(39 39 42); }
+html.light-theme .text-zinc-300   { color: rgb(63 63 70); }
+html.light-theme .text-zinc-400   { color: rgb(82 82 91); }
+
+/* Scrollbar in light mode */
+html.light-theme .scrollbar-thin                         { scrollbar-color: rgba(0,0,0,0.10) transparent; }
+html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.10); }
+html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.20); }
+
+/* ── Timestamp fade-in ─────────────────────────────────────────────────────── */
+.msg-timestamp {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.group:hover .msg-timestamp {
+  opacity: 1;
+}

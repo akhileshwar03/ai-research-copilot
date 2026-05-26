@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "AI Research Copilot API"
+    app_name: str = "Querex API"
     api_v1_prefix: str = "/api/v1"
     environment: str = "development"
     debug: bool = False
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # Email — Resend (primary, recommended) or SMTP (fallback)
     # Sign up at resend.com → get an API key → set RESEND_API_KEY
     resend_api_key: str = ""
-    email_from: str = "AI Research Copilot <noreply@resend.dev>"  # change to your domain after verifying on Resend
+    email_from: str = "Querex <noreply@resend.dev>"  # change to your domain after verifying on Resend
 
     # SMTP fallback (only used if RESEND_API_KEY is not set)
     smtp_host: str = ""
