@@ -8,6 +8,7 @@ import { useDocuments } from "@/features/documents/hooks/use-documents";
 import { useSessions, makeDefaultSession } from "@/features/sessions/hooks/use-sessions";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useSessionStore } from "@/stores/session-store";
+import { ProfileModal, type ProfileSection } from "@/features/workspace/components/sidebar/profile-modal";
 
 interface WorkspaceSidebarProps {
   email: string | null;
@@ -20,12 +21,18 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const upsertSession = useSessionStore((s) => s.upsertSession);
 
   const [isCreating, setIsCreating] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileSection, setProfileSection] = useState<ProfileSection>("profile");
+
+  const openProfile = (section: ProfileSection) => {
+    setProfileSection(section);
+    setProfileOpen(true);
+  };
 
   const handleNewSession = async () => {
     setIsCreating(true);
     try {
       const draft = makeDefaultSession();
-      // Optimistically add
       setSessions([draft, ...sessions]);
       setActiveSessionId(draft.id);
 
@@ -58,58 +65,76 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
-      {/* ── Brand header ──────────────────────────────── */}
-      <div className="shrink-0 border-b border-white/[0.05] px-4 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] ring-1 ring-white/[0.08]">
-            <svg className="h-4 w-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-[13px] font-semibold text-white/90 leading-tight">Research Copilot</p>
-            <p className="text-[10px] text-zinc-600 leading-tight">AI workspace</p>
+    <>
+      <div className="flex h-full flex-col overflow-hidden bg-[#0a0a0a]">
+        {/* ── Brand header ──────────────────────────────── */}
+        <div className="shrink-0 border-b border-white/[0.05] px-4 py-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/[0.06] ring-1 ring-white/[0.08]">
+              <svg className="h-4 w-4 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[13px] font-semibold text-white/90 leading-tight">Querex</p>
+              <p className="text-[10px] text-zinc-600 leading-tight">AI workspace</p>
+            </div>
           </div>
         </div>
+
+        {/* ── Scrollable body ───────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5 scrollbar-thin">
+          {/* Documents */}
+          <DocumentsPanel
+            documents={documents}
+            onUpload={async (file) => { await uploadDocument(file); }}
+            onDelete={async (id) => { await deleteDocument(id); }}
+            isUploading={isUploadingDocument}
+            isLoading={isLoadingDocuments}
+          />
+
+          {/* Divider */}
+          <div className="h-px bg-white/[0.05]" />
+
+          {/* Sessions */}
+          <SessionsPanel
+            sessions={sessions}
+            activeSessionId={activeSessionId}
+            onSelect={setActiveSessionId}
+            onDelete={handleDeleteSession}
+            onRename={handleRenameSession}
+            onNewSession={handleNewSession}
+            isCreating={isCreating}
+            isLoading={isLoadingSessions}
+          />
+        </div>
+
+        {/* ── User footer + profile menu ────────────────── */}
+        <UserFooter email={email} logout={logout} onOpenProfile={openProfile} />
       </div>
 
-      {/* ── Scrollable body ───────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5 scrollbar-thin">
-        {/* Documents */}
-        <DocumentsPanel
-          documents={documents}
-          onUpload={async (file) => { await uploadDocument(file); }}
-          onDelete={async (id) => { await deleteDocument(id); }}
-          isUploading={isUploadingDocument}
-          isLoading={isLoadingDocuments}
-        />
-
-        {/* Divider */}
-        <div className="h-px bg-white/[0.05]" />
-
-        {/* Sessions */}
-        <SessionsPanel
-          sessions={sessions}
-          activeSessionId={activeSessionId}
-          onSelect={setActiveSessionId}
-          onDelete={handleDeleteSession}
-          onRename={handleRenameSession}
-          onNewSession={handleNewSession}
-          isCreating={isCreating}
-          isLoading={isLoadingSessions}
-        />
-      </div>
-
-      {/* ── User footer + profile menu ────────────────── */}
-      <UserFooter email={email} logout={logout} />
-    </div>
+      {/* ── Profile / Settings Modal ──────────────────── */}
+      <ProfileModal
+        email={email}
+        isOpen={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        initialSection={profileSection}
+      />
+    </>
   );
 }
 
 // ─── Profile menu ──────────────────────────────────────────────────────────────
 
-function UserFooter({ email, logout }: { email: string | null; logout: () => void }) {
+function UserFooter({
+  email,
+  logout,
+  onOpenProfile,
+}: {
+  email: string | null;
+  logout: () => void;
+  onOpenProfile: (section: ProfileSection) => void;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -125,6 +150,11 @@ function UserFooter({ email, logout }: { email: string | null; logout: () => voi
 
   const initial = email ? email[0].toUpperCase() : "?";
   const joinedDate = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+
+  const openSection = (section: ProfileSection) => {
+    setOpen(false);
+    onOpenProfile(section);
+  };
 
   return (
     <div ref={ref} className="relative shrink-0 border-t border-white/[0.05] px-3 py-3">
@@ -146,11 +176,11 @@ function UserFooter({ email, logout }: { email: string | null; logout: () => voi
 
           {/* Menu items */}
           <div className="py-1.5">
-            <MenuItem icon={<SettingsIcon />} label="Settings" onClick={() => setOpen(false)} />
-            <MenuItem icon={<KeyIcon />} label="Change Password" onClick={() => setOpen(false)} />
-            <MenuItem icon={<ShortcutsIcon />} label="Keyboard Shortcuts" hint="⌘K" onClick={() => setOpen(false)} />
-            <MenuItem icon={<TutorialIcon />} label="Tutorial & Help" onClick={() => setOpen(false)} />
-            <MenuItem icon={<WhatsNewIcon />} label="What's New" onClick={() => setOpen(false)} />
+            <MenuItem icon={<SettingsIcon />} label="Settings" onClick={() => openSection("settings")} />
+            <MenuItem icon={<KeyIcon />} label="Change Password" onClick={() => openSection("settings")} />
+            <MenuItem icon={<ShortcutsIcon />} label="Keyboard Shortcuts" hint="⌘K" onClick={() => openSection("shortcuts")} />
+            <MenuItem icon={<TutorialIcon />} label="Tutorial & Help" onClick={() => openSection("tutorial")} />
+            <MenuItem icon={<WhatsNewIcon />} label="What's New" onClick={() => openSection("whatsnew")} />
           </div>
 
           <div className="border-t border-white/[0.06] py-1.5">

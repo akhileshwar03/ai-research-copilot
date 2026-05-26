@@ -109,6 +109,27 @@ class AuthService:
             "token_type": "bearer",
         }
 
+    def change_password(self, email: str, current_password: str, new_password: str) -> dict:
+        user = self.user_repo.get_by_email(email)
+        if not user:
+            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
+        if not user.hashed_password or not verify_password(current_password, user.hashed_password):
+            raise AppError(
+                code="INVALID_CREDENTIALS",
+                message="Current password is incorrect",
+                status_code=400,
+            )
+        if len(new_password) < 8:
+            raise AppError(
+                code="WEAK_PASSWORD",
+                message="Password must be at least 8 characters",
+                status_code=400,
+            )
+        self.user_repo.update_password(user, hash_password(new_password))
+        self.user_repo.db.commit()
+        logger.info("password_changed email=%s", email)
+        return {"message": "Password changed successfully"}
+
     def refresh(self, refresh_token: str) -> dict:
         payload = decode_refresh_token(refresh_token)
         email = payload.get("sub")

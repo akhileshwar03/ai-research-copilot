@@ -46,6 +46,10 @@ class UserRepository:
     def get_refresh_token(self, token_hash: str) -> RefreshToken | None:
         return self.db.query(RefreshToken).filter(RefreshToken.token_hash == token_hash).first()
 
+    def update_password(self, user: User, hashed_password: str) -> None:
+        user.hashed_password = hashed_password
+        self.db.flush()
+
     def revoke_refresh_token(self, refresh_token: RefreshToken) -> None:
         refresh_token.revoked = True
         self.db.flush()
