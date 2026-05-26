@@ -62,23 +62,40 @@ class EmailService:
         Delivery priority:
           1. Resend API (set RESEND_API_KEY) — recommended for production
           2. SMTP (set SMTP_HOST + SMTP_USER + SMTP_PASSWORD) — fallback
-          3. Console log + return code — development mode
+          3. Console log + return code — development mode (no delivery configured)
 
         Returns the code string only in development mode (no delivery configured).
+        Raises AppError if delivery is configured but fails.
         """
+        from app.core.exceptions import AppError
+
         subject = "Your verification code — AI Research Copilot"
         html = _otp_html(code, purpose)
         text = _otp_text(code)
 
+        delivery_configured = bool(self.settings.resend_api_key or self.settings.smtp_host)
+
         # ── 1. Resend API ──────────────────────────────────────────────────────
         if self.settings.resend_api_key:
-            return self._send_via_resend(email, subject, html, text, code)
+            if self._send_via_resend(email, subject, html, text):
+                return None
+            logger.warning("resend_failed_falling_through to=%s", email)
 
         # ── 2. SMTP ────────────────────────────────────────────────────────────
         if self.settings.smtp_host:
-            return self._send_via_smtp(email, subject, html, text, code)
+            if self._send_via_smtp(email, subject, html, text):
+                return None
+            logger.warning("smtp_failed_falling_through to=%s", email)
 
-        # ── 3. Dev mode ────────────────────────────────────────────────────────
+        # ── 3. Delivery configured but all methods failed ──────────────────────
+        if delivery_configured:
+            raise AppError(
+                code="EMAIL_DELIVERY_FAILED",
+                message="We couldn't send the verification email. Please try again in a moment.",
+                status_code=503,
+            )
+
+        # ── 4. Dev mode (no delivery configured) ──────────────────────────────
         logger.warning(
             "\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -92,7 +109,8 @@ class EmailService:
 
     # ── Resend ─────────────────────────────────────────────────────────────────
 
-    def _send_via_resend(self, to: str, subject: str, html: str, text: str, code: str) -> None:
+    def _send_via_resend(self, to: str, subject: str, html: str, text: str) -> bool:
+        """Returns True on success, False on failure (never raises)."""
         try:
             resp = httpx.post(
                 "https://api.resend.com/emails",
@@ -111,17 +129,21 @@ class EmailService:
             )
             resp.raise_for_status()
             logger.info("otp_email_sent_resend to=%s id=%s", to, resp.json().get("id"))
+            return True
         except httpx.HTTPStatusError as exc:
-            logger.error("resend_error status=%s body=%s", exc.response.status_code, exc.response.text)
-            raise
+            logger.error(
+                "resend_error to=%s status=%s body=%s",
+                to, exc.response.status_code, exc.response.text,
+            )
+            return False
         except Exception:
             logger.exception("resend_unexpected_error to=%s", to)
-            raise
-        return None
+            return False
 
     # ── SMTP ───────────────────────────────────────────────────────────────────
 
-    def _send_via_smtp(self, to: str, subject: str, html: str, text: str, code: str) -> None:
+    def _send_via_smtp(self, to: str, subject: str, html: str, text: str) -> bool:
+        """Returns True on success, False on failure (never raises)."""
         try:
             sender = self.settings.smtp_from or self.settings.smtp_user
             msg = MIMEMultipart("alternative")
@@ -137,7 +159,7 @@ class EmailService:
                 server.send_message(msg)
 
             logger.info("otp_email_sent_smtp to=%s", to)
+            return True
         except Exception:
             logger.exception("smtp_error to=%s", to)
-            raise
-        return None
+            return False
