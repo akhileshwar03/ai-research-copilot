@@ -5,7 +5,7 @@ import { useRef } from "react";
 interface OtpInputProps {
   value: string;
   onChange: (value: string) => void;
-  onComplete?: () => void;
+  onComplete?: (value: string) => void;
   length?: number;
   disabled?: boolean;
 }
@@ -22,12 +22,13 @@ export function OtpInput({ value, onChange, onComplete, length = 6, disabled = f
     if (sanitized && index < length - 1) {
       inputsRef.current[index + 1]?.focus();
     }
-    // Trigger onComplete when last digit is filled
+    // Trigger onComplete when last digit is filled — pass the completed value
+    // so the parent can use it immediately without waiting for state update
     const newVal = value.split("").slice(0, length);
     while (newVal.length < length) newVal.push("");
     newVal[index] = sanitized;
-    if (index === length - 1 && newVal.every(Boolean)) {
-      onComplete?.();
+    if (newVal.every(Boolean)) {
+      onComplete?.(newVal.join(""));
     }
   };
 

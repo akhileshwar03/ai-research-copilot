@@ -7,11 +7,12 @@ class Document(Base):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True, index=True)
+    user_email = Column(String, nullable=True, index=True)   # owner — nullable for legacy rows
     original_filename = Column(String, nullable=False)
     stored_filename = Column(String, unique=True, nullable=False, index=True)
     content_type = Column(String, nullable=False)
     size_bytes = Column(Integer, nullable=False)
-    checksum_sha256 = Column(String, unique=True, nullable=False, index=True)
+    checksum_sha256 = Column(String, nullable=False, index=True)  # per-user unique enforced in service
     upload_status = Column(String, nullable=False, default="ready")
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
