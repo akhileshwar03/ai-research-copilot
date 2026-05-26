@@ -9,16 +9,22 @@ router = APIRouter()
 
 @router.get("/documents")
 def list_documents(
-    _email: str = Depends(get_current_user_email),
+    email: str = Depends(get_current_user_email),
     service: DocumentService = Depends(get_document_service),
 ):
-    return service.list_documents()
+    return service.list_documents(user_email=email)
 
 
 @router.delete("/documents/{filename}")
 def delete_document(
     filename: str,
-    _email: str = Depends(get_current_user_email),
+    email: str = Depends(get_current_user_email),
     service: DocumentService = Depends(get_document_service),
 ):
+    # Verify ownership before deleting
+    docs = service.list_documents(user_email=email)
+    owned_ids = {d["id"] for d in docs["documents"]}
+    if filename not in owned_ids:
+        from app.core.exceptions import AppError
+        raise AppError(code="FORBIDDEN", message="Document not found", status_code=404)
     return service.delete_document(filename)

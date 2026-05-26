@@ -26,7 +26,7 @@ class DocumentService:
         self.vector_store = vector_store
         self.settings = get_settings()
 
-    async def upload(self, file: UploadFile) -> dict:
+    async def upload(self, file: UploadFile, user_email: str | None = None) -> dict:
         ext = os.path.splitext(file.filename or "")[1].lower()
         if ext not in ALLOWED_UPLOAD_EXTENSIONS:
             raise AppError(code="INVALID_FILE_TYPE", message="Only PDF files are allowed", status_code=400)
@@ -38,9 +38,9 @@ class DocumentService:
             raise AppError(code="FILE_TOO_LARGE", message="File is too large", status_code=413)
 
         checksum_sha256 = hashlib.sha256(content).hexdigest()
-        existing = self.document_repo.get_by_checksum(checksum_sha256)
+        existing = self.document_repo.get_by_checksum_and_user(checksum_sha256, user_email or "")
         if existing:
-            logger.info("upload_duplicate original=%s stored=%s", file.filename, existing.stored_filename)
+            logger.info("upload_duplicate original=%s stored=%s user=%s", file.filename, existing.stored_filename, user_email)
             return {"message": "PDF uploaded successfully"}
 
         stored_filename = f"{uuid.uuid4()}{ext}"
@@ -54,6 +54,7 @@ class DocumentService:
             size_bytes=size_bytes,
             checksum_sha256=checksum_sha256,
             upload_status="processing",
+            user_email=user_email,
         )
 
         try:
@@ -72,8 +73,12 @@ class DocumentService:
         logger.info("upload_complete stored=%s size_bytes=%s", stored_filename, size_bytes)
         return {"message": "PDF uploaded successfully"}
 
-    def list_documents(self) -> dict:
-        documents = self.document_repo.list_all()
+    def list_documents(self, user_email: str | None = None) -> dict:
+        documents = (
+            self.document_repo.list_by_user(user_email)
+            if user_email
+            else []
+        )
         return {
             "documents": [
                 {"id": doc.stored_filename, "name": doc.original_filename}

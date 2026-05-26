@@ -210,12 +210,12 @@ export default function LoginPage() {
   };
 
   // ── Sign Up step 2: verify OTP ───────────────────────────────────────────────
-  const handleVerifyOtp = async () => {
+  const handleVerifyOtp = async (completedValue?: string) => {
     setError("");
-    if (otp.length < 6) { setError("Enter the 6-digit code"); return; }
+    const code = completedValue ?? otp;
+    if (code.replace(/\s/g, "").length < 6) return;
     try {
-      await verifyOtp({ email: email.trim(), code: otp, password });
-      // Tokens set in store by hook — redirect to chat
+      await verifyOtp({ email: email.trim(), code, password });
       router.replace("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired code");
@@ -223,7 +223,7 @@ export default function LoginPage() {
     }
   };
 
-  // ── OTP sign-in (magic link) ─────────────────────────────────────────────────
+  // ── OTP sign-in ──────────────────────────────────────────────────────────────
   const handleSendSignInOtp = async () => {
     setError("");
     if (!email.trim() || !email.includes("@")) { setError("Enter a valid email address"); return; }
@@ -238,11 +238,12 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifySignInOtp = async () => {
+  const handleVerifySignInOtp = async (completedValue?: string) => {
     setError("");
-    if (otp.length < 6) { setError("Enter the 6-digit code"); return; }
+    const code = completedValue ?? otp;
+    if (code.replace(/\s/g, "").length < 6) return;
     try {
-      await verifyOtp({ email: email.trim(), code: otp });
+      await verifyOtp({ email: email.trim(), code });
       router.replace("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired code");
@@ -333,22 +334,19 @@ export default function LoginPage() {
                   </button>
                 </form>
 
-                {/* Magic link / OTP login */}
+                {/* Email code sign-in */}
                 <div className="flex items-center gap-3">
                   <div className="h-px flex-1 bg-white/[0.06]" />
                   <span className="text-[11px] text-zinc-600">or</span>
                   <div className="h-px flex-1 bg-white/[0.06]" />
                 </div>
-                <div className="space-y-2">
-                  {!email && <Field type="email" placeholder="Email for magic link" value={email} onChange={(v) => { setEmail(v); setError(""); }} autoComplete="email" />}
-                  <button
-                    onClick={handleSendSignInOtp}
-                    disabled={isLoading}
-                    className="w-full rounded-xl border border-white/[0.08] py-2.5 text-[13px] font-medium text-zinc-300 transition hover:border-white/[0.15] hover:bg-white/[0.03] disabled:opacity-50"
-                  >
-                    {isSendingOtp ? "Sending code…" : "Sign in with email code"}
-                  </button>
-                </div>
+                <button
+                  onClick={handleSendSignInOtp}
+                  disabled={isLoading}
+                  className="w-full rounded-xl border border-white/[0.08] py-2.5 text-[13px] font-medium text-zinc-300 transition hover:border-white/[0.15] hover:bg-white/[0.03] disabled:opacity-50"
+                >
+                  {isSendingOtp ? "Sending code…" : "Sign in with email code"}
+                </button>
               </div>
             )}
 
@@ -443,8 +441,8 @@ export default function LoginPage() {
                 {error && <p className="text-center text-[12px] text-red-400">{error}</p>}
 
                 <button
-                  onClick={mode === "signup" ? handleVerifyOtp : handleVerifySignInOtp}
-                  disabled={isVerifyingOtp || otp.length < 6}
+                  onClick={() => mode === "signup" ? handleVerifyOtp() : handleVerifySignInOtp()}
+                  disabled={isVerifyingOtp || otp.replace(/\s/g, "").length < 6}
                   className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50"
                 >
                   {isVerifyingOtp ? "Verifying…" : mode === "signup" ? "Verify & Create Account" : "Sign In"}

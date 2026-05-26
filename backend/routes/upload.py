@@ -10,7 +10,7 @@ router = APIRouter()
 @router.post("/upload")
 async def upload_pdf(
     file: UploadFile = File(...),
-    _email: str = Depends(get_current_user_email),
+    email: str = Depends(get_current_user_email),
     service: DocumentService = Depends(get_document_service),
 ):
-    return await service.upload(file)
+    return await service.upload(file, user_email=email)
