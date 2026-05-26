@@ -17,6 +17,7 @@ pypdf==6.11.0
 tiktoken==0.13.0
 
 SQLAlchemy==2.0.49
+bcrypt
 passlib[bcrypt]
 python-jose[cryptography]
 pydantic-settings
