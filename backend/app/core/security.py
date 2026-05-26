@@ -2,12 +2,10 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
+import bcrypt as _bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import get_settings
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class TokenKind:
@@ -16,12 +14,15 @@ class TokenKind:
 
 
 def hash_password(password: str) -> str:
-    # bcrypt has a 72-byte hard limit — truncate to avoid ValueError
-    return pwd_context.hash(password.encode("utf-8")[:72])
+    """Hash a password using bcrypt directly (bypasses passlib's Python 3.14 incompatibility)."""
+    pw_bytes = password.encode("utf-8")[:72]
+    return _bcrypt.hashpw(pw_bytes, _bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password.encode("utf-8")[:72], hashed_password)
+    """Verify a password against its bcrypt hash."""
+    pw_bytes = plain_password.encode("utf-8")[:72]
+    return _bcrypt.checkpw(pw_bytes, hashed_password.encode("utf-8"))
 
 
 def create_jwt_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
