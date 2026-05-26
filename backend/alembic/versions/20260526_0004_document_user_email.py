@@ -15,33 +15,103 @@ depends_on = None
 
 def upgrade() -> None:
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
 
-    existing_cols = {col["name"] for col in inspector.get_columns("documents")}
-    existing_idx = {idx["name"] for idx in inspector.get_indexes("documents")}
+    # ── Idempotency check ──────────────────────────────────────────────────────
+    rows = conn.execute(sa.text("PRAGMA table_info(documents)")).fetchall()
+    if any(r[1] == "user_email" for r in rows):
+        return  # already applied
 
-    # Idempotent: skip if column already exists
-    if "user_email" in existing_cols:
-        return
+    # ── Recreate documents table with user_email + no global checksum unique ───
+    # SQLite does not support ALTER TABLE DROP CONSTRAINT, so we use the
+    # rename-create-copy-drop pattern with raw SQL (most reliable on SQLite).
+    conn.execute(sa.text("""
+        CREATE TABLE _documents_new (
+            id            INTEGER  PRIMARY KEY NOT NULL,
+            user_email    VARCHAR,
+            original_filename  VARCHAR NOT NULL,
+            stored_filename    VARCHAR NOT NULL,
+            content_type  VARCHAR NOT NULL,
+            size_bytes    INTEGER NOT NULL,
+            checksum_sha256 VARCHAR NOT NULL,
+            upload_status VARCHAR NOT NULL,
+            error_message TEXT,
+            created_at    DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        )
+    """))
 
-    with op.batch_alter_table("documents", recreate="always") as batch_op:
-        batch_op.add_column(sa.Column("user_email", sa.String(), nullable=True))
-        batch_op.create_index("ix_documents_user_email", ["user_email"])
-        # Drop unique index on checksum — uniqueness is now per-user, enforced in service
-        if "ix_documents_checksum_sha256" in existing_idx:
-            batch_op.drop_index("ix_documents_checksum_sha256")
-        batch_op.create_index("ix_documents_checksum_sha256", ["checksum_sha256"])
+    conn.execute(sa.text("""
+        INSERT INTO _documents_new
+            (id, original_filename, stored_filename, content_type,
+             size_bytes, checksum_sha256, upload_status, error_message, created_at)
+        SELECT
+            id, original_filename, stored_filename, content_type,
+            size_bytes, checksum_sha256, upload_status, error_message, created_at
+        FROM documents
+    """))
+
+    conn.execute(sa.text("DROP TABLE documents"))
+    conn.execute(sa.text("ALTER TABLE _documents_new RENAME TO documents"))
+
+    # Recreate all indexes (stored_filename stays unique; checksum no longer unique)
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_documents_id ON documents (id)"
+    ))
+    conn.execute(sa.text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_documents_stored_filename "
+        "ON documents (stored_filename)"
+    ))
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_documents_checksum_sha256 "
+        "ON documents (checksum_sha256)"
+    ))
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_documents_user_email "
+        "ON documents (user_email)"
+    ))
 
 
 def downgrade() -> None:
     conn = op.get_bind()
-    inspector = sa.inspect(conn)
-    existing_idx = {idx["name"] for idx in inspector.get_indexes("documents")}
 
-    with op.batch_alter_table("documents", recreate="always") as batch_op:
-        if "ix_documents_user_email" in existing_idx:
-            batch_op.drop_index("ix_documents_user_email")
-        batch_op.drop_column("user_email")
-        if "ix_documents_checksum_sha256" in existing_idx:
-            batch_op.drop_index("ix_documents_checksum_sha256")
-        batch_op.create_index("ix_documents_checksum_sha256", ["checksum_sha256"], unique=True)
+    rows = conn.execute(sa.text("PRAGMA table_info(documents)")).fetchall()
+    if not any(r[1] == "user_email" for r in rows):
+        return  # nothing to undo
+
+    conn.execute(sa.text("""
+        CREATE TABLE _documents_old (
+            id            INTEGER  PRIMARY KEY NOT NULL,
+            original_filename  VARCHAR NOT NULL,
+            stored_filename    VARCHAR NOT NULL,
+            content_type  VARCHAR NOT NULL,
+            size_bytes    INTEGER NOT NULL,
+            checksum_sha256 VARCHAR NOT NULL UNIQUE,
+            upload_status VARCHAR NOT NULL,
+            error_message TEXT,
+            created_at    DATETIME NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+        )
+    """))
+
+    conn.execute(sa.text("""
+        INSERT OR IGNORE INTO _documents_old
+            (id, original_filename, stored_filename, content_type,
+             size_bytes, checksum_sha256, upload_status, error_message, created_at)
+        SELECT
+            id, original_filename, stored_filename, content_type,
+            size_bytes, checksum_sha256, upload_status, error_message, created_at
+        FROM documents
+    """))
+
+    conn.execute(sa.text("DROP TABLE documents"))
+    conn.execute(sa.text("ALTER TABLE _documents_old RENAME TO documents"))
+
+    conn.execute(sa.text(
+        "CREATE INDEX IF NOT EXISTS ix_documents_id ON documents (id)"
+    ))
+    conn.execute(sa.text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_documents_stored_filename "
+        "ON documents (stored_filename)"
+    ))
+    conn.execute(sa.text(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ix_documents_checksum_sha256 "
+        "ON documents (checksum_sha256)"
+    ))
