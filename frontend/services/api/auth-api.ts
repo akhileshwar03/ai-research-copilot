@@ -55,4 +55,10 @@ export const authApi = {
     apiRequest<OAuthProvidersResponse>("/auth/oauth/providers", {
       skipAuth: true,
     }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    apiRequest<{ message: string }>("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    }),
 };

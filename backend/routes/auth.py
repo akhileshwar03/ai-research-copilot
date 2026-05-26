@@ -7,7 +7,8 @@ from fastapi.responses import RedirectResponse
 from app.api.dependencies.services import get_auth_service, get_otp_service
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.schemas.auth import AuthRequest, RefreshRequest, SendOtpRequest, VerifyOtpRequest, SignupRequest
+from app.api.dependencies.auth import get_current_user_email
+from app.schemas.auth import AuthRequest, ChangePasswordRequest, RefreshRequest, SendOtpRequest, VerifyOtpRequest, SignupRequest
 from app.services.auth_service import AuthService
 from app.services.otp_service import OtpService
 
@@ -39,6 +40,21 @@ def refresh(request: RefreshRequest, service: AuthService = Depends(get_auth_ser
 def signup(request: SignupRequest, service: AuthService = Depends(get_auth_service)):
     """Step 1 of signup: validate uniqueness. Frontend then calls /auth/send-otp."""
     return service.signup_request(email=request.email, password=request.password)
+
+
+# ── Password management ────────────────────────────────────────────────────────
+
+@router.post("/auth/change-password")
+def change_password(
+    request: ChangePasswordRequest,
+    email: str = Depends(get_current_user_email),
+    service: AuthService = Depends(get_auth_service),
+):
+    return service.change_password(
+        email=email,
+        current_password=request.current_password,
+        new_password=request.new_password,
+    )
 
 
 # ── OTP auth ───────────────────────────────────────────────────────────────────

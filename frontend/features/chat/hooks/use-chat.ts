@@ -69,9 +69,6 @@ export function useChat(email: string | null, selectedDocument: string) {
       }).catch(() => {/* silently ignore — title will revert on next load at worst */});
     }
 
-    const optimisticAssistant: Message = { role: "assistant", content: "" };
-    updateMessages(activeSession.id, [...baselineMessages, optimisticAssistant]);
-
     try {
       await stream({
         messages: baselineMessages,
