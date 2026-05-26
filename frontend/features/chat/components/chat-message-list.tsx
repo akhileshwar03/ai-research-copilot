@@ -11,7 +11,18 @@ import type { Message } from "@/shared/types/chat";
 interface ChatMessageListProps {
   messages: Message[];
   isStreaming: boolean;
+  /** First letter of the current user's email — shown in the avatar */
+  userInitial?: string;
+  /** Called when an empty-state suggestion chip is clicked */
+  onSuggestionClick?: (text: string) => void;
 }
+
+const SUGGESTION_CHIPS = [
+  "Summarise the key findings",
+  "What are the main arguments?",
+  "Compare the methodologies",
+  "List all citations",
+];
 
 // ─── Streaming dots ───────────────────────────────────────────────────────────
 
@@ -84,7 +95,7 @@ function CopyButton({ text, className = "" }: { text: string; className?: string
 function CodeBlock({ language, code }: { language: string; code: string }) {
   return (
     <div className="group/code relative my-3 overflow-hidden rounded-xl">
-      <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#0d0d0d] px-4 py-1.5">
+      <div className="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--code-bg)] px-4 py-1.5">
         <span className="text-[11px] font-mono text-zinc-600">{language || "code"}</span>
         <CopyButton text={code} />
       </div>
@@ -96,7 +107,7 @@ function CodeBlock({ language, code }: { language: string; code: string }) {
           margin: 0,
           borderRadius: 0,
           fontSize: "13px",
-          background: "#0d0d0d",
+          background: "var(--code-bg)",
           padding: "1rem",
         }}
       >
@@ -112,7 +123,7 @@ function ScrollFab({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.08] bg-[#111] text-zinc-400 shadow-lg transition hover:border-white/20 hover:text-zinc-200"
+      className="absolute bottom-4 right-4 flex h-8 w-8 items-center justify-center rounded-full border border-[var(--border-medium)] bg-[var(--surface-1)] text-zinc-400 shadow-lg transition hover:border-[var(--border-strong)] hover:text-zinc-200"
       title="Scroll to bottom"
     >
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -122,29 +133,41 @@ function ScrollFab({ onClick }: { onClick: () => void }) {
   );
 }
 
+// ─── Message timestamp ────────────────────────────────────────────────────────
+
+function MessageTimestamp() {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return (
+    <span className="msg-timestamp shrink-0 text-[10px] text-zinc-700 self-end mb-1">
+      {time}
+    </span>
+  );
+}
+
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message, userInitial }: { message: Message; userInitial: string }) {
   const isUser = message.role === "user";
 
   return (
-    <div className={`group flex gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`group flex items-end gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
       <div className={[
         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ring-1",
         isUser
-          ? "bg-white text-black ring-white/20"
-          : "bg-white/[0.05] text-zinc-500 ring-white/[0.06]",
+          ? "bg-[var(--bubble-user-bg)] text-[var(--bubble-user-text)] ring-[var(--border-medium)]"
+          : "bg-white/[0.05] text-zinc-500 ring-[var(--border-subtle)]",
       ].join(" ")}>
-        {isUser ? "Y" : "AI"}
+        {isUser ? userInitial : "AI"}
       </div>
 
       {/* Bubble */}
       <div className={[
         "relative max-w-[80%] rounded-2xl",
         isUser
-          ? "rounded-tr-sm bg-white px-4 py-3 text-black"
-          : "rounded-tl-sm bg-[#111] px-4 py-3 text-zinc-200 ring-1 ring-white/[0.06]",
+          ? "rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)]"
+          : "rounded-tl-sm bg-[var(--bubble-ai-bg)] px-4 py-3 text-[var(--bubble-ai-text)] ring-1 ring-[var(--border-subtle)]",
       ].join(" ")}>
         {isUser ? (
           <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
@@ -183,10 +206,10 @@ function MessageBubble({ message }: { message: Message }) {
                     </div>
                   ),
                   th: ({ children }) => (
-                    <th className="border border-white/[0.08] bg-white/[0.04] px-3 py-1.5 text-left font-semibold">{children}</th>
+                    <th className="border border-[var(--border-subtle)] bg-white/[0.04] px-3 py-1.5 text-left font-semibold">{children}</th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-white/[0.08] px-3 py-1.5">{children}</td>
+                    <td className="border border-[var(--border-subtle)] px-3 py-1.5">{children}</td>
                   ),
                 }}
               >
@@ -194,7 +217,7 @@ function MessageBubble({ message }: { message: Message }) {
               </ReactMarkdown>
             </div>
 
-            {/* Copy button — appears on hover */}
+            {/* Copy + sources — appear on hover */}
             <div className="mt-2 flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
               <CopyButton text={message.content} />
               {message.sources && (
@@ -209,22 +232,45 @@ function MessageBubble({ message }: { message: Message }) {
           </>
         )}
       </div>
+
+      {/* Timestamp — fades in on group hover */}
+      <MessageTimestamp />
     </div>
   );
 }
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps) {
+export function ChatMessageList({
+  messages,
+  isStreaming,
+  userInitial = "?",
+  onSuggestionClick,
+}: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showScrollFab, setShowScrollFab] = useState(false);
+  const wasStreamingRef = useRef(false);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
   }, []);
 
-  useEffect(() => { scrollToBottom("smooth"); }, [messages.length, isStreaming, scrollToBottom]);
+  const isNearBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 220;
+  }, []);
+
+  // Smart auto-scroll: only force-scroll when user is near the bottom
+  // OR when streaming just kicked off (so the user sees the first token appear).
+  useEffect(() => {
+    const justStartedStreaming = isStreaming && !wasStreamingRef.current;
+    wasStreamingRef.current = isStreaming;
+    if (justStartedStreaming || isNearBottom()) {
+      scrollToBottom("smooth");
+    }
+  }, [messages.length, isStreaming, scrollToBottom, isNearBottom]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -237,8 +283,12 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
+  // Hide the auto-inserted welcome message stub (from either old or new name)
   const visibleMessages = messages.filter(
-    (m) => !(m.role === "assistant" && m.content === "Welcome to AI Research Copilot.") || messages.length === 1
+    (m) => !(m.role === "assistant" && (
+      m.content === "Welcome to AI Research Copilot." ||
+      m.content === "Welcome to Querex."
+    )) || messages.length === 1
   );
 
   return (
@@ -248,7 +298,7 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
         {/* Welcome / empty state */}
         {visibleMessages.length <= 1 && !isStreaming && (
           <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-white/[0.06]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-[var(--border-subtle)]">
               <svg className="h-7 w-7 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
@@ -257,35 +307,32 @@ export function ChatMessageList({ messages, isStreaming }: ChatMessageListProps)
               <p className="text-[15px] font-medium text-zinc-400">Start your research</p>
               <p className="mt-1 text-[13px] text-zinc-600">Upload a PDF or ask anything to begin</p>
             </div>
+            {/* Suggestion chips — clickable to pre-fill the input */}
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {[
-                "Summarise the key findings",
-                "What are the main arguments?",
-                "Compare the methodologies",
-                "List all citations",
-              ].map((hint) => (
-                <div
+              {SUGGESTION_CHIPS.map((hint) => (
+                <button
                   key={hint}
-                  className="cursor-default rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-2.5 text-[12px] text-zinc-600 transition hover:border-white/[0.10] hover:text-zinc-500"
+                  onClick={() => onSuggestionClick?.(hint)}
+                  className="cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-white/[0.02] px-4 py-2.5 text-[12px] text-zinc-600 transition hover:border-[var(--border-medium)] hover:bg-white/[0.05] hover:text-zinc-400 text-left"
                 >
                   {hint}
-                </div>
+                </button>
               ))}
             </div>
           </div>
         )}
 
         {visibleMessages.map((message, index) => (
-          <MessageBubble key={index} message={message} />
+          <MessageBubble key={index} message={message} userInitial={userInitial} />
         ))}
 
         {/* Streaming indicator */}
         {isStreaming && (
           <div className="flex gap-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-[10px] font-semibold text-zinc-500 ring-1 ring-white/[0.06]">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-[10px] font-semibold text-zinc-500 ring-1 ring-[var(--border-subtle)]">
               AI
             </div>
-            <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-[#111] px-4 py-3 ring-1 ring-white/[0.06]">
+            <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-[var(--bubble-ai-bg)] px-4 py-3 ring-1 ring-[var(--border-subtle)]">
               <StreamingDot />
             </div>
           </div>

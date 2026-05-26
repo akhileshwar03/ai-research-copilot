@@ -101,3 +101,38 @@ class OtpService:
             "token_type": "bearer",
             "is_new_user": is_new_user,
         }
+
+    def reset_password(self, email: str, code: str, new_password: str) -> dict:
+        """Forgot-password flow: verify OTP and set a new password (no current password required)."""
+        from app.core.security import hash_password
+
+        if len(new_password) < 8:
+            raise AppError(
+                code="WEAK_PASSWORD",
+                message="Password must be at least 8 characters",
+                status_code=400,
+            )
+
+        token = self.otp_repo.get_latest(email=email, purpose="auth")
+        if not token:
+            raise AppError(code="OTP_NOT_FOUND", message="No pending verification code", status_code=400)
+
+        expires_at = token.expires_at
+        if expires_at.tzinfo is not None:
+            expires_at = expires_at.replace(tzinfo=None)
+        if expires_at < datetime.utcnow():
+            raise AppError(code="OTP_EXPIRED", message="Verification code has expired", status_code=400)
+
+        if token.code != code.strip():
+            raise AppError(code="OTP_INVALID", message="Invalid verification code", status_code=400)
+
+        user = self.user_repo.get_by_email(email)
+        if not user:
+            raise AppError(code="USER_NOT_FOUND", message="No account found for this email", status_code=404)
+
+        self.otp_repo.mark_used(token)
+        self.user_repo.update_password(user, hash_password(new_password))
+        self.otp_repo.db.commit()
+
+        logger.info("password_reset email=%s", email)
+        return {"message": "Password reset successfully"}

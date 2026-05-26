@@ -61,4 +61,16 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
+
+  resetPassword: (email: string, code: string, newPassword: string) =>
+    apiRequest<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, code, new_password: newPassword }),
+      skipAuth: true,
+    }),
+
+  deleteAccount: () =>
+    apiRequest<{ message: string }>("/auth/account", {
+      method: "DELETE",
+    }),
 };

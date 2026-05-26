@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import type { Message } from "@/shared/types/chat";
@@ -22,6 +22,7 @@ function deriveTitle(message: string): string {
 export function useChat(email: string | null, selectedDocument: string) {
   const [input, setInput] = useState("");
   const [chatError, setChatError] = useState<string>("");
+  const lastSentMessageRef = useRef<string>("");
   const updateMessages = useSessionStore((s) => s.updateMessages);
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
@@ -50,6 +51,7 @@ export function useChat(email: string | null, selectedDocument: string) {
     setChatError("");
 
     const userMessage: Message = { role: "user", content: input.trim() };
+    lastSentMessageRef.current = input.trim();
     const baselineMessages = [...activeSession.messages, userMessage];
     updateMessages(activeSession.id, baselineMessages);
     setInput("");
@@ -87,11 +89,25 @@ export function useChat(email: string | null, selectedDocument: string) {
     }
   };
 
+  /** Undo the last failed message: restore user input and strip the error turn. */
+  const retryLastMessage = () => {
+    if (!activeSession || !lastSentMessageRef.current) return;
+    const msgs = [...activeSession.messages];
+    // Remove the error assistant reply
+    if (msgs.length && msgs[msgs.length - 1].role === "assistant") msgs.pop();
+    // Remove the user message that failed
+    if (msgs.length && msgs[msgs.length - 1].role === "user") msgs.pop();
+    updateMessages(activeSession.id, msgs);
+    setInput(lastSentMessageRef.current);
+    setChatError("");
+  };
+
   return {
     input,
     setInput,
     sendMessage,
     cancelStreaming: cancel,
+    retryLastMessage,
     isStreaming,
     activeSession,
     chatError,

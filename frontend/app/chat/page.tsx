@@ -14,7 +14,6 @@ import { CommandPalette } from "@/components/ui/command-palette";
 import { buildStaticUrl } from "@/constants/config";
 import { useDocuments } from "@/features/documents/hooks/use-documents";
 import { useSessions, makeDefaultSession } from "@/features/sessions/hooks/use-sessions";
-import { sessionsApi } from "@/services/api/sessions-api";
 
 const PdfViewer = dynamic(() => import("@/components/pdf/pdf-viewer"), { ssr: false });
 
@@ -30,20 +29,53 @@ export default function ChatPage() {
 
   const { documents } = useDocuments();
   const { createSession } = useSessions(email);
+
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const uploadRef = useRef<HTMLInputElement>(null);
 
-  // ── Cmd+K shortcut ──────────────────────────────────────────────────────────
+  // ── Sidebar toggle via custom event (dispatched by ChatHeader button) ───────
   useEffect(() => {
+    const handler = () => setSidebarOpen((o) => !o);
+    window.addEventListener("toggle-sidebar", handler);
+    return () => window.removeEventListener("toggle-sidebar", handler);
+  }, []);
+
+  // ── Settings modal open via custom event ────────────────────────────────────
+  // Dispatched by ⌘+, shortcut below
+  useEffect(() => {
+    // Keyboard shortcuts
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setPaletteOpen((o) => !o);
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+
+      switch (e.key) {
+        case "k":
+          e.preventDefault();
+          setPaletteOpen((o) => !o);
+          break;
+        case "b":
+          e.preventDefault();
+          setSidebarOpen((o) => !o);
+          break;
+        case "n":
+          e.preventDefault();
+          handleNewSession();
+          break;
+        case "/":
+          e.preventDefault();
+          document.getElementById("chat-input")?.focus();
+          break;
+        case ",":
+          e.preventDefault();
+          window.dispatchEvent(new CustomEvent("open-settings"));
+          break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, setSessions, setActiveSessionId, email, createSession]);
 
   const handleNewSession = useCallback(async () => {
     const draft = makeDefaultSession();
@@ -66,7 +98,7 @@ export default function ChatPage() {
 
   if (!isReady || !isAuthenticated) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#080808]">
+      <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
         <div className="flex flex-col items-center gap-3">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
           <p className="text-[12px] text-zinc-600">Loading workspace…</p>
@@ -77,14 +109,18 @@ export default function ChatPage() {
 
   return (
     <>
-      <MainLayout sidebar={<Sidebar email={email} />}>
+      <MainLayout sidebar={<Sidebar email={email} />} sidebarCollapsed={!sidebarOpen}>
         <div className="flex h-full">
           <div className="flex-1 overflow-hidden">
-            <ChatWindow email={email} selectedDocument={selectedDocument} />
+            <ChatWindow
+              email={email}
+              selectedDocument={selectedDocument}
+              sidebarOpen={sidebarOpen}
+            />
           </div>
 
           {selectedDocument ? (
-            <div className="hidden w-[420px] shrink-0 border-l border-white/[0.05] bg-[#0a0a0a] xl:block">
+            <div className="hidden w-[420px] shrink-0 border-l border-[var(--border-subtle)] bg-[var(--app-bg)] xl:block">
               <PdfViewer file={buildStaticUrl(`/uploads/${selectedDocument}`)} />
             </div>
           ) : null}
@@ -113,7 +149,6 @@ export default function ChatPage() {
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file) {
-            // Reuse sidebar upload — dispatch a custom event the sidebar listens to
             window.dispatchEvent(new CustomEvent("upload-pdf", { detail: { file } }));
           }
           e.target.value = "";

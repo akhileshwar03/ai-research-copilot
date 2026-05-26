@@ -178,7 +178,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
 
       {/* Batch action bar */}
       {someChecked && (
-        <div className="flex items-center justify-between rounded-lg border border-white/[0.08] bg-[#1a1a1a] px-3 py-2">
+        <div className="flex items-center justify-between rounded-lg border border-[var(--border-medium)] bg-[var(--surface-3)] px-3 py-2">
           <span className="text-[12px] text-zinc-400">{checkedDocuments.length} selected</span>
           <div className="flex gap-2">
             <button
@@ -205,7 +205,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
           <DocumentSkeleton />
         </div>
       ) : sorted.length === 0 ? (
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[#0d0d0d] px-4 py-8 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02]">
+        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[var(--surface-0)] px-4 py-8 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02]">
           <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
           <UploadIcon />
           <span className="text-[12px] text-zinc-600">{isUploading ? "Uploading…" : "Drop PDF or click to upload"}</span>
@@ -241,7 +241,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   "group flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
                   isActive
                     ? "border-white/20 bg-white/[0.07]"
-                    : "border-white/[0.06] bg-[#111] hover:border-white/[0.10] hover:bg-white/[0.04]",
+                    : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)] hover:bg-white/[0.04]",
                   isDeleting ? "opacity-50" : "",
                 ].join(" ")}
               >
@@ -323,7 +323,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
           })}
 
           {/* Upload more */}
-          <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.06] py-2 text-[11px] text-zinc-700 transition hover:border-white/[0.12] hover:text-zinc-500">
+          <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] py-2 text-[11px] text-zinc-700 transition hover:border-white/[0.12] hover:text-zinc-500">
             <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
             <UploadIcon />
             {isUploading ? "Uploading…" : "Add PDF"}

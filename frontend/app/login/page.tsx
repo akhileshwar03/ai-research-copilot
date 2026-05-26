@@ -4,8 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_auth_failed: "Google sign-in failed. Please try again.",
+  facebook_auth_failed: "Facebook sign-in failed. Please try again.",
+  no_email: "Could not retrieve your email from this provider. Try email sign-in.",
+};
+
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { OtpInput } from "@/components/ui/otp-input";
+import { authApi } from "@/services/api/auth-api";
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -81,7 +88,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         autoComplete={autoComplete}
-        className="w-full rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-[13px] text-white placeholder-zinc-600 outline-none transition focus:border-white/20 focus:bg-white/[0.05]"
+        className="w-full rounded-xl border border-[var(--border-medium)] bg-white/[0.03] px-4 py-2.5 text-[13px] text-[var(--text-primary)] placeholder-zinc-600 outline-none transition focus:border-[var(--border-strong)] focus:bg-white/[0.05]"
       />
       {right && <div className="absolute right-3 top-1/2 -translate-y-1/2">{right}</div>}
     </div>
@@ -131,6 +138,236 @@ function SocialButtons({
   );
 }
 
+// ─── Password strength ─────────────────────────────────────────────────────────
+
+function passwordScore(pw: string): number {
+  if (!pw) return 0;
+  let s = 0;
+  if (pw.length >= 8) s++;
+  if (pw.length >= 12) s++;
+  if (/[A-Z]/.test(pw)) s++;
+  if (/[0-9]/.test(pw)) s++;
+  if (/[^A-Za-z0-9]/.test(pw)) s++;
+  return s;
+}
+
+const STRENGTH_LABELS = ["", "Weak", "Fair", "Good", "Strong", "Very Strong"];
+const STRENGTH_COLORS = ["", "bg-red-500", "bg-amber-500", "bg-yellow-400", "bg-emerald-500", "bg-emerald-400"];
+const STRENGTH_TEXT =   ["", "text-red-400", "text-amber-400", "text-yellow-300", "text-emerald-400", "text-emerald-300"];
+
+function PasswordStrength({ password }: { password: string }) {
+  if (!password) return null;
+  const score = passwordScore(password);
+  return (
+    <div className="mt-1.5 space-y-1">
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div
+            key={i}
+            className={[
+              "h-1 flex-1 rounded-full transition-all duration-300",
+              i <= score ? STRENGTH_COLORS[score] : "bg-white/[0.06]",
+            ].join(" ")}
+          />
+        ))}
+      </div>
+      <p className={`text-[11px] ${STRENGTH_TEXT[score]}`}>{STRENGTH_LABELS[score]}</p>
+    </div>
+  );
+}
+
+// ─── Forgot password modal ─────────────────────────────────────────────────────
+
+type ForgotStep = "email" | "otp" | "reset" | "done";
+
+function ForgotPasswordFlow({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState<ForgotStep>("email");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const { remaining, start: startCountdown } = useCountdown(60);
+
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!email.includes("@")) { setError("Enter a valid email address"); return; }
+    setLoading(true);
+    try {
+      const res = await authApi.sendOtp({ email: email.trim() });
+      setDevCode((res as { _dev_code?: string })._dev_code ?? null);
+      if ((res as { _dev_code?: string })._dev_code) setCode((res as { _dev_code?: string })._dev_code!);
+      setStep("otp");
+      startCountdown();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyCode = (completedValue?: string) => {
+    const c = completedValue ?? code;
+    if (c.replace(/\s/g, "").length < 6) return;
+    setStep("reset");
+  };
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (newPw.length < 8) { setError("Password must be at least 8 characters"); return; }
+    if (newPw !== confirmPw) { setError("Passwords don't match"); return; }
+    setLoading(true);
+    try {
+      await authApi.resetPassword(email.trim(), code, newPw);
+      setStep("done");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reset failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Back button — except on done */}
+      {step !== "done" && (
+        <button
+          onClick={() => {
+            if (step === "email") { onClose(); return; }
+            if (step === "otp") setStep("email");
+            if (step === "reset") setStep("otp");
+          }}
+          className="flex items-center gap-1.5 text-[12px] text-zinc-600 transition hover:text-zinc-300"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back
+        </button>
+      )}
+
+      {/* ── Step 1: enter email ── */}
+      {step === "email" && (
+        <>
+          <div>
+            <p className="text-[15px] font-semibold text-white">Reset your password</p>
+            <p className="mt-1 text-[12px] text-zinc-500">Enter your account email and we'll send a verification code.</p>
+          </div>
+          <form onSubmit={handleSendCode} className="space-y-3">
+            <Field type="email" placeholder="Email address" value={email} onChange={(v) => { setEmail(v); setError(""); }} autoComplete="email" />
+            {error && <p className="text-[12px] text-red-400">{error}</p>}
+            <button type="submit" disabled={loading} className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50">
+              {loading ? "Sending…" : "Send Reset Code"}
+            </button>
+          </form>
+        </>
+      )}
+
+      {/* ── Step 2: enter OTP ── */}
+      {step === "otp" && (
+        <>
+          <div>
+            <p className="text-[15px] font-semibold text-white">Check your email</p>
+            <p className="mt-1 text-[12px] text-zinc-500">
+              Enter the 6-digit code sent to <span className="text-zinc-300">{email}</span>
+            </p>
+          </div>
+          {devCode && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2.5">
+              <svg className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <div>
+                <p className="text-[11px] font-medium text-amber-400">Dev mode — code auto-filled</p>
+                <p className="text-[11px] text-amber-600">Code: <span className="font-mono font-bold text-amber-400">{devCode}</span></p>
+              </div>
+            </div>
+          )}
+          <OtpInput length={6} value={code} onChange={(v) => { setCode(v); setError(""); }} onComplete={handleVerifyCode} />
+          {error && <p className="text-center text-[12px] text-red-400">{error}</p>}
+          <button
+            onClick={() => handleVerifyCode()}
+            disabled={code.replace(/\s/g, "").length < 6}
+            className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50"
+          >
+            Continue
+          </button>
+          <div className="text-center text-[12px] text-zinc-600">
+            {remaining > 0 ? (
+              <span>Resend in {remaining}s</span>
+            ) : (
+              <button onClick={() => { setCode(""); setDevCode(null); handleSendCode(new Event("click") as unknown as React.FormEvent); }} disabled={loading} className="text-zinc-400 underline underline-offset-2 hover:text-zinc-200">
+                {loading ? "Sending…" : "Resend code"}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* ── Step 3: enter new password ── */}
+      {step === "reset" && (
+        <>
+          <div>
+            <p className="text-[15px] font-semibold text-white">Set a new password</p>
+            <p className="mt-1 text-[12px] text-zinc-500">Choose a strong password for your account.</p>
+          </div>
+          <form onSubmit={handleReset} className="space-y-3">
+            <div>
+              <Field
+                type={showPw ? "text" : "password"}
+                placeholder="New password (min. 8 characters)"
+                value={newPw}
+                onChange={(v) => { setNewPw(v); setError(""); }}
+                autoComplete="new-password"
+                right={
+                  <button type="button" onClick={() => setShowPw((s) => !s)} className="text-zinc-600 hover:text-zinc-400">
+                    <EyeIcon open={showPw} />
+                  </button>
+                }
+              />
+              <PasswordStrength password={newPw} />
+            </div>
+            <Field
+              type={showPw ? "text" : "password"}
+              placeholder="Confirm new password"
+              value={confirmPw}
+              onChange={(v) => { setConfirmPw(v); setError(""); }}
+              autoComplete="new-password"
+            />
+            {error && <p className="text-[12px] text-red-400">{error}</p>}
+            <button type="submit" disabled={loading} className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50">
+              {loading ? "Resetting…" : "Reset Password"}
+            </button>
+          </form>
+        </>
+      )}
+
+      {/* ── Step 4: success ── */}
+      {step === "done" && (
+        <div className="flex flex-col items-center gap-4 py-4 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/20">
+            <svg className="h-7 w-7 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[15px] font-semibold text-white">Password reset!</p>
+            <p className="mt-1 text-[12px] text-zinc-500">Sign in with your new password.</p>
+          </div>
+          <button onClick={onClose} className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100">
+            Back to Sign In
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 type Mode = "signin" | "signup";
@@ -143,6 +380,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<Mode>("signin");
   const [step, setStep] = useState<Step>("form");
+  const [showForgot, setShowForgot] = useState(false);
 
   // Form fields
   const [email, setEmail] = useState("");
@@ -158,6 +396,19 @@ export default function LoginPage() {
   useEffect(() => {
     if (isReady && isAuthenticated) router.replace("/chat");
   }, [isReady, isAuthenticated, router]);
+
+  // Show OAuth error toasts from redirect params (e.g. /login?error=google_auth_failed)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      toast.error(OAUTH_ERROR_MESSAGES[err] ?? "Sign-in failed. Please try again.", {
+        duration: 5000,
+      });
+      // Clean the URL without causing a navigation
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
 
   // Reset when switching tabs
   const switchMode = (m: Mode) => {
@@ -255,7 +506,7 @@ export default function LoginPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#080808] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-4">
       {/* Ambient glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-60 left-1/2 h-96 w-[600px] -translate-x-1/2 rounded-full bg-white/[0.015] blur-3xl" />
@@ -264,21 +515,21 @@ export default function LoginPage() {
       <div className="relative w-full max-w-sm">
         {/* Brand */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-white/[0.08]">
+          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-[var(--border-medium)]">
             <svg className="h-5 w-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
           </div>
-          <h1 className="text-[17px] font-semibold text-white">AI Research Copilot</h1>
+          <h1 className="text-[17px] font-semibold text-[var(--text-primary)]">Querex</h1>
           <p className="mt-1 text-[12px] text-zinc-500">Your intelligent research workspace</p>
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-white/[0.07] bg-[#0f0f0f] shadow-2xl">
+        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--login-card)] shadow-2xl">
 
           {/* ── Tab bar ───────────────────────────────────────────────────── */}
           {step === "form" && (
-            <div className="flex border-b border-white/[0.06]">
+            <div className="flex border-b border-[var(--border-subtle)]">
               {(["signin", "signup"] as Mode[]).map((m) => (
                 <button
                   key={m}
@@ -299,8 +550,13 @@ export default function LoginPage() {
 
           <div className="p-6">
 
+            {/* ── FORGOT PASSWORD flow ─────────────────────────────────────── */}
+            {showForgot && (
+              <ForgotPasswordFlow onClose={() => setShowForgot(false)} />
+            )}
+
             {/* ── SIGN IN: form ────────────────────────────────────────────── */}
-            {mode === "signin" && step === "form" && (
+            {!showForgot && mode === "signin" && step === "form" && (
               <div className="space-y-4">
                 <SocialButtons oauthProviders={oauthProviders} onClick={handleOAuth} />
 
@@ -332,6 +588,15 @@ export default function LoginPage() {
                   >
                     {isLoggingIn ? "Signing in…" : "Sign In"}
                   </button>
+                  <div className="text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgot(true)}
+                      className="text-[12px] text-zinc-600 transition hover:text-zinc-300 underline underline-offset-2"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
                 </form>
 
                 {/* Email code sign-in */}
@@ -351,7 +616,7 @@ export default function LoginPage() {
             )}
 
             {/* ── SIGN UP: form ────────────────────────────────────────────── */}
-            {mode === "signup" && step === "form" && (
+            {!showForgot && mode === "signup" && step === "form" && (
               <div className="space-y-4">
                 <SocialButtons oauthProviders={oauthProviders} onClick={handleOAuth} />
 
@@ -363,18 +628,21 @@ export default function LoginPage() {
 
                 <form onSubmit={handleSignUp} className="space-y-3">
                   <Field type="email" placeholder="Email address" value={email} onChange={(v) => { setEmail(v); setError(""); }} autoComplete="email" />
-                  <Field
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password (min. 8 characters)"
-                    value={password}
-                    onChange={(v) => { setPassword(v); setError(""); }}
-                    autoComplete="new-password"
-                    right={
-                      <button type="button" onClick={() => setShowPassword((s) => !s)} className="text-zinc-600 hover:text-zinc-400">
-                        <EyeIcon open={showPassword} />
-                      </button>
-                    }
-                  />
+                  <div>
+                    <Field
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password (min. 8 characters)"
+                      value={password}
+                      onChange={(v) => { setPassword(v); setError(""); }}
+                      autoComplete="new-password"
+                      right={
+                        <button type="button" onClick={() => setShowPassword((s) => !s)} className="text-zinc-600 hover:text-zinc-400">
+                          <EyeIcon open={showPassword} />
+                        </button>
+                      }
+                    />
+                    <PasswordStrength password={password} />
+                  </div>
                   <Field
                     type={showPassword ? "text" : "password"}
                     placeholder="Confirm password"
@@ -399,7 +667,7 @@ export default function LoginPage() {
             )}
 
             {/* ── OTP step (both sign in and sign up) ──────────────────────── */}
-            {step === "otp" && (
+            {!showForgot && step === "otp" && (
               <div className="space-y-5">
                 <div>
                   <button
@@ -467,7 +735,7 @@ export default function LoginPage() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/[0.05] px-6 py-3 text-center">
+          <div className="border-t border-[var(--border-subtle)] px-6 py-3 text-center">
             <p className="text-[11px] text-zinc-700">
               By continuing you agree to our{" "}
               <span className="cursor-pointer text-zinc-500 underline underline-offset-2">Terms</span>
