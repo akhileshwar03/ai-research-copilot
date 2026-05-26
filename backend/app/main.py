@@ -1,5 +1,6 @@
 import os
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +26,59 @@ settings = get_settings()
 configure_logging()
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title=settings.app_name)
+
+def _run_startup_migrations() -> None:
+    """Apply any pending schema changes at startup.
+
+    This runs regardless of whether `alembic upgrade head` is in the start
+    command, making the service resilient to dashboard/config drift.
+    """
+    from sqlalchemy import inspect as sa_inspect, text
+
+    try:
+        with engine.connect() as conn:
+            inspector = sa_inspect(conn)
+
+            # ── documents.user_email (migration 0004) ──────────────────────
+            doc_cols = {c["name"] for c in inspector.get_columns("documents")}
+            if "user_email" not in doc_cols:
+                logger.info("startup_migration: adding documents.user_email")
+                conn.execute(text(
+                    "ALTER TABLE documents ADD COLUMN user_email VARCHAR"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_documents_user_email "
+                    "ON documents (user_email)"
+                ))
+                conn.commit()
+                logger.info("startup_migration: documents.user_email added")
+
+            # Also stamp alembic_version so alembic upgrade head agrees
+            try:
+                result = conn.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).fetchone()
+                if result and result[0] == "20260524_0003":
+                    conn.execute(
+                        text("UPDATE alembic_version SET version_num = '0004'")
+                    )
+                    conn.commit()
+                    logger.info("startup_migration: alembic_version stamped 0004")
+            except Exception:
+                pass  # alembic_version table might not exist yet
+
+    except Exception:
+        logger.exception("startup_migration failed — server will continue but "
+                         "document endpoints may be broken")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _run_startup_migrations()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
