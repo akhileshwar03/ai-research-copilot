@@ -67,6 +67,25 @@ def _run_startup_migrations() -> None:
             except Exception:
                 pass  # alembic_version table might not exist yet
 
+            # ── documents.checksum_sha256 — per-user unique (migration 0005) ──
+            # Migration 0004's idempotency guard fires when user_email was added
+            # by the ALTER TABLE path above, so it skips the index change.
+            # We detect that here and fix it unconditionally at startup.
+            existing_index_names = {idx["name"] for idx in inspector.get_indexes("documents")}
+            if "uq_documents_user_checksum" not in existing_index_names:
+                logger.info("startup_migration: fixing documents.checksum_sha256 to per-user unique")
+                conn.execute(text("DROP INDEX IF EXISTS ix_documents_checksum_sha256"))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_documents_checksum_sha256 "
+                    "ON documents (checksum_sha256)"
+                ))
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS uq_documents_user_checksum "
+                    "ON documents (user_email, checksum_sha256)"
+                ))
+                conn.commit()
+                logger.info("startup_migration: checksum_sha256 now per-user unique")
+
     except Exception:
         logger.exception("startup_migration failed — server will continue but "
                          "document endpoints may be broken")

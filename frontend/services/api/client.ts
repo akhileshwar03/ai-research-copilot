@@ -1,5 +1,5 @@
 import { buildApiUrl } from "@/constants/config";
-import { clearStoredTokens, getStoredTokens, setStoredTokens } from "@/shared/lib/token-storage";
+import { clearStoredTokens, getStoredTokens, isTokenExpired, setStoredTokens } from "@/shared/lib/token-storage";
 import type { ApiError, RefreshResponse } from "@/shared/types/api";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -86,17 +86,43 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   return (await response.json()) as T;
 }
 
-export function apiStream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
-  const { accessToken, tokenType } = getStoredTokens();
-  const headers = new Headers(JSON_HEADERS);
-  if (accessToken) {
-    headers.set("Authorization", `${tokenType} ${accessToken}`);
+/**
+ * Like apiRequest but returns the raw Response for streaming.
+ * Includes the same proactive + reactive token-refresh logic as apiRequest
+ * so that expired access tokens don't silently kill streams.
+ */
+export async function apiStream(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+  let { accessToken, tokenType } = getStoredTokens();
+
+  // Proactive refresh: if the stored token is already expired, refresh before sending
+  if (isTokenExpired(accessToken)) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      accessToken = refreshed;
+      tokenType = "bearer";
+    }
   }
 
-  return fetch(buildApiUrl(path), {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
-    signal,
-  });
+  const makeRequest = (token: string | null, type: string) => {
+    const headers = new Headers(JSON_HEADERS);
+    if (token) headers.set("Authorization", `${type} ${token}`);
+    return fetch(buildApiUrl(path), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+  };
+
+  const response = await makeRequest(accessToken, tokenType);
+
+  // Reactive refresh: token was valid when checked but expired between now and the request
+  if (response.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      return makeRequest(refreshed, "bearer");
+    }
+  }
+
+  return response;
 }
