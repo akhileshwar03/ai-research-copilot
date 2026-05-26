@@ -16,11 +16,12 @@ class TokenKind:
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # bcrypt has a 72-byte hard limit — truncate to avoid ValueError
+    return pwd_context.hash(password.encode("utf-8")[:72])
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_context.verify(plain_password.encode("utf-8")[:72], hashed_password)
 
 
 def create_jwt_token(subject: str, token_type: str, expires_delta: timedelta) -> str:
