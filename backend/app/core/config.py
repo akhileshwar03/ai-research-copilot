@@ -53,12 +53,12 @@ class Settings(BaseSettings):
     # OAuth — configure these to enable social login
     google_client_id: str = ""
     google_client_secret: str = ""
+    github_client_id: str = ""
+    github_client_secret: str = ""
     apple_client_id: str = ""
     apple_team_id: str = ""
     apple_key_id: str = ""
     apple_private_key: str = ""
-    facebook_app_id: str = ""
-    facebook_app_secret: str = ""
 
     # Frontend URL for OAuth redirects
     frontend_url: str = "http://localhost:3000"

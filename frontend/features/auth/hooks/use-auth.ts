@@ -68,6 +68,6 @@ export function useAuth() {
     isSendingOtp: sendOtpMutation.isPending,
     isVerifyingOtp: verifyOtpMutation.isPending,
     logout,
-    oauthProviders: providersQuery.data ?? { google: false, apple: false, facebook: false },
+    oauthProviders: providersQuery.data ?? { google: false, github: false },
   };
 }
