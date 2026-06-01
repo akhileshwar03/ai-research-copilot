@@ -18,6 +18,14 @@ class SessionRepository:
     def get_by_id(self, session_id: int) -> ChatSession | None:
         return self.db.query(ChatSession).filter(ChatSession.id == session_id).first()
 
+    def get_by_id_and_user(self, session_id: int, user_id: int) -> ChatSession | None:
+        """Return the session only when it belongs to the given user — prevents cross-user access."""
+        return (
+            self.db.query(ChatSession)
+            .filter(ChatSession.id == session_id, ChatSession.user_id == user_id)
+            .first()
+        )
+
     def create(self, user_id: int, title: str, pinned: bool = False) -> ChatSession:
         session = ChatSession(user_id=user_id, title=title, pinned=pinned)
         self.db.add(session)

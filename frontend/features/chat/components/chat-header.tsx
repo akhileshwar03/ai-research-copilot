@@ -130,14 +130,14 @@ export function ChatHeader({ sidebarOpen = true }: ChatHeaderProps) {
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[var(--border-subtle)] text-zinc-600 transition hover:border-[var(--border-medium)] hover:text-zinc-300"
       >
         {sidebarOpen ? (
-          /* panels icon */
+          /* sidebar is open — show collapse icon (panel with left divider) */
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         ) : (
-          /* expand icon */
+          /* sidebar is closed — show expand / menu icon */
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h10M4 18h16" />
           </svg>
         )}
       </button>

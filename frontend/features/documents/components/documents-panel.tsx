@@ -79,6 +79,13 @@ function UploadIcon() {
   );
 }
 
+function formatBytes(bytes?: number): string {
+  if (!bytes) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isLoading = false }: DocumentsPanelProps) {
   const {
     selectedDocument, setSelectedDocument,
@@ -116,14 +123,15 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
 
   const handleBatchDelete = async () => {
     const toDelete = documents.filter((d) => checkedDocuments.includes(d.id));
-    try {
-      await Promise.all(toDelete.map((d) => onDelete(d.id)));
-      if (checkedDocuments.includes(selectedDocument)) setSelectedDocument("");
-      clearChecked();
-      toast.success(`${toDelete.length} document${toDelete.length > 1 ? "s" : ""} removed`);
-    } catch {
-      toast.error("Failed to delete selected documents");
-    }
+    const results = await Promise.allSettled(toDelete.map((d) => onDelete(d.id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    const succeeded = results.length - failed;
+
+    if (checkedDocuments.includes(selectedDocument)) setSelectedDocument("");
+    clearChecked();
+
+    if (succeeded > 0) toast.success(`${succeeded} document${succeeded > 1 ? "s" : ""} removed`);
+    if (failed > 0) toast.error(`${failed} document${failed > 1 ? "s" : ""} failed to delete`);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -268,7 +276,9 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                     <p className={["truncate text-[12px] font-medium leading-tight", isActive ? "text-white" : "text-zinc-300"].join(" ")}>
                       {doc.name.replace(/\.pdf$/i, "")}
                     </p>
-                    <p className="text-[10px] text-zinc-700">PDF</p>
+                    <p className="text-[10px] text-zinc-700">
+                      PDF{doc.size_bytes ? ` · ${formatBytes(doc.size_bytes)}` : ""}
+                    </p>
                   </div>
                 </button>
 

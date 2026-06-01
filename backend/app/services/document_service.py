@@ -60,7 +60,7 @@ class DocumentService:
         try:
             with open(filepath, "wb") as output:
                 output.write(content)
-            self.ingestion_service.process_pdf(filepath=filepath, source_id=stored_filename)
+            self.ingestion_service.process_pdf(filepath=filepath, source_id=stored_filename, user_email=user_email or "")
             self.document_repo.update_status(document, upload_status="ready", error_message=None)
             db.commit()
         except Exception as exc:
@@ -81,15 +81,28 @@ class DocumentService:
         )
         return {
             "documents": [
-                {"id": doc.stored_filename, "name": doc.original_filename}
+                {
+                    "id": doc.stored_filename,
+                    "name": doc.original_filename,
+                    "size_bytes": doc.size_bytes,
+                    "upload_status": doc.upload_status,
+                    "created_at": doc.created_at.isoformat() if doc.created_at else None,
+                }
                 for doc in documents
             ]
         }
 
-    def delete_document(self, filename: str) -> dict:
+    def delete_document(self, filename: str, user_email: str) -> dict:
+        """Delete a document only when it belongs to *user_email*.
+
+        Ownership is enforced here (service layer) so the check cannot be
+        bypassed by calling this method directly.
+        """
+        from app.core.exceptions import AppError
+
         document = self.document_repo.get_by_stored_filename(filename)
-        if not document:
-            return {"message": "Document not found"}
+        if not document or document.user_email != user_email:
+            raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
 
         filepath = os.path.join(self.settings.uploads_dir, filename)
         if os.path.exists(filepath):
@@ -103,5 +116,5 @@ class DocumentService:
         db = self.document_repo.db
         self.document_repo.delete(document)
         db.commit()
-        logger.info("upload_deleted stored=%s", filename)
+        logger.info("upload_deleted stored=%s user=%s", filename, user_email)
         return {"message": "Document deleted"}

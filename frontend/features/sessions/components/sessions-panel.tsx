@@ -21,6 +21,7 @@ interface SessionsPanelProps {
   onSelect: (id: number) => void;
   onDelete: (id: number) => Promise<void>;
   onRename: (id: number, title: string) => Promise<void>;
+  onPin: (id: number, pinned: boolean) => Promise<void>;
   onNewSession: () => Promise<void>;
   isCreating?: boolean;
   isLoading?: boolean;
@@ -120,6 +121,7 @@ export function SessionsPanel({
   onSelect,
   onDelete,
   onRename,
+  onPin,
   onNewSession,
   isCreating = false,
   isLoading = false,
@@ -238,7 +240,16 @@ export function SessionsPanel({
                 <PencilIcon />
                 Rename
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => { togglePin(session.id); toast.success(isPinned ? "Unpinned" : "Pinned to top"); }}>
+              <DropdownMenuItem onClick={async () => {
+                togglePin(session.id);
+                try {
+                  await onPin(session.id, !isPinned);
+                  toast.success(isPinned ? "Unpinned" : "Pinned to top");
+                } catch {
+                  togglePin(session.id); // roll back on failure
+                  toast.error("Failed to update pin");
+                }
+              }}>
                 <PinIcon filled={isPinned} />
                 {isPinned ? "Unpin" : "Pin to top"}
               </DropdownMenuItem>

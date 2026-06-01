@@ -58,5 +58,11 @@ export interface ChatRequest { messages: Message[]; document_id?: string | null 
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 
-export interface DocumentItem { id: string; name: string }
+export interface DocumentItem {
+  id: string;
+  name: string;
+  size_bytes?: number;
+  upload_status?: string;
+  created_at?: string;
+}
 export interface DocumentsResponse { documents: DocumentItem[] }

@@ -19,6 +19,18 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions } = useSessions(email);
   const { documents, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
   const [isCreating, setIsCreating] = useState(false);
+
+  // Handle drag-drop uploads dispatched by ChatWindow and command-palette palette uploads
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const file = (e as CustomEvent<{ file: File }>).detail?.file;
+      if (file) uploadDocument(file).catch(() => {});
+    };
+    window.addEventListener("upload-pdf", handler);
+    return () => window.removeEventListener("upload-pdf", handler);
+  // uploadDocument identity is stable (useMutation), safe to exclude
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSection, setProfileSection] = useState<ProfileSection>("profile");
   const [profileSubSection, setProfileSubSection] = useState<"password" | undefined>(undefined);
@@ -41,13 +53,17 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
     setIsCreating(true);
     try {
       const draft = makeDefaultSession();
-      setSessions([draft, ...sessions]);
+      // Read current sessions from store to avoid stale closure
+      const currentSessions = useSessionStore.getState().sessions;
+      setSessions([draft, ...currentSessions]);
       setActiveSessionId(draft.id);
 
       if (email) {
         const created = await createSession(draft);
         const persisted = { ...draft, id: created.id };
-        setSessions([persisted, ...sessions]);
+        // Read again — state may have changed during the async call
+        const latestSessions = useSessionStore.getState().sessions;
+        setSessions([persisted, ...latestSessions.filter((s) => s.id !== draft.id)]);
         setActiveSessionId(persisted.id);
       }
     } finally {
@@ -68,6 +84,14 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
     const target = sessions.find((s) => s.id === id);
     if (!target) return;
     const updated = { ...target, title };
+    setSessions(sessions.map((s) => (s.id === id ? updated : s)));
+    if (email) await updateSession(updated);
+  };
+
+  const handlePinSession = async (id: number, pinned: boolean) => {
+    const target = sessions.find((s) => s.id === id);
+    if (!target) return;
+    const updated = { ...target, pinned };
     setSessions(sessions.map((s) => (s.id === id ? updated : s)));
     if (email) await updateSession(updated);
   };
@@ -111,6 +135,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
             onSelect={setActiveSessionId}
             onDelete={handleDeleteSession}
             onRename={handleRenameSession}
+            onPin={handlePinSession}
             onNewSession={handleNewSession}
             isCreating={isCreating}
             isLoading={isLoadingSessions}

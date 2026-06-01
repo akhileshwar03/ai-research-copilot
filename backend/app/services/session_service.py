@@ -43,10 +43,23 @@ class SessionService:
         logger.info("session_created email=%s session_id=%s", email, session.id)
         return {"id": session.id}
 
-    def update_session(self, session_id: int, title: str, messages: list[dict], pinned: bool = False) -> dict:
-        session = self.session_repo.get_by_id(session_id)
+    def _resolve_user_id(self, email: str) -> int:
+        """Return the user.id for *email*, raising 404 if the user row doesn't exist."""
+        user = self.user_repo.get_by_email(email)
+        if not user:
+            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
+        return user.id
+
+    def _get_owned_session(self, session_id: int, user_id: int):
+        """Return the session only when it belongs to *user_id*, else 404."""
+        session = self.session_repo.get_by_id_and_user(session_id, user_id)
         if not session:
             raise AppError(code="SESSION_NOT_FOUND", message="Session not found", status_code=404)
+        return session
+
+    def update_session(self, session_id: int, user_email: str, title: str, messages: list[dict], pinned: bool = False) -> dict:
+        user_id = self._resolve_user_id(user_email)
+        session = self._get_owned_session(session_id, user_id)
 
         db = self.session_repo.db
         session.title = title
@@ -54,16 +67,15 @@ class SessionService:
         self.message_repo.delete_by_session_id(session_id=session.id)
         self.message_repo.create_many(session_id=session.id, messages=messages)
         db.commit()
-        logger.info("session_updated session_id=%s pinned=%s", session.id, pinned)
+        logger.info("session_updated email=%s session_id=%s pinned=%s", user_email, session.id, pinned)
         return {"message": "Updated"}
 
-    def delete_session(self, session_id: int) -> dict:
-        session = self.session_repo.get_by_id(session_id)
-        if not session:
-            raise AppError(code="SESSION_NOT_FOUND", message="Session not found", status_code=404)
+    def delete_session(self, session_id: int, user_email: str) -> dict:
+        user_id = self._resolve_user_id(user_email)
+        session = self._get_owned_session(session_id, user_id)
 
         db = self.session_repo.db
         self.session_repo.delete(session)
         db.commit()
-        logger.info("session_deleted session_id=%s", session_id)
+        logger.info("session_deleted email=%s session_id=%s", user_email, session_id)
         return {"message": "Deleted"}
