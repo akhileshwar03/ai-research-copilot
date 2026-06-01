@@ -57,9 +57,15 @@ def change_password(
     )
 
 
+@router.post("/auth/forgot-password/send")
+def forgot_password_send(request: SendOtpRequest, service: OtpService = Depends(get_otp_service)):
+    """Forgot-password step 1: send OTP only if the account exists (no email-existence leak)."""
+    return service.send_otp(email=request.email, require_existing_account=True)
+
+
 @router.post("/auth/reset-password")
 def reset_password(request: ResetPasswordRequest, service: OtpService = Depends(get_otp_service)):
-    """Forgot-password flow: OTP has been sent; verify it and set a new password."""
+    """Forgot-password step 2: verify OTP and set a new password."""
     return service.reset_password(
         email=request.email,
         code=request.code,

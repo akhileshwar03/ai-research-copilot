@@ -14,7 +14,12 @@ class IngestionService:
         self.vector_store = vector_store
         self.settings = get_settings()
 
-    def process_pdf(self, filepath: str, source_id: str) -> None:
+    def process_pdf(self, filepath: str, source_id: str, user_email: str = "") -> None:
+        """Ingest a PDF and store chunks in the vector store.
+
+        Every chunk carries ``user_email`` in its metadata so that retrieval
+        queries can be scoped to a single user without leaking other users' data.
+        """
         reader = PdfReader(filepath)
         text = ""
         for page in reader.pages:
@@ -32,5 +37,8 @@ class IngestionService:
 
         vectors = self.embedding_service.embed_documents(chunks)
         ids = [str(uuid.uuid4()) for _ in chunks]
-        metadatas = [{"source": source_id, "chunk": i} for i in range(len(chunks))]
+        metadatas = [
+            {"source": source_id, "chunk": i, "user_email": user_email}
+            for i in range(len(chunks))
+        ]
         self.vector_store.add(ids=ids, documents=chunks, embeddings=vectors, metadatas=metadatas)

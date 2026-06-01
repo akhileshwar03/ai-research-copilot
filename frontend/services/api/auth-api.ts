@@ -62,6 +62,13 @@ export const authApi = {
       body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
     }),
 
+  forgotPasswordSend: (email: string) =>
+    apiRequest<{ message: string }>("/auth/forgot-password/send", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+      skipAuth: true,
+    }),
+
   resetPassword: (email: string, code: string, newPassword: string) =>
     apiRequest<{ message: string }>("/auth/reset-password", {
       method: "POST",

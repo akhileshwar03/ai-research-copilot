@@ -44,8 +44,9 @@ class AuthService:
                 message="An account with this email already exists. Please sign in instead.",
                 status_code=400,
             )
-        # Return payload for OTP service to consume
-        return {"email": email, "password": password, "needs_otp": True}
+        # Signal to the frontend that an OTP step is required.
+        # Never echo the password back — the frontend already holds it in state.
+        return {"email": email, "needs_otp": True}
 
     def login_or_create_oauth_user(self, email: str, provider: str, provider_subject: str) -> dict:
         """Find or create a user via OAuth, issue tokens."""
@@ -131,27 +132,55 @@ class AuthService:
         return {"message": "Password changed successfully"}
 
     def delete_account(self, email: str) -> dict:
-        """Permanently delete a user account and all associated data."""
+        """Permanently delete a user account and ALL associated data.
+
+        Order:
+        1. Remove uploaded PDF files from disk + vectors from ChromaDB
+        2. Delete DB document rows
+        3. Delete chat sessions (cascade → chat messages)
+        4. Delete the user row (cascade → identities, refresh tokens)
+        """
+        import os
+        from app.core.config import get_settings
         from app.db.models.chat_models import ChatSession
         from app.db.models.document import Document
+        from app.db.repositories.document_repository import DocumentRepository
+        from app.modules.rag.vector_store_manager import VectorStoreManager
 
         user = self.user_repo.get_by_email(email)
         if not user:
             raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
 
         db = self.user_repo.db
+        settings = get_settings()
 
-        # Delete chat sessions (cascade deletes ChatMessages via relationship)
-        db.query(ChatSession).filter(ChatSession.user_id == user.id).delete(synchronize_session=False)
+        # 1. Purge each document's file and vector embeddings before removing DB rows
+        docs = DocumentRepository(db).list_by_user(email)
+        if docs:
+            vector_store = VectorStoreManager()
+            for doc in docs:
+                filepath = os.path.join(settings.uploads_dir, doc.stored_filename)
+                if os.path.exists(filepath):
+                    try:
+                        os.remove(filepath)
+                    except Exception:
+                        logger.exception("delete_account: failed to remove file %s", filepath)
+                try:
+                    vector_store.delete_by_source(doc.stored_filename)
+                except Exception:
+                    logger.exception("delete_account: failed to remove vectors for %s", doc.stored_filename)
 
-        # Delete documents (user_email is a plain string column, no FK cascade)
+        # 2. Delete document DB rows
         db.query(Document).filter(Document.user_email == email).delete(synchronize_session=False)
 
-        # Delete the user (cascade deletes UserIdentity and RefreshToken via ORM)
+        # 3. Delete chat sessions (cascade deletes ChatMessages via ORM relationship)
+        db.query(ChatSession).filter(ChatSession.user_id == user.id).delete(synchronize_session=False)
+
+        # 4. Delete user (cascade deletes UserIdentity and RefreshToken)
         db.delete(user)
         db.commit()
 
-        logger.info("account_deleted email=%s", email)
+        logger.info("account_deleted email=%s docs_purged=%d", email, len(docs))
         return {"message": "Account deleted successfully"}
 
     def refresh(self, refresh_token: str) -> dict:

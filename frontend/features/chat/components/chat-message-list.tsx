@@ -136,11 +136,13 @@ function ScrollFab({ onClick }: { onClick: () => void }) {
 // ─── Message timestamp ────────────────────────────────────────────────────────
 
 function MessageTimestamp() {
-  const now = new Date();
-  const time = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // Capture once on mount so the timestamp doesn't update during streaming re-renders
+  const timeRef = useRef(
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  );
   return (
     <span className="msg-timestamp shrink-0 text-[10px] text-zinc-700 self-end mb-1">
-      {time}
+      {timeRef.current}
     </span>
   );
 }
@@ -283,12 +285,12 @@ export function ChatMessageList({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Hide the auto-inserted welcome message stub (from either old or new name)
+  // Strip the auto-inserted welcome stub from either name variant
   const visibleMessages = messages.filter(
     (m) => !(m.role === "assistant" && (
       m.content === "Welcome to AI Research Copilot." ||
       m.content === "Welcome to Querex."
-    )) || messages.length === 1
+    ))
   );
 
   return (
@@ -296,7 +298,7 @@ export function ChatMessageList({
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
 
         {/* Welcome / empty state */}
-        {visibleMessages.length <= 1 && !isStreaming && (
+        {visibleMessages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-[var(--border-subtle)]">
               <svg className="h-7 w-7 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

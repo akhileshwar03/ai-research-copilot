@@ -23,8 +23,21 @@ class OtpService:
         self.email_service = email_service
         self.settings = get_settings()
 
-    def send_otp(self, email: str) -> dict:
+    def send_otp(self, email: str, require_existing_account: bool = False) -> dict:
+        """Send an OTP to *email*.
+
+        Args:
+            require_existing_account: When True (forgot-password flow) the call
+                raises a generic error if no account exists so we don't leak
+                whether the email is registered.  When False (sign-up / sign-in)
+                any email is accepted.
+        """
         from app.db.repositories.otp_repository import OTP_RATE_LIMIT
+        if require_existing_account and not self.user_repo.get_by_email(email):
+            # Return a generic success-looking message — don't reveal account existence
+            logger.info("otp_skipped_no_account email=%s", email)
+            return {"message": "If an account exists for this email, a code has been sent."}
+
         recent = self.otp_repo.count_recent(email)
         if recent >= OTP_RATE_LIMIT:
             raise AppError(

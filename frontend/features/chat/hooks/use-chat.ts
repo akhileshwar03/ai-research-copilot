@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import type { Message } from "@/shared/types/chat";
 import { useSessionStore } from "@/stores/session-store";
@@ -65,10 +66,12 @@ export function useChat(email: string | null, selectedDocument: string) {
         s.id === activeSession.id ? { ...s, title: newTitle } : s
       );
       setSessions(updatedSessions);
-      // Persist in background — don't await, don't block the stream
+      // Persist the new title in background WITHOUT sending the current messages —
+      // the full session (with assistant reply) is saved after streaming completes.
+      // Sending messages here would race against that final save and could overwrite it.
       sessionsApi.update(activeSession.id, {
-        session: { ...activeSession, title: newTitle, messages: baselineMessages },
-      }).catch(() => {/* silently ignore — title will revert on next load at worst */});
+        session: { ...activeSession, title: newTitle, messages: [] },
+      }).catch(() => {/* silently ignore */});
     }
 
     try {
@@ -79,13 +82,20 @@ export function useChat(email: string | null, selectedDocument: string) {
           updateMessages(activeSession.id, [...baselineMessages, { role: "assistant", content: text, sources }]);
         },
       });
-      await updateMutation.mutateAsync(activeSession.id);
     } catch (error) {
       updateMessages(activeSession.id, [
         ...baselineMessages,
         { role: "assistant", content: "Request failed. Please retry." },
       ]);
       setChatError(error instanceof Error ? error.message : "Request failed. Please retry.");
+      return; // don't try to save a failed session
+    }
+
+    // Stream succeeded — persist the session. Failure here is non-fatal (show a toast, not an error banner).
+    try {
+      await updateMutation.mutateAsync(activeSession.id);
+    } catch {
+      toast.error("Session not saved — check your connection", { duration: 4000 });
     }
   };
 

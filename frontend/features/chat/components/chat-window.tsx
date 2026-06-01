@@ -48,7 +48,14 @@ export default function ChatWindow({ email, selectedDocument, sidebarOpen = true
   }, []);
 
   if (!activeSession) {
-    return null;
+    return (
+      <div className="flex h-full items-center justify-center bg-[var(--app-bg)]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/40" />
+          <p className="text-[12px] text-zinc-600">Loading workspace…</p>
+        </div>
+      </div>
+    );
   }
 
   return (

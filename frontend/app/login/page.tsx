@@ -192,13 +192,13 @@ function ForgotPasswordFlow({ onClose }: { onClose: () => void }) {
   const [devCode, setDevCode] = useState<string | null>(null);
   const { remaining, start: startCountdown } = useCountdown(60);
 
-  const handleSendCode = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doSendCode = async () => {
     setError("");
     if (!email.includes("@")) { setError("Enter a valid email address"); return; }
     setLoading(true);
     try {
-      const res = await authApi.sendOtp({ email: email.trim() });
+      // Use the forgot-password endpoint so the server doesn't reveal account existence
+      const res = await authApi.forgotPasswordSend(email.trim());
       setDevCode((res as { _dev_code?: string })._dev_code ?? null);
       if ((res as { _dev_code?: string })._dev_code) setCode((res as { _dev_code?: string })._dev_code!);
       setStep("otp");
@@ -208,6 +208,11 @@ function ForgotPasswordFlow({ onClose }: { onClose: () => void }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await doSendCode();
   };
 
   const handleVerifyCode = (completedValue?: string) => {
@@ -301,7 +306,11 @@ function ForgotPasswordFlow({ onClose }: { onClose: () => void }) {
             {remaining > 0 ? (
               <span>Resend in {remaining}s</span>
             ) : (
-              <button onClick={() => { setCode(""); setDevCode(null); handleSendCode(new Event("click") as unknown as React.FormEvent); }} disabled={loading} className="text-zinc-400 underline underline-offset-2 hover:text-zinc-200">
+              <button
+                onClick={() => { setCode(""); setDevCode(null); void doSendCode(); }}
+                disabled={loading}
+                className="text-zinc-400 underline underline-offset-2 hover:text-zinc-200"
+              >
                 {loading ? "Sending…" : "Resend code"}
               </button>
             )}
@@ -528,7 +537,7 @@ export default function LoginPage() {
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--login-card)] shadow-2xl">
 
           {/* ── Tab bar ───────────────────────────────────────────────────── */}
-          {step === "form" && (
+          {step === "form" && !showForgot && (
             <div className="flex border-b border-[var(--border-subtle)]">
               {(["signin", "signup"] as Mode[]).map((m) => (
                 <button

@@ -39,6 +39,7 @@ def update_session(
 ):
     return service.update_session(
         session_id=session_id,
+        user_email=email,
         title=request.session.title,
         messages=[message.model_dump() for message in request.session.messages],
         pinned=request.session.pinned,
@@ -51,4 +52,4 @@ def delete_session(
     email: str = Depends(get_current_user_email),
     service: SessionService = Depends(get_session_service),
 ):
-    return service.delete_session(session_id)
+    return service.delete_session(session_id=session_id, user_email=email)
