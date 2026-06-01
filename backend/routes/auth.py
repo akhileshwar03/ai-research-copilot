@@ -100,9 +100,8 @@ def verify_otp(request: VerifyOtpRequest, service: OtpService = Depends(get_otp_
 def oauth_providers():
     s = get_settings()
     return {
-        "google":   bool(s.google_client_id and s.google_client_secret),
-        "apple":    bool(s.apple_client_id and s.apple_team_id),
-        "facebook": bool(s.facebook_app_id and s.facebook_app_secret),
+        "google": bool(s.google_client_id and s.google_client_secret),
+        "github": bool(s.github_client_id and s.github_client_secret),
     }
 
 
@@ -179,63 +178,87 @@ def callback_google(code: str, service: AuthService = Depends(get_auth_service))
     )
 
 
-# ── Facebook OAuth ─────────────────────────────────────────────────────────────
+# ── GitHub OAuth ───────────────────────────────────────────────────────────────
 
-@router.get("/auth/oauth/facebook")
-def oauth_facebook():
+@router.get("/auth/oauth/github")
+def oauth_github():
     s = get_settings()
-    if not s.facebook_app_id:
-        raise AppError(code="OAUTH_NOT_CONFIGURED", message="Facebook OAuth is not configured.", status_code=501)
-    redirect_uri = f"{s.app_base_url}/auth/callback/facebook"
+    if not s.github_client_id:
+        raise AppError(code="OAUTH_NOT_CONFIGURED", message="GitHub OAuth is not configured.", status_code=501)
+    redirect_uri = f"{s.app_base_url}/auth/callback/github"
     params = (
-        f"client_id={s.facebook_app_id}"
+        f"client_id={s.github_client_id}"
         f"&redirect_uri={redirect_uri}"
-        "&scope=email,public_profile"
-        "&response_type=code"
+        "&scope=user:email"
     )
-    return RedirectResponse(url=f"https://www.facebook.com/v19.0/dialog/oauth?{params}")
+    return RedirectResponse(url=f"https://github.com/login/oauth/authorize?{params}")
 
 
-@router.get("/auth/callback/facebook")
-def callback_facebook(code: str, service: AuthService = Depends(get_auth_service)):
+@router.get("/auth/callback/github")
+def callback_github(code: str, service: AuthService = Depends(get_auth_service)):
     s = get_settings()
-    redirect_uri = f"{s.app_base_url}/auth/callback/facebook"
+    redirect_uri = f"{s.app_base_url}/auth/callback/github"
 
+    # Exchange code for access token
     try:
-        token_resp = httpx.get(
-            "https://graph.facebook.com/v19.0/oauth/access_token",
-            params={
-                "client_id": s.facebook_app_id,
-                "client_secret": s.facebook_app_secret,
-                "redirect_uri": redirect_uri,
+        token_resp = httpx.post(
+            "https://github.com/login/oauth/access_token",
+            data={
+                "client_id": s.github_client_id,
+                "client_secret": s.github_client_secret,
                 "code": code,
+                "redirect_uri": redirect_uri,
             },
+            headers={"Accept": "application/json"},
             timeout=10,
         )
         token_resp.raise_for_status()
-        access_token = token_resp.json()["access_token"]
+        access_token = token_resp.json().get("access_token")
+        if not access_token:
+            raise ValueError("No access token in response")
     except Exception as exc:
-        logger.error("facebook_token_exchange_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=facebook_auth_failed")
+        logger.error("github_token_exchange_failed: %s", exc)
+        return RedirectResponse(url=f"{s.frontend_url}/login?error=github_auth_failed")
 
+    # Fetch user profile
     try:
         user_resp = httpx.get(
-            "https://graph.facebook.com/me",
-            params={"fields": "id,email,name", "access_token": access_token},
+            "https://api.github.com/user",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
             timeout=10,
         )
         user_resp.raise_for_status()
         user_info = user_resp.json()
     except Exception as exc:
-        logger.error("facebook_userinfo_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=facebook_auth_failed")
+        logger.error("github_userinfo_failed: %s", exc)
+        return RedirectResponse(url=f"{s.frontend_url}/login?error=github_auth_failed")
 
     email = user_info.get("email")
+
+    # GitHub users can set their email to private — fetch from emails endpoint in that case
+    if not email:
+        try:
+            emails_resp = httpx.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+                timeout=10,
+            )
+            emails_resp.raise_for_status()
+            emails = emails_resp.json()
+            email = next(
+                (e["email"] for e in emails if e.get("primary") and e.get("verified")),
+                None,
+            )
+        except Exception as exc:
+            logger.error("github_emails_failed: %s", exc)
+
     if not email:
         return RedirectResponse(url=f"{s.frontend_url}/login?error=no_email")
 
     tokens = service.login_or_create_oauth_user(
-        email=email, provider="facebook", provider_subject=user_info["id"],
+        email=email,
+        provider="github",
+        provider_subject=str(user_info["id"]),
     )
     return RedirectResponse(
         url=f"{s.frontend_url}/auth/callback"

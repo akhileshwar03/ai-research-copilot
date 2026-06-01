@@ -42,8 +42,7 @@ export interface VerifyOtpResponse {
 }
 export interface OAuthProvidersResponse {
   google: boolean;
-  apple: boolean;
-  facebook: boolean;
+  github: boolean;
   [key: string]: boolean;
 }
 
