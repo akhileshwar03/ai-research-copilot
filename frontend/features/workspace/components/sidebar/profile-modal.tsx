@@ -108,7 +108,6 @@ function TextInput({
 function ProfileSection({ email }: { email: string | null }) {
   const [firstName, setFirstName] = useState(() => ls("pf_firstname"));
   const [lastName, setLastName] = useState(() => ls("pf_lastname"));
-  const [phone, setPhone] = useState(() => ls("pf_phone"));
   const [saved, setSaved] = useState(false);
 
   const initial = email ? email[0].toUpperCase() : "?";
@@ -118,14 +117,13 @@ function ProfileSection({ email }: { email: string | null }) {
   const handleSave = () => {
     saveLs("pf_firstname", firstName);
     saveLs("pf_lastname", lastName);
-    saveLs("pf_phone", phone);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
 
   return (
     <div>
-      <SectionHeader title="Profile" subtitle="Manage your personal information" />
+      <SectionHeader title="Profile" subtitle="Display name shown in this workspace (stored on this device)" />
 
       {/* Avatar */}
       <div className="mb-8 flex items-center gap-5">
@@ -150,15 +148,6 @@ function ProfileSection({ email }: { email: string | null }) {
 
         <Field label="Email Address" hint="Cannot be changed">
           <TextInput value={email ?? ""} disabled />
-        </Field>
-
-        <Field label="Phone Number" hint="Optional">
-          <TextInput
-            value={phone}
-            onChange={setPhone}
-            placeholder="+1 (555) 000-0000"
-            type="tel"
-          />
         </Field>
 
         <div className="pt-2">

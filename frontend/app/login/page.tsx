@@ -6,7 +6,8 @@ import { toast } from "sonner";
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   google_auth_failed: "Google sign-in failed. Please try again.",
-  facebook_auth_failed: "Facebook sign-in failed. Please try again.",
+  github_auth_failed: "GitHub sign-in failed. Please try again.",
+  oauth_state_invalid: "The sign-in session expired. Please try again.",
   no_email: "Could not retrieve your email from this provider. Try email sign-in.",
 };
 
@@ -278,11 +279,8 @@ export default function LoginPage() {
 
           {/* Footer */}
           <div className="border-t border-[var(--border-subtle)] px-6 py-3 text-center">
-            <p className="text-[11px] text-zinc-700">
-              By continuing you agree to our{" "}
-              <span className="cursor-pointer text-zinc-500 underline underline-offset-2">Terms</span>
-              {" "}&{" "}
-              <span className="cursor-pointer text-zinc-500 underline underline-offset-2">Privacy</span>
+            <p className="text-[11px] text-zinc-600">
+              Secured with one-time codes — no passwords stored for email sign-in.
             </p>
           </div>
         </div>
