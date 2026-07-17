@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { adminApi } from "@/services/api/admin-api";
 import { authApi } from "@/services/api/auth-api";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 
@@ -550,6 +553,7 @@ const NavSettingsIcon = () => ni("M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.
 const NavShortcutsIcon = () => ni("M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18");
 const NavTutorialIcon = () => ni("M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z");
 const NavWhatsNewIcon = () => ni("M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z");
+const NavAdminIcon = () => ni("M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z");
 
 // ─── Main modal ───────────────────────────────────────────────────────────────
 
@@ -567,8 +571,18 @@ export function ProfileModal({
   onClose,
   initialSection = "profile",
 }: ProfileModalProps) {
+  const router = useRouter();
   const [active, setActive] = useState<ProfileSection>(initialSection);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Admin panel entry is shown only to admins (ADMIN_EMAILS on the backend).
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => adminApi.me(),
+    enabled: isOpen && Boolean(email),
+    staleTime: 60_000,
+    retry: false,
+  });
 
   // Sync to new initialSection when modal opens
   useEffect(() => {
@@ -625,6 +639,24 @@ export function ProfileModal({
               />
             ))}
           </nav>
+
+          {me?.is_admin && (
+            <>
+              <div className="mx-3 my-3 h-px bg-[var(--border-subtle)]" />
+              <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
+                Administration
+              </p>
+              <NavItem
+                icon={<NavAdminIcon />}
+                label="Admin panel"
+                active={false}
+                onClick={() => {
+                  onClose();
+                  router.push("/admin");
+                }}
+              />
+            </>
+          )}
         </div>
 
         {/* ── Right content ──────────────────────────────────────────── */}
