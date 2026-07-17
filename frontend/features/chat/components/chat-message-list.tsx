@@ -32,8 +32,11 @@ function StreamingDot() {
       {[0, 1, 2].map((i) => (
         <span
           key={i}
-          className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-500"
-          style={{ animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite` }}
+          className="inline-block h-1.5 w-1.5 rounded-full"
+          style={{
+            backgroundColor: "var(--marketing-accent)",
+            animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
+          }}
         />
       ))}
       <style>{`
@@ -153,7 +156,7 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
   const isUser = message.role === "user";
 
   return (
-    <div className={`group flex items-end gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div className={`animate-message-in group flex items-end gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
       {/* Avatar */}
       <div className={[
         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ring-1",
@@ -219,17 +222,22 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
               </ReactMarkdown>
             </div>
 
-            {/* Copy + sources — appear on hover */}
-            <div className="mt-2 flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Citation chip — always visible; it's the product's core promise, not a footnote */}
+            {message.sources && (
+              <div
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+              >
+                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                {message.sources}
+              </div>
+            )}
+
+            {/* Copy — appears on hover */}
+            <div className="mt-1.5 opacity-0 transition-opacity group-hover:opacity-100">
               <CopyButton text={message.content} />
-              {message.sources && (
-                <div className="flex items-center gap-1.5">
-                  <svg className="h-3 w-3 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                  </svg>
-                  <span className="text-[11px] text-zinc-600">{message.sources}</span>
-                </div>
-              )}
             </div>
           </>
         )}
@@ -300,13 +308,25 @@ export function ChatMessageList({
         {/* Welcome / empty state */}
         {visibleMessages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 ring-[var(--border-subtle)]">
-              <svg className="h-7 w-7 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-2xl ring-1"
+              style={{ backgroundColor: "var(--marketing-accent-soft)", borderColor: "var(--marketing-accent-soft)" }}
+            >
+              <svg
+                className="h-7 w-7"
+                style={{ color: "var(--marketing-accent-text)" }}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.5}
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
               </svg>
             </div>
             <div>
-              <p className="text-[15px] font-medium text-zinc-400">Start your research</p>
+              <p className="text-[19px] text-zinc-200" style={{ fontFamily: "var(--font-display)" }}>
+                Start your research
+              </p>
               <p className="mt-1 text-[13px] text-zinc-600">Upload a PDF or ask anything to begin</p>
             </div>
             {/* Suggestion chips — clickable to pre-fill the input */}
@@ -315,7 +335,10 @@ export function ChatMessageList({
                 <button
                   key={hint}
                   onClick={() => onSuggestionClick?.(hint)}
-                  className="cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-white/[0.02] px-4 py-2.5 text-[12px] text-zinc-600 transition hover:border-[var(--border-medium)] hover:bg-white/[0.05] hover:text-zinc-400 text-left"
+                  className="cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-white/[0.02] px-4 py-2.5 text-[12px] text-zinc-600 text-left transition hover:bg-white/[0.05] hover:text-zinc-400"
+                  style={{ borderColor: "var(--border-subtle)" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-subtle)")}
                 >
                   {hint}
                 </button>

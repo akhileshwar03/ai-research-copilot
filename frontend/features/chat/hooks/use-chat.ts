@@ -35,7 +35,8 @@ export function useChat(email: string | null, selectedDocument: string) {
     if (!sourceIds || sourceIds.length === 0) return undefined;
     const docs = queryClient.getQueryData<DocumentsResponse>(["documents"])?.documents ?? [];
     const names = sourceIds.map((id) => docs.find((d) => d.id === id)?.name ?? id);
-    return `Sources: ${names.join(", ")}`;
+    // No "Sources:" prefix — the citation chip's icon carries that meaning.
+    return names.join(", ");
   };
 
   const setSessions = useSessionStore((s) => s.setSessions);

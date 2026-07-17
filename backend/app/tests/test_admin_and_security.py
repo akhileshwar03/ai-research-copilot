@@ -90,6 +90,54 @@ def test_admin_can_suspend_and_reinstate_user(client, unique_email):
     assert restored.status_code == 200
 
 
+def test_admin_can_demote_another_admin_when_two_exist(client, unique_email):
+    admin_headers = _register_and_login(client, unique_email)
+    _make_admin(unique_email)
+
+    other_email = f"other-admin-{uuid.uuid4().hex[:8]}@example.com"
+    _register_and_login(client, other_email)
+    _make_admin(other_email)
+
+    # Two admins exist — demoting the other one is allowed.
+    other = client.get(f"/api/v1/admin/users?q={other_email}", headers=admin_headers).json()["users"][0]
+    resp = client.patch(f"/api/v1/admin/users/{other['id']}", json={"is_admin": False}, headers=admin_headers)
+    assert resp.status_code == 200
+
+
+def test_admin_cannot_self_demote(client, unique_email):
+    # Combined with CANNOT_DELETE_SELF/self-suspend below, this guarantees the
+    # platform can never reach zero admins: whoever is acting always remains
+    # admin, so the floor of 1 is structural, not just a count check.
+    headers = _register_and_login(client, unique_email)
+    _make_admin(unique_email)
+
+    me = client.get(f"/api/v1/admin/users?q={unique_email}", headers=headers).json()["users"][0]
+    resp = client.patch(f"/api/v1/admin/users/{me['id']}", json={"is_admin": False}, headers=headers)
+    assert resp.status_code == 400
+
+
+def test_admin_cannot_delete_self(client, unique_email):
+    headers = _register_and_login(client, unique_email)
+    _make_admin(unique_email)
+
+    me = client.get(f"/api/v1/admin/users?q={unique_email}", headers=headers).json()["users"][0]
+    resp = client.delete(f"/api/v1/admin/users/{me['id']}", headers=headers)
+    assert resp.status_code == 400
+
+
+def test_admin_can_delete_another_admin_when_two_exist(client, unique_email):
+    admin_headers = _register_and_login(client, unique_email)
+    _make_admin(unique_email)
+
+    other_email = f"other-admin-{uuid.uuid4().hex[:8]}@example.com"
+    _register_and_login(client, other_email)
+    _make_admin(other_email)
+
+    other = client.get(f"/api/v1/admin/users?q={other_email}", headers=admin_headers).json()["users"][0]
+    resp = client.delete(f"/api/v1/admin/users/{other['id']}", headers=admin_headers)
+    assert resp.status_code == 200
+
+
 def test_admin_runtime_settings_roundtrip(client, unique_email):
     headers = _register_and_login(client, unique_email)
     _make_admin(unique_email)
