@@ -1,22 +1,59 @@
+databases:
+  # Managed PostgreSQL — persists across deploys (unlike the ephemeral disk).
+  # Free tier: 256 MB RAM / 1 GB storage, expires after 90 days unless upgraded.
+  - name: querex-db
+    plan: free
+    databaseName: querex
+    user: querex
+
 services:
   - type: web
-    name: ai-research-copilot-backend
+    name: querex-backend
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: querex-db
+          property: connectionString
       - key: OPENAI_API_KEY
         sync: false
       - key: JWT_SECRET_KEY
-        sync: false
+        generateValue: true
+        # Or set your own: openssl rand -hex 32
       - key: FRONTEND_ORIGINS
         sync: false
-      - key: DATABASE_URL
-        value: sqlite:///./app.db
+        # Your Vercel frontend URL, e.g. https://querex.vercel.app
+      - key: FRONTEND_URL
+        sync: false
+        # Same as FRONTEND_ORIGINS but without a trailing slash
+      - key: APP_BASE_URL
+        sync: false
+        # Your Render service URL, e.g. https://querex-backend.onrender.com
       - key: ENVIRONMENT
         value: production
       - key: AUTO_CREATE_TABLES
         value: "false"
       - key: OPENAI_CHAT_MODEL
         value: gpt-4.1-mini
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+        # Comma-separated emails auto-promoted to admin on login,
+        # e.g. you@example.com — gives access to /admin on the frontend.
+
+    # NOTE on files & vectors: uploaded PDFs (uploads/) and the ChromaDB index
+    # (chroma_db/) still live on the instance disk, which is wiped on deploy.
+    # To persist them, attach a Render Disk (paid plans) by uncommenting:
+    #
+    # disk:
+    #   name: querex-data
+    #   mountPath: /opt/render/project/src/backend/data
+    #   sizeGB: 1
+    #
+    # and setting UPLOADS_DIR=data/uploads and CHROMA_PATH=data/chroma_db
+    # in envVars above. Documents survive DB resets either way — the DB now
+    # lives in PostgreSQL; only the raw PDF bytes and vectors are ephemeral.

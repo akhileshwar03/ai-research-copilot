@@ -17,10 +17,14 @@ pypdf==6.11.0
 tiktoken==0.13.0
 
 SQLAlchemy==2.0.49
-bcrypt
-passlib[bcrypt]
-python-jose[cryptography]
-pydantic-settings
-email-validator
-alembic
+psycopg2-binary==2.9.10
+bcrypt==4.0.1
+python-jose[cryptography]==3.5.0
+pydantic-settings==2.14.1
+email-validator==2.3.0
+alembic==1.18.4
+
+slowapi==0.1.9
+
 pytest
+pytest-asyncio

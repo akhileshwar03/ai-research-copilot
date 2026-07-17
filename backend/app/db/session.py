@@ -7,10 +7,20 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
+
+def _normalize_db_url(url: str) -> str:
+    """Render/Heroku hand out postgres:// URLs; SQLAlchemy 2.x requires postgresql://."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql://", 1)
+    return url
+
+
+DATABASE_URL = _normalize_db_url(settings.database_url)
+
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 engine = create_engine(
-    settings.database_url,
+    DATABASE_URL,
     connect_args=connect_args,
     pool_pre_ping=True,
 )

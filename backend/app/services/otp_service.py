@@ -1,14 +1,36 @@
+import hmac
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.core.security import create_access_token, create_refresh_token, hash_token, hash_password
-from app.db.repositories.otp_repository import OtpRepository
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+    hash_token,
+    validate_password_strength,
+)
+from app.db.repositories.otp_repository import OtpRepository, _utcnow_naive
 from app.db.repositories.user_repository import UserRepository
 from app.services.email_service import EmailService
 
 logger = logging.getLogger(__name__)
+
+# A 6-digit code has 10^6 combinations; without a per-token attempt cap an
+# attacker with many IPs can brute-force it within the 10-minute TTL.
+MAX_OTP_ATTEMPTS = 5
+
+
+def _is_expired(expires_at: datetime) -> bool:
+    """Compare a potentially tz-naive OTP expiry against the current UTC time.
+
+    The OTP repository stores naive UTC datetimes (SQLite strips timezone info
+    on round-trip). Stripping tzinfo from the stored value before comparing
+    keeps this correct on both SQLite and PostgreSQL.
+    """
+    naive_expiry = expires_at.replace(tzinfo=None) if expires_at.tzinfo else expires_at
+    return naive_expiry < _utcnow_naive()
 
 
 class OtpService:
@@ -24,17 +46,15 @@ class OtpService:
         self.settings = get_settings()
 
     def send_otp(self, email: str, require_existing_account: bool = False) -> dict:
-        """Send an OTP to *email*.
+        """Send a 6-digit OTP to *email*.
 
-        Args:
-            require_existing_account: When True (forgot-password flow) the call
-                raises a generic error if no account exists so we don't leak
-                whether the email is registered.  When False (sign-up / sign-in)
-                any email is accepted.
+        When *require_existing_account* is True (forgot-password flow), the
+        response is identical whether or not the account exists — prevents
+        enumeration of registered email addresses.
         """
         from app.db.repositories.otp_repository import OTP_RATE_LIMIT
+
         if require_existing_account and not self.user_repo.get_by_email(email):
-            # Return a generic success-looking message — don't reveal account existence
             logger.info("otp_skipped_no_account email=%s", email)
             return {"message": "If an account exists for this email, a code has been sent."}
 
@@ -54,26 +74,47 @@ class OtpService:
 
         result: dict = {"message": "Verification code sent"}
         if dev_code:
-            # Only returned when SMTP is not configured (development mode).
-            # Remove SMTP_HOST from .env to disable this in production.
             result["_dev_code"] = dev_code
         return result
 
+    def _check_code(self, token, code: str) -> None:
+        """Validate *code* against *token* with attempt limiting.
+
+        Uses a constant-time comparison (no timing side-channel) and burns the
+        token after MAX_OTP_ATTEMPTS failures so the code cannot be brute-forced
+        within its TTL.
+        """
+        if token.attempts is not None and token.attempts >= MAX_OTP_ATTEMPTS:
+            raise AppError(
+                code="OTP_TOO_MANY_ATTEMPTS",
+                message="Too many incorrect attempts. Please request a new code.",
+                status_code=429,
+            )
+
+        if not hmac.compare_digest(token.code, code.strip()):
+            token.attempts = (token.attempts or 0) + 1
+            if token.attempts >= MAX_OTP_ATTEMPTS:
+                token.used = True  # burn the token permanently
+            self.otp_repo.db.commit()
+            raise AppError(code="OTP_INVALID", message="Invalid verification code", status_code=400)
+
     def verify_otp(self, email: str, code: str, password: str | None = None) -> dict:
         token = self.otp_repo.get_latest(email=email, purpose="auth")
-
         if not token:
             raise AppError(code="OTP_NOT_FOUND", message="No pending verification code", status_code=400)
 
-        # SQLite stores datetimes without tz info; normalise both sides to UTC-naive for comparison
-        expires_at = token.expires_at
-        if expires_at.tzinfo is not None:
-            expires_at = expires_at.replace(tzinfo=None)
-        if expires_at < datetime.utcnow():
+        if _is_expired(token.expires_at):
             raise AppError(code="OTP_EXPIRED", message="Verification code has expired", status_code=400)
 
-        if token.code != code.strip():
-            raise AppError(code="OTP_INVALID", message="Invalid verification code", status_code=400)
+        self._check_code(token, code)
+
+        # Enforce the password policy here too: signup_request validates it, but
+        # this endpoint is directly reachable and must not mint weak accounts.
+        if password and not self.user_repo.get_by_email(email):
+            try:
+                validate_password_strength(password)
+            except ValueError as exc:
+                raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
 
         self.otp_repo.mark_used(token)
 
@@ -90,14 +131,12 @@ class OtpService:
                 email=email,
             )
         else:
-            # Mark email as verified and optionally set password
             user.email_verified = True
             if password and not user.hashed_password:
                 user.hashed_password = hash_password(password)
 
         access_token = create_access_token(subject=user.email)
         refresh_token = create_refresh_token(subject=user.email)
-        from datetime import timedelta
         expires_at = datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days)
         self.user_repo.create_refresh_token(
             user_id=user.id,
@@ -116,28 +155,20 @@ class OtpService:
         }
 
     def reset_password(self, email: str, code: str, new_password: str) -> dict:
-        """Forgot-password flow: verify OTP and set a new password (no current password required)."""
-        from app.core.security import hash_password
-
-        if len(new_password) < 8:
-            raise AppError(
-                code="WEAK_PASSWORD",
-                message="Password must be at least 8 characters",
-                status_code=400,
-            )
+        """Forgot-password flow: verify OTP then set a new password."""
+        try:
+            validate_password_strength(new_password)
+        except ValueError as exc:
+            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
 
         token = self.otp_repo.get_latest(email=email, purpose="auth")
         if not token:
             raise AppError(code="OTP_NOT_FOUND", message="No pending verification code", status_code=400)
 
-        expires_at = token.expires_at
-        if expires_at.tzinfo is not None:
-            expires_at = expires_at.replace(tzinfo=None)
-        if expires_at < datetime.utcnow():
+        if _is_expired(token.expires_at):
             raise AppError(code="OTP_EXPIRED", message="Verification code has expired", status_code=400)
 
-        if token.code != code.strip():
-            raise AppError(code="OTP_INVALID", message="Invalid verification code", status_code=400)
+        self._check_code(token, code)
 
         user = self.user_repo.get_by_email(email)
         if not user:

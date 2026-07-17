@@ -1,49 +1,62 @@
+import json
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import get_current_user_email
 from app.api.dependencies.services import get_chat_service
 from app.core.exceptions import AppError
+from app.core.rate_limit import limiter
 from app.db.repositories.document_repository import DocumentRepository
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest
 from app.services.chat_service import ChatService
+from app.services.runtime_settings import chat_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.post("/chat")
+@limiter.limit(chat_rate_limit)
 async def chat(
-    request: ChatRequest,
+    request: Request,
+    body: ChatRequest,
     email: str = Depends(get_current_user_email),
     service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db),
 ):
-    # If a specific document was requested, verify it actually belongs to this user.
-    # This prevents User A from reading User B's documents by guessing a stored filename.
-    if request.document_id:
-        doc = DocumentRepository(db).get_by_stored_filename(request.document_id)
+    if body.document_id:
+        doc = DocumentRepository(db).get_by_stored_filename(body.document_id)
         if not doc or doc.user_email != email:
-            raise AppError(
-                code="DOCUMENT_NOT_FOUND",
-                message="Document not found",
-                status_code=404,
-            )
+            raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
 
-    async def stream():
+    async def event_stream():
         try:
-            async for token in service.stream_response(
-                messages=[message.model_dump() for message in request.messages],
-                document_id=request.document_id,
+            async for event in service.stream_response(
+                messages=[message.model_dump() for message in body.messages],
+                document_id=body.document_id,
                 user_email=email,
             ):
-                yield token
+                if event["type"] == "sources":
+                    yield f"event: sources\ndata: {json.dumps(event['sources'])}\n\n"
+                else:
+                    # JSON-encode each token so newlines inside markdown don't break SSE framing.
+                    yield f"data: {json.dumps(event['value'])}\n\n"
         except Exception:
-            logger.exception("stream_error document_id=%s", request.document_id)
-            yield "\n\nAn error occurred while processing your request. Please try again."
+            logger.exception("stream_error document_id=%s", body.document_id)
+            error_payload = json.dumps({"message": "Stream processing failed. Please try again."})
+            yield f"event: error\ndata: {error_payload}\n\n"
+        finally:
+            yield "event: done\ndata: \n\n"
 
-    return StreamingResponse(stream(), media_type="text/plain", headers={"X-Sources": ""})
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -27,12 +27,27 @@ class Settings(BaseSettings):
 
     uploads_dir: str = "uploads"
     max_upload_size_mb: int = 20
+    # Free-tier retention: documents and chats older than this are purged by
+    # the daily cleanup. 0 disables retention entirely (keep forever).
+    retention_days: int = 7
     chroma_path: str = "chroma_db"
     chroma_collection: str = "documents"
+
+    rate_limit_enabled: bool = True
+
+    # Comma-separated list of emails that are auto-promoted to admin on login.
+    # Survives ephemeral-DB resets because promotion re-applies on every request.
+    admin_emails: str = ""
 
     rag_chunk_size: int = 700
     rag_chunk_overlap: int = 120
     rag_top_k: int = 6
+    # Cosine-distance threshold for retrieved chunks (0.0 = identical, 2.0 = opposite).
+    # Chunks whose distance exceeds this value are discarded before being sent to the LLM,
+    # preventing garbage context from causing confident-sounding hallucinations.
+    # 0.8 keeps clearly related chunks (typically 0.3–0.6 with OpenAI embeddings)
+    # while dropping unrelated ones (~0.9+). Adjustable at runtime from /admin.
+    rag_similarity_threshold: float = 0.8
 
     # Email — Resend (primary, recommended) or SMTP (fallback)
     # Sign up at resend.com → get an API key → set RESEND_API_KEY
@@ -66,6 +81,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_email_list(self) -> list[str]:
+        return [e.strip().lower() for e in self.admin_emails.split(",") if e.strip()]
 
     @property
     def is_development(self) -> bool:

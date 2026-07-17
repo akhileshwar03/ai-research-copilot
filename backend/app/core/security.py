@@ -13,6 +13,21 @@ class TokenKind:
     REFRESH = "refresh"
 
 
+def validate_password_strength(password: str) -> None:
+    """Raise ValueError if *password* fails minimum strength requirements."""
+    errors = []
+    if len(password) < 8:
+        errors.append("at least 8 characters")
+    if not any(c.isupper() for c in password):
+        errors.append("at least one uppercase letter")
+    if not any(c.islower() for c in password):
+        errors.append("at least one lowercase letter")
+    if not any(c.isdigit() for c in password):
+        errors.append("at least one digit")
+    if errors:
+        raise ValueError("Password must contain " + ", ".join(errors) + ".")
+
+
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt directly (bypasses passlib's Python 3.14 incompatibility)."""
     pw_bytes = password.encode("utf-8")[:72]

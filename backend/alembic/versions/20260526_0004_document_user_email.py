@@ -16,12 +16,19 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # ── Idempotency check ──────────────────────────────────────────────────────
-    rows = conn.execute(sa.text("PRAGMA table_info(documents)")).fetchall()
-    if any(r[1] == "user_email" for r in rows):
+    # ── Idempotency check (dialect-agnostic) ───────────────────────────────────
+    cols = {c["name"] for c in sa.inspect(conn).get_columns("documents")}
+    if "user_email" in cols:
         return  # already applied
 
-    # ── Recreate documents table with user_email + no global checksum unique ───
+    if conn.dialect.name != "sqlite":
+        # PostgreSQL (and anything else sane) supports plain ADD COLUMN.
+        # The checksum uniqueness change is handled portably in revision 0005.
+        op.add_column("documents", sa.Column("user_email", sa.String(), nullable=True))
+        op.create_index("ix_documents_user_email", "documents", ["user_email"], unique=False)
+        return
+
+    # ── SQLite: recreate documents table with user_email + no global checksum unique ──
     # SQLite does not support ALTER TABLE DROP CONSTRAINT, so we use the
     # rename-create-copy-drop pattern with raw SQL (most reliable on SQLite).
     conn.execute(sa.text("""
@@ -73,9 +80,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     conn = op.get_bind()
 
-    rows = conn.execute(sa.text("PRAGMA table_info(documents)")).fetchall()
-    if not any(r[1] == "user_email" for r in rows):
+    cols = {c["name"] for c in sa.inspect(conn).get_columns("documents")}
+    if "user_email" not in cols:
         return  # nothing to undo
+
+    if conn.dialect.name != "sqlite":
+        op.drop_index("ix_documents_user_email", table_name="documents")
+        op.drop_column("documents", "user_email")
+        return
 
     conn.execute(sa.text("""
         CREATE TABLE _documents_old (

@@ -17,28 +17,39 @@ class IngestionService:
     def process_pdf(self, filepath: str, source_id: str, user_email: str = "") -> None:
         """Ingest a PDF and store chunks in the vector store.
 
-        Every chunk carries ``user_email`` in its metadata so that retrieval
-        queries can be scoped to a single user without leaking other users' data.
+        Text is split per page so every chunk carries its page number — the
+        LLM can then cite "page N" instead of an opaque chunk index. Every
+        chunk also carries ``user_email`` so retrieval stays scoped to one
+        user without leaking other users' data.
         """
         reader = PdfReader(filepath)
-        text = ""
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted
-
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.settings.rag_chunk_size,
             chunk_overlap=self.settings.rag_chunk_overlap,
         )
-        chunks = splitter.split_text(text)
+
+        chunks: list[str] = []
+        metadatas: list[dict] = []
+        chunk_index = 0
+        for page_number, page in enumerate(reader.pages, start=1):
+            extracted = page.extract_text()
+            if not extracted or not extracted.strip():
+                continue
+            for piece in splitter.split_text(extracted):
+                chunks.append(piece)
+                metadatas.append(
+                    {
+                        "source": source_id,
+                        "chunk": chunk_index,
+                        "page": page_number,
+                        "user_email": user_email,
+                    }
+                )
+                chunk_index += 1
+
         if not chunks:
             return
 
         vectors = self.embedding_service.embed_documents(chunks)
         ids = [str(uuid.uuid4()) for _ in chunks]
-        metadatas = [
-            {"source": source_id, "chunk": i, "user_email": user_email}
-            for i in range(len(chunks))
-        ]
         self.vector_store.add(ids=ids, documents=chunks, embeddings=vectors, metadatas=metadatas)

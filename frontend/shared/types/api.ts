@@ -9,7 +9,7 @@ export interface ApiError {
 
 export interface LoginRequest { email: string; password: string }
 export interface RegisterRequest { email: string; password: string }
-export interface RefreshRequest { refresh_token: string }
+export interface RefreshRequest { refresh_token?: string }
 
 export interface LoginResponse {
   token?: string;
@@ -50,6 +50,14 @@ export interface OAuthProvidersResponse {
 
 export interface SessionPayload { session: ChatSession }
 export interface SessionCreateResponse { id: number }
+export interface SessionsResponse {
+  sessions: ChatSession[];
+  total: number;
+  skip: number;
+  limit: number;
+  /** Free-tier retention window in days; 0 means chats are kept forever. */
+  retention_days?: number;
+}
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
@@ -64,4 +72,8 @@ export interface DocumentItem {
   upload_status?: string;
   created_at?: string;
 }
-export interface DocumentsResponse { documents: DocumentItem[] }
+export interface DocumentsResponse {
+  documents: DocumentItem[];
+  /** Free-tier retention window in days; 0 means documents are kept forever. */
+  retention_days?: number;
+}

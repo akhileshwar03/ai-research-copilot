@@ -11,8 +11,8 @@ import { useSessionStore } from "@/stores/session-store";
 import MainLayout from "@/components/layout/main-layout";
 import Sidebar from "@/features/workspace/components/sidebar/sidebar";
 import { CommandPalette } from "@/components/ui/command-palette";
-import { buildStaticUrl } from "@/constants/config";
 import { useDocuments } from "@/features/documents/hooks/use-documents";
+import { useDocumentFile } from "@/features/documents/hooks/use-document-file";
 import { useSessions, makeDefaultSession } from "@/features/sessions/hooks/use-sessions";
 
 const PdfViewer = dynamic(() => import("@/components/pdf/pdf-viewer"), { ssr: false });
@@ -29,6 +29,7 @@ export default function ChatPage() {
 
   const { documents } = useDocuments();
   const { createSession } = useSessions(email);
+  const { blobUrl: pdfBlobUrl, isLoading: isPdfLoading } = useDocumentFile(selectedDocument || null);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -121,7 +122,13 @@ export default function ChatPage() {
 
           {selectedDocument ? (
             <div className="hidden w-[420px] shrink-0 border-l border-[var(--border-subtle)] bg-[var(--app-bg)] xl:block">
-              <PdfViewer file={buildStaticUrl(`/uploads/${selectedDocument}`)} />
+              {pdfBlobUrl ? (
+                <PdfViewer file={pdfBlobUrl} />
+              ) : (
+                <div className="flex h-full items-center justify-center text-[13px] text-zinc-500">
+                  {isPdfLoading ? "Loading PDF…" : "Unable to load PDF"}
+                </div>
+              )}
             </div>
           ) : null}
         </div>

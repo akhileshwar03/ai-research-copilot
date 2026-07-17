@@ -2,24 +2,24 @@ import os
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.api.middleware.exception_handlers import register_exception_handlers
 from app.api.middleware.request_context import request_context_middleware
 from app.api.dependencies.services import get_health_service
+from app.api.routes.oauth import router as oauth_router
 from app.api.routes.v1 import api_v1_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
-from app.db.models import chat_models, document, user  # noqa: F401
+from app.core.rate_limit import limiter
+from app.db.models import app_setting, chat_models, document, one_time_code, user  # noqa: F401
 from app.db.session import Base, engine
-from routes.auth import router as legacy_auth_router
-from routes.chat import router as legacy_chat_router
-from routes.documents import router as legacy_documents_router
-from routes.sessions import router as legacy_sessions_router
-from routes.upload import router as legacy_upload_router
 from app.services.health_service import HealthService
+from app.services.retention_service import maybe_run_cleanup
 
 settings = get_settings()
 
@@ -28,56 +28,107 @@ logger = logging.getLogger(__name__)
 
 
 def _run_startup_migrations() -> None:
-    """Apply any pending schema changes at startup.
+    """Apply any pending schema changes that Alembic may have missed.
 
-    This runs regardless of whether `alembic upgrade head` is in the start
-    command, making the service resilient to dashboard/config drift.
+    SQLite only: this safety net exists for Render's ephemeral disk, where the
+    database can be reset between the alembic step and process start. On
+    PostgreSQL the database persists and `alembic upgrade head` in the start
+    command is the single source of truth — running raw DDL here would just
+    risk drift.
     """
     from sqlalchemy import inspect as sa_inspect, text
+
+    if engine.dialect.name != "sqlite":
+        logger.info("startup_migrations_skipped dialect=%s (alembic owns the schema)", engine.dialect.name)
+        return
 
     try:
         with engine.connect() as conn:
             inspector = sa_inspect(conn)
 
-            # ── documents.user_email (migration 0004) ──────────────────────
             doc_cols = {c["name"] for c in inspector.get_columns("documents")}
             if "user_email" not in doc_cols:
                 logger.info("startup_migration: adding documents.user_email")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN user_email VARCHAR"))
                 conn.execute(text(
-                    "ALTER TABLE documents ADD COLUMN user_email VARCHAR"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_documents_user_email "
-                    "ON documents (user_email)"
+                    "CREATE INDEX IF NOT EXISTS ix_documents_user_email ON documents (user_email)"
                 ))
                 conn.commit()
                 logger.info("startup_migration: documents.user_email added")
 
-            # Also stamp alembic_version so alembic upgrade head agrees
             try:
                 result = conn.execute(
                     text("SELECT version_num FROM alembic_version")
                 ).fetchone()
                 if result and result[0] == "20260524_0003":
-                    conn.execute(
-                        text("UPDATE alembic_version SET version_num = '0004'")
-                    )
+                    conn.execute(text("UPDATE alembic_version SET version_num = '0004'"))
                     conn.commit()
-                    logger.info("startup_migration: alembic_version stamped 0004")
             except Exception:
-                pass  # alembic_version table might not exist yet
+                pass
 
-            # ── documents.checksum_sha256 — per-user unique (migration 0005) ──
-            # Migration 0004's idempotency guard fires when user_email was added
-            # by the ALTER TABLE path above, so it skips the index change.
-            # We detect that here and fix it unconditionally at startup.
+            # ── chat_sessions.created_at (migration 0006) ──────────────────────
+            session_cols = {c["name"] for c in inspector.get_columns("chat_sessions")}
+            if "created_at" not in session_cols:
+                logger.info("startup_migration: adding chat_sessions.created_at")
+                conn.execute(text(
+                    "ALTER TABLE chat_sessions ADD COLUMN created_at DATETIME"
+                ))
+                conn.execute(text(
+                    "UPDATE chat_sessions SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
+                ))
+                conn.commit()
+                logger.info("startup_migration: chat_sessions.created_at added")
+
+            # ── admin role + OTP attempts + app_settings (migration 0007) ──────
+            user_cols = {c["name"] for c in inspector.get_columns("users")}
+            if "is_admin" not in user_cols:
+                logger.info("startup_migration: adding users.is_admin")
+                conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+
+            otp_cols = {c["name"] for c in inspector.get_columns("otp_tokens")}
+            if "attempts" not in otp_cols:
+                logger.info("startup_migration: adding otp_tokens.attempts")
+                conn.execute(text("ALTER TABLE otp_tokens ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0"))
+                conn.commit()
+
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key VARCHAR NOT NULL PRIMARY KEY,
+                    value VARCHAR NOT NULL,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.commit()
+
+            # ── one_time_codes (migration 0008) ────────────────────────────────
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS one_time_codes (
+                    id INTEGER PRIMARY KEY,
+                    code_hash VARCHAR NOT NULL,
+                    purpose VARCHAR NOT NULL,
+                    payload TEXT,
+                    expires_at DATETIME NOT NULL
+                )
+                """
+            ))
+            conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_one_time_codes_code_hash ON one_time_codes (code_hash)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_one_time_codes_purpose ON one_time_codes (purpose)"
+            ))
+            conn.commit()
+
             existing_index_names = {idx["name"] for idx in inspector.get_indexes("documents")}
             if "uq_documents_user_checksum" not in existing_index_names:
                 logger.info("startup_migration: fixing documents.checksum_sha256 to per-user unique")
                 conn.execute(text("DROP INDEX IF EXISTS ix_documents_checksum_sha256"))
                 conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_documents_checksum_sha256 "
-                    "ON documents (checksum_sha256)"
+                    "CREATE INDEX IF NOT EXISTS ix_documents_checksum_sha256 ON documents (checksum_sha256)"
                 ))
                 conn.execute(text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS uq_documents_user_checksum "
@@ -87,8 +138,9 @@ def _run_startup_migrations() -> None:
                 logger.info("startup_migration: checksum_sha256 now per-user unique")
 
     except Exception:
-        logger.exception("startup_migration failed — server will continue but "
-                         "document endpoints may be broken")
+        logger.exception(
+            "startup_migration failed — server will continue but document endpoints may be broken"
+        )
 
 
 @asynccontextmanager
@@ -99,6 +151,31 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+# ── Rate limiting ──────────────────────────────────────────────────────────────
+app.state.limiter = limiter
+
+
+async def _rate_limit_error_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    from app.api.middleware.request_context import request_context_middleware  # noqa: F401
+    request_id = getattr(request.state, "request_id", "") or request.headers.get("x-request-id", "")
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": {
+                "code": "RATE_LIMIT_EXCEEDED",
+                "message": f"Too many requests. Limit: {exc.detail}",
+                "request_id": request_id,
+                "details": {},
+            },
+            "detail": f"Too many requests. Limit: {exc.detail}",
+        },
+        headers={"Retry-After": "60"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_error_handler)
+
+# ── CORS ───────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -112,28 +189,31 @@ app.middleware("http")(request_context_middleware)
 os.makedirs(settings.uploads_dir, exist_ok=True)
 os.makedirs(settings.chroma_path, exist_ok=True)
 
-app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
+# NOTE: uploads are deliberately NOT mounted as public static files.
+# PDFs are served through GET /documents/{id}/file with an ownership check.
 
-# Versioned API routes use existing handlers to preserve behavior.
+# ── Versioned API (all frontend calls go here) ─────────────────────────────────
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
 
-# Backward compatibility: existing frontend can continue to call legacy paths.
-app.include_router(legacy_auth_router)
-app.include_router(legacy_chat_router)
-app.include_router(legacy_documents_router)
-app.include_router(legacy_sessions_router)
-app.include_router(legacy_upload_router)
+# ── OAuth callbacks at root level ──────────────────────────────────────────────
+# OAuth providers redirect to hard-coded URIs registered at the domain root.
+# Only the callback routes need root-level mounting; all other auth endpoints
+# are exclusively under /api/v1.
+app.include_router(oauth_router)
 
 register_exception_handlers(app)
 
 
 @app.get("/")
-async def root():
-    return {"message": settings.app_name}
+async def root(background_tasks: BackgroundTasks):
+    # The uptime ping lands here; it doubles as the retention-cleanup trigger.
+    background_tasks.add_task(maybe_run_cleanup)
+    return {"message": settings.app_name, "version": "v1", "docs": "/docs"}
 
 
 @app.get("/health")
-def health(service: HealthService = Depends(get_health_service)):
+def health(background_tasks: BackgroundTasks, service: HealthService = Depends(get_health_service)):
+    background_tasks.add_task(maybe_run_cleanup)
     return service.health()
 
 

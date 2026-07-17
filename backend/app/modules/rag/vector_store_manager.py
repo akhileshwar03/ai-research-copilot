@@ -6,14 +6,17 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_RESULT = {"documents": [[]], "metadatas": [[]]}
+_EMPTY_RESULT = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
 
 
 class VectorStoreManager:
     def __init__(self):
         settings = get_settings()
         self.client = chromadb.PersistentClient(path=settings.chroma_path)
-        self.collection = self.client.get_or_create_collection(name=settings.chroma_collection)
+        self.collection = self.client.get_or_create_collection(
+            name=settings.chroma_collection,
+            metadata={"hnsw:space": "cosine"},
+        )
 
     def add(self, ids: list[str], documents: list[str], embeddings: list[list[float]], metadatas: list[dict]) -> None:
         self.collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
@@ -24,7 +27,11 @@ class VectorStoreManager:
             return _EMPTY_RESULT
 
         actual_n = min(n_results, count)
-        args: dict = {"query_embeddings": [query_embedding], "n_results": actual_n}
+        args: dict = {
+            "query_embeddings": [query_embedding],
+            "n_results": actual_n,
+            "include": ["documents", "metadatas", "distances"],
+        }
         if where:
             args["where"] = where
 

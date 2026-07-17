@@ -1,79 +1,143 @@
 import logging
 
-import httpx
-from fastapi import APIRouter, Depends
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Request, Response
 
 from app.api.dependencies.services import get_auth_service, get_otp_service
-from app.core.config import get_settings
+from app.api.dependencies.auth import get_current_user, get_current_user_email
+from app.db.models.user import User
+from app.core.cookies import clear_refresh_cookie, get_refresh_cookie, set_refresh_cookie
 from app.core.exceptions import AppError
-from app.api.dependencies.auth import get_current_user_email
-from app.schemas.auth import AuthRequest, ChangePasswordRequest, RefreshRequest, ResetPasswordRequest, SendOtpRequest, VerifyOtpRequest, SignupRequest
+from app.core.rate_limit import limiter
+from app.schemas.auth import (
+    AuthRequest,
+    AuthResponse,
+    ChangePasswordRequest,
+    MeResponse,
+    MessageResponse,
+    RefreshRequest,
+    RefreshResponse,
+    ResetPasswordRequest,
+    SendOtpRequest,
+    SendOtpResponse,
+    SignupRequest,
+    SignupResponse,
+    VerifyOtpRequest,
+    VerifyOtpResponse,
+)
 from app.services.auth_service import AuthService
 from app.services.otp_service import OtpService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-settings = get_settings()
 
 
 # ── Password auth ──────────────────────────────────────────────────────────────
 
-@router.post("/register")
-def register(request: AuthRequest, service: AuthService = Depends(get_auth_service)):
-    return service.register(email=request.email, password=request.password)
+@router.post("/register", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def register(request: Request, body: AuthRequest, service: AuthService = Depends(get_auth_service)):
+    return service.register(email=body.email, password=body.password)
 
 
-@router.post("/login")
-def login(request: AuthRequest, service: AuthService = Depends(get_auth_service)):
-    return service.login(email=request.email, password=request.password)
+@router.post("/login", response_model=AuthResponse)
+@limiter.limit("10/minute")
+def login(
+    request: Request,
+    response: Response,
+    body: AuthRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    result = service.login(email=body.email, password=body.password)
+    # httpOnly cookie is the primary refresh channel; the JSON copy exists for
+    # clients where cross-site cookies are blocked (Safari ITP).
+    set_refresh_cookie(response, result["refresh_token"])
+    return result
 
 
-@router.post("/refresh")
-def refresh(request: RefreshRequest, service: AuthService = Depends(get_auth_service)):
-    return service.refresh(refresh_token=request.refresh_token)
+@router.post("/refresh", response_model=RefreshResponse)
+@limiter.limit("30/minute")
+def refresh(
+    request: Request,
+    body: RefreshRequest | None = None,
+    service: AuthService = Depends(get_auth_service),
+):
+    # Prefer the httpOnly cookie; fall back to the request body.
+    token = get_refresh_cookie(request) or (body.refresh_token if body else None)
+    if not token:
+        raise AppError(code="MISSING_REFRESH_TOKEN", message="No refresh token provided", status_code=401)
+    return service.refresh(refresh_token=token)
+
+
+@router.post("/auth/logout", response_model=MessageResponse)
+def logout(
+    request: Request,
+    response: Response,
+    body: RefreshRequest | None = None,
+    service: AuthService = Depends(get_auth_service),
+):
+    """Revoke the refresh token (cookie or body) and clear the cookie."""
+    token = get_refresh_cookie(request) or (body.refresh_token if body else None)
+    result = service.logout(refresh_token=token)
+    clear_refresh_cookie(response)
+    return result
 
 
 # ── Signup with email verification ─────────────────────────────────────────────
 
-@router.post("/auth/signup")
-def signup(request: SignupRequest, service: AuthService = Depends(get_auth_service)):
-    """Step 1 of signup: validate uniqueness. Frontend then calls /auth/send-otp."""
-    return service.signup_request(email=request.email, password=request.password)
+@router.post("/auth/signup", response_model=SignupResponse)
+@limiter.limit("5/minute")
+def signup(request: Request, body: SignupRequest, service: AuthService = Depends(get_auth_service)):
+    """Step 1 of signup: validate uniqueness + strength. Frontend then calls /auth/send-otp."""
+    return service.signup_request(email=body.email, password=body.password)
+
+
+@router.get("/auth/me", response_model=MeResponse)
+def me(user: User = Depends(get_current_user)):
+    """Current user profile — the frontend uses is_admin to gate the admin panel."""
+    return {
+        "email": user.email,
+        "is_admin": user.is_admin,
+        "email_verified": user.email_verified,
+        "created_at": user.created_at.isoformat() if user.created_at else None,
+    }
 
 
 # ── Password management ────────────────────────────────────────────────────────
 
-@router.post("/auth/change-password")
+@router.post("/auth/change-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
 def change_password(
-    request: ChangePasswordRequest,
+    request: Request,
+    body: ChangePasswordRequest,
     email: str = Depends(get_current_user_email),
     service: AuthService = Depends(get_auth_service),
 ):
     return service.change_password(
         email=email,
-        current_password=request.current_password,
-        new_password=request.new_password,
+        current_password=body.current_password,
+        new_password=body.new_password,
     )
 
 
-@router.post("/auth/forgot-password/send")
-def forgot_password_send(request: SendOtpRequest, service: OtpService = Depends(get_otp_service)):
+@router.post("/auth/forgot-password/send", response_model=SendOtpResponse)
+@limiter.limit("3/minute")
+def forgot_password_send(request: Request, body: SendOtpRequest, service: OtpService = Depends(get_otp_service)):
     """Forgot-password step 1: send OTP only if the account exists (no email-existence leak)."""
-    return service.send_otp(email=request.email, require_existing_account=True)
+    return service.send_otp(email=body.email, require_existing_account=True)
 
 
-@router.post("/auth/reset-password")
-def reset_password(request: ResetPasswordRequest, service: OtpService = Depends(get_otp_service)):
+@router.post("/auth/reset-password", response_model=MessageResponse)
+@limiter.limit("5/minute")
+def reset_password(request: Request, body: ResetPasswordRequest, service: OtpService = Depends(get_otp_service)):
     """Forgot-password step 2: verify OTP and set a new password."""
     return service.reset_password(
-        email=request.email,
-        code=request.code,
-        new_password=request.new_password,
+        email=body.email,
+        code=body.code,
+        new_password=body.new_password,
     )
 
 
-@router.delete("/auth/account")
+@router.delete("/auth/account", response_model=MessageResponse)
 def delete_account(
     email: str = Depends(get_current_user_email),
     service: AuthService = Depends(get_auth_service),
@@ -84,203 +148,20 @@ def delete_account(
 
 # ── OTP auth ───────────────────────────────────────────────────────────────────
 
-@router.post("/auth/send-otp")
-def send_otp(request: SendOtpRequest, service: OtpService = Depends(get_otp_service)):
-    return service.send_otp(email=request.email)
+@router.post("/auth/send-otp", response_model=SendOtpResponse)
+@limiter.limit("3/minute")
+def send_otp(request: Request, body: SendOtpRequest, service: OtpService = Depends(get_otp_service)):
+    return service.send_otp(email=body.email)
 
 
-@router.post("/auth/verify-otp")
-def verify_otp(request: VerifyOtpRequest, service: OtpService = Depends(get_otp_service)):
-    return service.verify_otp(email=request.email, code=request.code, password=request.password)
-
-
-# ── OAuth provider discovery ───────────────────────────────────────────────────
-
-@router.get("/auth/oauth/providers")
-def oauth_providers():
-    s = get_settings()
-    return {
-        "google": bool(s.google_client_id and s.google_client_secret),
-        "github": bool(s.github_client_id and s.github_client_secret),
-    }
-
-
-# ── Google OAuth ───────────────────────────────────────────────────────────────
-
-@router.get("/auth/oauth/google")
-def oauth_google():
-    s = get_settings()
-    if not s.google_client_id:
-        raise AppError(code="OAUTH_NOT_CONFIGURED", message="Google OAuth is not configured.", status_code=501)
-    redirect_uri = f"{s.app_base_url}/auth/callback/google"
-    params = (
-        f"client_id={s.google_client_id}"
-        f"&redirect_uri={redirect_uri}"
-        "&response_type=code"
-        "&scope=openid%20email%20profile"
-        "&access_type=offline"
-        "&prompt=select_account"
-    )
-    return RedirectResponse(url=f"https://accounts.google.com/o/oauth2/v2/auth?{params}")
-
-
-@router.get("/auth/callback/google")
-def callback_google(code: str, service: AuthService = Depends(get_auth_service)):
-    s = get_settings()
-    redirect_uri = f"{s.app_base_url}/auth/callback/google"
-
-    # Exchange code for tokens
-    try:
-        token_resp = httpx.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "code": code,
-                "client_id": s.google_client_id,
-                "client_secret": s.google_client_secret,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
-            },
-            timeout=10,
-        )
-        token_resp.raise_for_status()
-        token_data = token_resp.json()
-    except Exception as exc:
-        logger.error("google_token_exchange_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=google_auth_failed")
-
-    # Fetch user info
-    try:
-        user_resp = httpx.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {token_data['access_token']}"},
-            timeout=10,
-        )
-        user_resp.raise_for_status()
-        user_info = user_resp.json()
-    except Exception as exc:
-        logger.error("google_userinfo_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=google_auth_failed")
-
-    email = user_info.get("email")
-    if not email:
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=no_email")
-
-    tokens = service.login_or_create_oauth_user(
-        email=email,
-        provider="google",
-        provider_subject=user_info["id"],
-    )
-    return RedirectResponse(
-        url=f"{s.frontend_url}/auth/callback"
-        f"?token={tokens['access_token']}"
-        f"&refresh_token={tokens['refresh_token']}"
-        f"&is_new_user={str(tokens.get('is_new_user', False)).lower()}"
-    )
-
-
-# ── GitHub OAuth ───────────────────────────────────────────────────────────────
-
-@router.get("/auth/oauth/github")
-def oauth_github():
-    s = get_settings()
-    if not s.github_client_id:
-        raise AppError(code="OAUTH_NOT_CONFIGURED", message="GitHub OAuth is not configured.", status_code=501)
-    redirect_uri = f"{s.app_base_url}/auth/callback/github"
-    params = (
-        f"client_id={s.github_client_id}"
-        f"&redirect_uri={redirect_uri}"
-        "&scope=user:email"
-    )
-    return RedirectResponse(url=f"https://github.com/login/oauth/authorize?{params}")
-
-
-@router.get("/auth/callback/github")
-def callback_github(code: str, service: AuthService = Depends(get_auth_service)):
-    s = get_settings()
-    redirect_uri = f"{s.app_base_url}/auth/callback/github"
-
-    # Exchange code for access token
-    try:
-        token_resp = httpx.post(
-            "https://github.com/login/oauth/access_token",
-            data={
-                "client_id": s.github_client_id,
-                "client_secret": s.github_client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-            },
-            headers={"Accept": "application/json"},
-            timeout=10,
-        )
-        token_resp.raise_for_status()
-        access_token = token_resp.json().get("access_token")
-        if not access_token:
-            raise ValueError("No access token in response")
-    except Exception as exc:
-        logger.error("github_token_exchange_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=github_auth_failed")
-
-    # Fetch user profile
-    try:
-        user_resp = httpx.get(
-            "https://api.github.com/user",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            timeout=10,
-        )
-        user_resp.raise_for_status()
-        user_info = user_resp.json()
-    except Exception as exc:
-        logger.error("github_userinfo_failed: %s", exc)
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=github_auth_failed")
-
-    email = user_info.get("email")
-
-    # GitHub users can set their email to private — fetch from emails endpoint in that case
-    if not email:
-        try:
-            emails_resp = httpx.get(
-                "https://api.github.com/user/emails",
-                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-                timeout=10,
-            )
-            emails_resp.raise_for_status()
-            emails = emails_resp.json()
-            email = next(
-                (e["email"] for e in emails if e.get("primary") and e.get("verified")),
-                None,
-            )
-        except Exception as exc:
-            logger.error("github_emails_failed: %s", exc)
-
-    if not email:
-        return RedirectResponse(url=f"{s.frontend_url}/login?error=no_email")
-
-    tokens = service.login_or_create_oauth_user(
-        email=email,
-        provider="github",
-        provider_subject=str(user_info["id"]),
-    )
-    return RedirectResponse(
-        url=f"{s.frontend_url}/auth/callback"
-        f"?token={tokens['access_token']}"
-        f"&refresh_token={tokens['refresh_token']}"
-        f"&is_new_user={str(tokens.get('is_new_user', False)).lower()}"
-    )
-
-
-# ── Apple OAuth (stub — requires paid Apple Developer account) ─────────────────
-
-@router.get("/auth/oauth/apple")
-def oauth_apple():
-    s = get_settings()
-    if not s.apple_client_id:
-        raise AppError(code="OAUTH_NOT_CONFIGURED", message="Apple OAuth is not configured.", status_code=501)
-    redirect_uri = f"{s.app_base_url}/auth/callback/apple"
-    params = (
-        f"client_id={s.apple_client_id}"
-        f"&redirect_uri={redirect_uri}"
-        "&response_type=code%20id_token"
-        "&scope=name%20email"
-        "&response_mode=form_post"
-    )
-    return RedirectResponse(url=f"https://appleid.apple.com/auth/authorize?{params}")
+@router.post("/auth/verify-otp", response_model=VerifyOtpResponse)
+@limiter.limit("10/minute")
+def verify_otp(
+    request: Request,
+    response: Response,
+    body: VerifyOtpRequest,
+    service: OtpService = Depends(get_otp_service),
+):
+    result = service.verify_otp(email=body.email, code=body.code, password=body.password)
+    set_refresh_cookie(response, result["refresh_token"])
+    return result

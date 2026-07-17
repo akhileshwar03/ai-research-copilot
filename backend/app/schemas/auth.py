@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class AuthRequest(BaseModel):
@@ -14,7 +14,9 @@ class AuthResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    # Optional: cookie-based clients send no body; the httpOnly cookie carries
+    # the token. Body form kept for clients where cross-site cookies are blocked.
+    refresh_token: str | None = None
 
 
 class RefreshResponse(BaseModel):
@@ -25,6 +27,30 @@ class RefreshResponse(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class MeResponse(BaseModel):
+    email: EmailStr
+    is_admin: bool
+    email_verified: bool
+    created_at: str | None = None
+
+
+class SignupResponse(BaseModel):
+    email: EmailStr
+    needs_otp: bool
+
+
+class SendOtpResponse(BaseModel):
+    message: str
+    # Only present in dev mode (no email provider configured).
+    dev_code: str | None = Field(default=None, alias="_dev_code")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class VerifyOtpResponse(AuthResponse):
+    is_new_user: bool = False
 
 
 class SendOtpRequest(BaseModel):

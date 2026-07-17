@@ -32,12 +32,21 @@ class DocumentRepository:
         self.db.flush()
         return document
 
-    def list_by_user(self, user_email: str) -> list[Document]:
+    def list_by_user(self, user_email: str, skip: int = 0, limit: int = 100) -> list[Document]:
         return (
             self.db.query(Document)
             .filter(Document.user_email == user_email)
             .order_by(Document.created_at.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
+        )
+
+    def count_by_user(self, user_email: str) -> int:
+        return (
+            self.db.query(Document)
+            .filter(Document.user_email == user_email)
+            .count()
         )
 
     def get_by_stored_filename(self, stored_filename: str) -> Document | None:
@@ -49,6 +58,10 @@ class DocumentRepository:
             .filter(Document.checksum_sha256 == checksum_sha256, Document.user_email == user_email)
             .first()
         )
+
+    # Kept for test compatibility
+    def get_by_checksum(self, checksum_sha256: str) -> Document | None:
+        return self.db.query(Document).filter(Document.checksum_sha256 == checksum_sha256).first()
 
     def update_status(self, document: Document, upload_status: str, error_message: str | None = None) -> None:
         document.upload_status = upload_status

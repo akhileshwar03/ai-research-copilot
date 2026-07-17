@@ -35,14 +35,15 @@ export function useSessions(email: string | null) {
   });
 
   useEffect(() => {
-    if (!query.data) {
-      return;
-    }
+    if (!query.data) return;
 
-    if (query.data.length > 0) {
-      setSessions(query.data);
+    // Backend now returns a paginated envelope — pull the sessions array out.
+    const fetched: ChatSession[] = query.data.sessions ?? [];
+
+    if (fetched.length > 0) {
+      setSessions(fetched);
       if (activeSessionId === null) {
-        setActiveSessionId(query.data[0].id);
+        setActiveSessionId(fetched[0].id);
       }
       return;
     }

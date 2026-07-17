@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies.services import get_health_service
+from app.api.routes.admin import router as admin_router
+from app.api.routes.oauth import router as oauth_router
 from app.services.health_service import HealthService
 from routes.auth import router as auth_router
 from routes.chat import router as chat_router
@@ -10,8 +12,9 @@ from routes.upload import router as upload_router
 
 api_v1_router = APIRouter()
 
-# API versioning layer while preserving existing handler behavior.
 api_v1_router.include_router(auth_router)
+api_v1_router.include_router(oauth_router)
+api_v1_router.include_router(admin_router)
 api_v1_router.include_router(chat_router)
 api_v1_router.include_router(documents_router)
 api_v1_router.include_router(sessions_router)
