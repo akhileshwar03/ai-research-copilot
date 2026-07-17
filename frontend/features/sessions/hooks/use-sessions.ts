@@ -35,9 +35,22 @@ export function useSessions(email: string | null) {
   });
 
   useEffect(() => {
+    // The workspace must ALWAYS end up with an active session once the
+    // sessions request settles — success, empty, or failure. An unhandled
+    // error here used to leave activeSessionId null and the chat window
+    // stuck on its loading spinner forever.
+    if (query.isError) {
+      if (sessions.length === 0) {
+        const fallback = makeDefaultSession();
+        setSessions([fallback]);
+        setActiveSessionId(fallback.id);
+      }
+      return;
+    }
+
     if (!query.data) return;
 
-    // Backend now returns a paginated envelope — pull the sessions array out.
+    // Backend returns a paginated envelope — pull the sessions array out.
     const fetched: ChatSession[] = query.data.sessions ?? [];
 
     if (fetched.length > 0) {
@@ -53,7 +66,7 @@ export function useSessions(email: string | null) {
       setSessions([defaultSession]);
       setActiveSessionId(defaultSession.id);
     }
-  }, [query.data, setSessions, setActiveSessionId, activeSessionId, sessions.length]);
+  }, [query.data, query.isError, setSessions, setActiveSessionId, activeSessionId, sessions.length]);
 
   const createMutation = useMutation({
     mutationFn: (session: ChatSession) => sessionsApi.create({ session }),
