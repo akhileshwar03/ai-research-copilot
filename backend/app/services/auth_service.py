@@ -9,6 +9,7 @@ from app.core.security import (
     decode_refresh_token,
     hash_password,
     hash_token,
+    validate_password_strength,
     verify_password,
 )
 from app.db.repositories.user_repository import UserRepository
@@ -23,6 +24,11 @@ class AuthService:
 
     def register(self, email: str, password: str) -> dict:
         """Legacy password register — kept for backward compat. Use signup_request for new flows."""
+        try:
+            validate_password_strength(password)
+        except ValueError as exc:
+            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
+
         if self.user_repo.get_by_email(email):
             raise AppError(code="USER_EXISTS", message="An account with this email already exists.", status_code=400)
 
@@ -35,8 +41,13 @@ class AuthService:
         return {"message": "User created"}
 
     def signup_request(self, email: str, password: str) -> dict:
-        """New signup: validates uniqueness, stores pending password, returns OTP gate signal.
+        """New signup: validates uniqueness + strength, returns OTP gate signal.
         Actual user creation happens in OtpService.verify_otp when email is confirmed."""
+        try:
+            validate_password_strength(password)
+        except ValueError as exc:
+            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
+
         existing = self.user_repo.get_by_email(email)
         if existing and existing.email_verified:
             raise AppError(
@@ -120,12 +131,10 @@ class AuthService:
                 message="Current password is incorrect",
                 status_code=400,
             )
-        if len(new_password) < 8:
-            raise AppError(
-                code="WEAK_PASSWORD",
-                message="Password must be at least 8 characters",
-                status_code=400,
-            )
+        try:
+            validate_password_strength(new_password)
+        except ValueError as exc:
+            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
         self.user_repo.update_password(user, hash_password(new_password))
         self.user_repo.db.commit()
         logger.info("password_changed email=%s", email)
@@ -180,11 +189,31 @@ class AuthService:
         db.delete(user)
         db.commit()
 
+        # 5. Block the user's still-valid access tokens from auto-provisioning
+        #    the account back into existence (DB-backed, multi-worker safe).
+        from app.services.one_time_code_store import deny_account
+        deny_account(db, email, ttl_seconds=settings.access_token_expire_minutes * 60)
+
         logger.info("account_deleted email=%s docs_purged=%d", email, len(docs))
         return {"message": "Account deleted successfully"}
 
+    def logout(self, refresh_token: str | None) -> dict:
+        """Revoke the presented refresh token. Idempotent — unknown/absent
+        tokens still return success so logout never fails client-side."""
+        if refresh_token:
+            stored = self.user_repo.get_refresh_token(hash_token(refresh_token))
+            if stored and not stored.revoked:
+                self.user_repo.revoke_refresh_token(stored)
+                self.user_repo.db.commit()
+                logger.info("user_logout token_revoked user_id=%s", stored.user_id)
+        return {"message": "Logged out"}
+
     def refresh(self, refresh_token: str) -> dict:
-        payload = decode_refresh_token(refresh_token)
+        try:
+            payload = decode_refresh_token(refresh_token)
+        except ValueError as exc:
+            # A malformed/expired JWT must be a 401, not an unhandled 500.
+            raise AppError(code="INVALID_REFRESH", message="Invalid refresh token", status_code=401) from exc
         email = payload.get("sub")
         if not email:
             raise AppError(code="INVALID_REFRESH", message="Invalid refresh token", status_code=401)
@@ -197,7 +226,11 @@ class AuthService:
         if not stored or stored.revoked:
             raise AppError(code="REFRESH_REVOKED", message="Refresh token is revoked", status_code=401)
 
-        if stored.expires_at < datetime.now(timezone.utc):
+        # SQLite strips timezone info on round-trip; treat naive datetimes as UTC.
+        stored_expires = stored.expires_at
+        if stored_expires.tzinfo is None:
+            stored_expires = stored_expires.replace(tzinfo=timezone.utc)
+        if stored_expires < datetime.now(timezone.utc):
             raise AppError(code="REFRESH_EXPIRED", message="Refresh token expired", status_code=401)
 
         access_token = create_access_token(subject=user.email)

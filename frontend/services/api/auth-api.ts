@@ -19,13 +19,26 @@ export const authApi = {
     apiRequest<LoginResponse>("/login", {
       method: "POST",
       body: JSON.stringify(payload),
+      credentials: "include", // receive the httpOnly refresh cookie
       skipAuth: true,
     }),
 
-  refresh: (payload: RefreshRequest) =>
+  /** Refresh via httpOnly cookie (credentials) with optional legacy body token. */
+  refresh: (payload: RefreshRequest = {}) =>
     apiRequest<RefreshResponse>("/refresh", {
       method: "POST",
       body: JSON.stringify(payload),
+      credentials: "include",
+      skipAuth: true,
+      skipRefresh: true,
+    }),
+
+  /** Revoke the refresh token server-side and clear the cookie. */
+  logout: () =>
+    apiRequest<{ message: string }>("/auth/logout", {
+      method: "POST",
+      body: JSON.stringify({}),
+      credentials: "include",
       skipAuth: true,
       skipRefresh: true,
     }),
@@ -48,6 +61,7 @@ export const authApi = {
     apiRequest<VerifyOtpResponse>("/auth/verify-otp", {
       method: "POST",
       body: JSON.stringify(payload),
+      credentials: "include", // receive the httpOnly refresh cookie
       skipAuth: true,
     }),
 

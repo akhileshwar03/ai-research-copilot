@@ -15,11 +15,3 @@ export function buildApiUrl(path: string): string {
   const prefix = API_V1_PREFIX ? (API_V1_PREFIX.startsWith("/") ? API_V1_PREFIX : `/${API_V1_PREFIX}`) : "";
   return `${API_BASE_URL}${prefix}${normalizedPath}`;
 }
-
-export function buildStaticUrl(path: string): string {
-  if (!API_BASE_URL) {
-    return "";
-  }
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${API_BASE_URL}${normalizedPath}`;
-}

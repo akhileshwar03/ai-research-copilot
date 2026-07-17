@@ -39,30 +39,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (refreshToken && !isTokenExpired(refreshToken)) {
-        try {
-          const refreshed = await authApi.refresh({ refresh_token: refreshToken });
-          const nextAccessToken = refreshed.access_token || refreshed.token;
-          const nextEmail = getUserEmailFromToken(nextAccessToken || null);
+      // Try to refresh: the httpOnly cookie is sent automatically; a legacy
+      // localStorage refresh token (pre-cookie sessions) rides in the body.
+      // No cookie AND no legacy token simply yields a 401 → login screen.
+      try {
+        const refreshed = await authApi.refresh(
+          refreshToken && !isTokenExpired(refreshToken) ? { refresh_token: refreshToken } : {},
+        );
+        const nextAccessToken = refreshed.access_token || refreshed.token;
+        const nextEmail = getUserEmailFromToken(nextAccessToken || null);
 
-          if (nextAccessToken && nextEmail && !cancelled) {
-            setStoredTokens({
-              accessToken: nextAccessToken,
-              refreshToken,
-              tokenType: refreshed.token_type || "bearer",
-            });
-            setAuth({
-              accessToken: nextAccessToken,
-              refreshToken,
-              tokenType: refreshed.token_type || "bearer",
-              email: nextEmail,
-            });
-            setReady(true);
-            return;
-          }
-        } catch {
-          clearStoredTokens();
+        if (nextAccessToken && nextEmail && !cancelled) {
+          setStoredTokens({
+            accessToken: nextAccessToken,
+            tokenType: refreshed.token_type || "bearer",
+          });
+          setAuth({
+            accessToken: nextAccessToken,
+            tokenType: refreshed.token_type || "bearer",
+            email: nextEmail,
+          });
+          setReady(true);
+          return;
         }
+      } catch {
+        clearStoredTokens();
       }
 
       if (!cancelled) {

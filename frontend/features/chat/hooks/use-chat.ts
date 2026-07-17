@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
+import type { DocumentsResponse } from "@/shared/types/api";
 import type { Message } from "@/shared/types/chat";
 import { useSessionStore } from "@/stores/session-store";
 import { sessionsApi } from "@/services/api/sessions-api";
@@ -27,6 +28,15 @@ export function useChat(email: string | null, selectedDocument: string) {
   const updateMessages = useSessionStore((s) => s.updateMessages);
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const queryClient = useQueryClient();
+
+  /** Map stored document IDs (UUIDs) from the stream to display names. */
+  const formatSources = (sourceIds?: string[]): string | undefined => {
+    if (!sourceIds || sourceIds.length === 0) return undefined;
+    const docs = queryClient.getQueryData<DocumentsResponse>(["documents"])?.documents ?? [];
+    const names = sourceIds.map((id) => docs.find((d) => d.id === id)?.name ?? id);
+    return `Sources: ${names.join(", ")}`;
+  };
 
   const setSessions = useSessionStore((s) => s.setSessions);
 
@@ -79,7 +89,10 @@ export function useChat(email: string | null, selectedDocument: string) {
         messages: baselineMessages,
         documentId: selectedDocument,
         onAssistantToken: (text, sources) => {
-          updateMessages(activeSession.id, [...baselineMessages, { role: "assistant", content: text, sources }]);
+          updateMessages(activeSession.id, [
+            ...baselineMessages,
+            { role: "assistant", content: text, sources: formatSources(sources) },
+          ]);
         },
       });
     } catch (error) {

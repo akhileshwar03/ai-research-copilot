@@ -19,9 +19,10 @@ export function useAuth() {
   const _handleTokens = (data: { access_token?: string; token?: string; refresh_token?: string; token_type?: string }) => {
     const accessToken = data.access_token || data.token;
     if (!accessToken) throw new Error("Missing access token in response");
+    // The refresh token arrives as an httpOnly cookie — never persisted to
+    // localStorage (XSS hardening). Kept in memory only for Safari fallback.
     setStoredTokens({
       accessToken,
-      refreshToken: data.refresh_token || null,
       tokenType: data.token_type || "bearer",
     });
     setAuth({
@@ -54,6 +55,8 @@ export function useAuth() {
   });
 
   const logout = () => {
+    // Revoke server-side + clear the httpOnly cookie; local cleanup regardless.
+    authApi.logout().catch(() => {/* logout must never block on the network */});
     clearStoredTokens();
     clearAuth();
     router.replace("/login");

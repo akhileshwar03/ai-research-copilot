@@ -21,16 +21,15 @@ depends_on = None
 def upgrade() -> None:
     conn = op.get_bind()
 
-    # Idempotency: skip if already applied
-    indexes = conn.execute(sa.text(
-        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='documents'"
-    )).fetchall()
-    index_names = {row[0] for row in indexes}
+    # Idempotency: skip if already applied (inspector works on all dialects)
+    index_names = {ix["name"] for ix in sa.inspect(conn).get_indexes("documents")}
 
     if "uq_documents_user_checksum" in index_names:
         return  # already applied
 
-    # Drop the old globally-unique index (SQLite supports DROP INDEX)
+    # The raw SQL below (DROP INDEX IF EXISTS / CREATE [UNIQUE] INDEX IF NOT
+    # EXISTS) is valid on both SQLite and PostgreSQL.
+    # Drop the old globally-unique index
     conn.execute(sa.text("DROP INDEX IF EXISTS ix_documents_checksum_sha256"))
 
     # Recreate as non-unique (kept for query performance)

@@ -12,3 +12,4 @@ class OtpToken(Base):
     purpose = Column(String, nullable=False, default="auth")  # auth | verify
     expires_at = Column(DateTime(timezone=True), nullable=False)
     used = Column(Boolean, default=False, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)

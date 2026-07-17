@@ -4,6 +4,7 @@ from app.core.exceptions import AppError
 from app.db.repositories.message_repository import MessageRepository
 from app.db.repositories.session_repository import SessionRepository
 from app.db.repositories.user_repository import UserRepository
+from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -14,21 +15,30 @@ class SessionService:
         self.message_repo = message_repo
         self.user_repo = user_repo
 
-    def get_sessions(self, email: str) -> list[dict]:
+    def get_sessions(self, email: str, skip: int = 0, limit: int = 200) -> dict:
+        retention_days = int(runtime_settings.get("retention_days"))
         user = self.user_repo.get_by_email(email)
         if not user:
-            return []
+            return {"sessions": [], "total": 0, "skip": skip, "limit": limit, "retention_days": retention_days}
 
-        sessions = self.session_repo.list_by_user_id(user.id)
-        return [
-            {
-                "id": session.id,
-                "title": session.title,
-                "pinned": session.pinned,
-                "messages": [{"role": m.role, "content": m.content} for m in session.messages],
-            }
-            for session in sessions
-        ]
+        sessions = self.session_repo.list_by_user_id(user.id, skip=skip, limit=limit)
+        total = self.session_repo.count_by_user_id(user.id)
+        return {
+            "retention_days": retention_days,
+            "sessions": [
+                {
+                    "id": session.id,
+                    "title": session.title,
+                    "pinned": session.pinned,
+                    "created_at": session.created_at.isoformat() if session.created_at else None,
+                    "messages": [{"role": m.role, "content": m.content} for m in session.messages],
+                }
+                for session in sessions
+            ],
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        }
 
     def create_session(self, email: str, title: str, messages: list[dict], pinned: bool = False) -> dict:
         user = self.user_repo.get_by_email(email)
@@ -44,14 +54,12 @@ class SessionService:
         return {"id": session.id}
 
     def _resolve_user_id(self, email: str) -> int:
-        """Return the user.id for *email*, raising 404 if the user row doesn't exist."""
         user = self.user_repo.get_by_email(email)
         if not user:
             raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
         return user.id
 
     def _get_owned_session(self, session_id: int, user_id: int):
-        """Return the session only when it belongs to *user_id*, else 404."""
         session = self.session_repo.get_by_id_and_user(session_id, user_id)
         if not session:
             raise AppError(code="SESSION_NOT_FOUND", message="Session not found", status_code=404)

@@ -2,17 +2,32 @@
 
 /**
  * OAuth callback handler.
- * The backend redirects here after a successful OAuth exchange:
- *   /auth/callback?token=xxx&refresh_token=xxx&is_new_user=true/false
  *
- * This page stores the tokens, updates auth state, and redirects to /chat.
+ * Security: the backend no longer embeds tokens in the redirect URL.
+ * Instead it generates a short-lived, single-use code and sends only that
+ * code here. This page exchanges the code for tokens via a POST request so
+ * that JWTs never appear in URLs, browser history, or server logs.
+ *
+ * Flow:
+ *   Backend OAuth callback → redirect to /auth/callback?code=<one-time-code>
+ *   This page calls POST /auth/oauth/exchange with the code
+ *   Receives tokens, stores them, redirects to /chat
  */
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { apiRequest } from "@/services/api/client";
 import { setStoredTokens, getUserEmailFromToken } from "@/shared/lib/token-storage";
 import { useAuthStore } from "@/stores/auth-store";
+
+interface ExchangeResponse {
+  access_token?: string;
+  token?: string;
+  refresh_token?: string;
+  token_type?: string;
+  is_new_user?: boolean;
+}
 
 function AuthCallbackInner() {
   const router = useRouter();
@@ -22,44 +37,55 @@ function AuthCallbackInner() {
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
-    const token = params.get("token");
-    const refreshToken = params.get("refresh_token");
+    const code = params.get("code");
     const error = params.get("error");
 
     if (error) {
       const messages: Record<string, string> = {
         google_auth_failed: "Google sign-in failed. Please try again.",
-        facebook_auth_failed: "Facebook sign-in failed. Please try again.",
+        github_auth_failed: "GitHub sign-in failed. Please try again.",
         no_email: "We couldn't get your email from this provider. Try email sign-in instead.",
       };
-      setErrorMsg(messages[error] || "Authentication failed. Please try again.");
+      setErrorMsg(messages[error] ?? "Authentication failed. Please try again.");
       setStatus("error");
       return;
     }
 
-    if (!token) {
-      setErrorMsg("No authentication token received. Please try again.");
+    if (!code) {
+      setErrorMsg("No authentication code received. Please try again.");
       setStatus("error");
       return;
     }
 
-    // Store tokens
-    setStoredTokens({
-      accessToken: token,
-      refreshToken: refreshToken || null,
-      tokenType: "bearer",
-    });
+    // Exchange the one-time code for tokens — keeps JWTs out of the URL.
+    // credentials:include lets the backend set the httpOnly refresh cookie.
+    apiRequest<ExchangeResponse>("/auth/oauth/exchange", {
+      method: "POST",
+      body: JSON.stringify({ code }),
+      credentials: "include",
+      skipAuth: true,
+    })
+      .then((data) => {
+        const accessToken = data.access_token ?? data.token ?? "";
+        const refreshToken = data.refresh_token ?? null;
+        const tokenType = data.token_type ?? "bearer";
 
-    // Update auth store
-    setAuth({
-      accessToken: token,
-      refreshToken: refreshToken || null,
-      tokenType: "bearer",
-      email: getUserEmailFromToken(token),
-    });
+        // Refresh token stays in the httpOnly cookie + memory only.
+        setStoredTokens({ accessToken, tokenType });
+        setAuth({
+          accessToken,
+          refreshToken,
+          tokenType,
+          email: getUserEmailFromToken(accessToken),
+        });
 
-    // Redirect to workspace
-    router.replace("/chat");
+        router.replace("/chat");
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Token exchange failed";
+        setErrorMsg(message);
+        setStatus("error");
+      });
   }, [params, router, setAuth]);
 
   if (status === "error") {
@@ -93,14 +119,12 @@ function AuthCallbackInner() {
 }
 
 export default function AuthCallbackPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
-        <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
-      </div>
-    }>
-      <AuthCallbackInner />
-    </Suspense>
+  const loadingFallback = (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
+      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
+      <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
+    </div>
   );
+
+  return <Suspense fallback={loadingFallback}><AuthCallbackInner /></Suspense>;
 }

@@ -7,13 +7,18 @@ class SessionRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_by_user_id(self, user_id: int) -> list[ChatSession]:
+    def list_by_user_id(self, user_id: int, skip: int = 0, limit: int = 200) -> list[ChatSession]:
         return (
             self.db.query(ChatSession)
             .filter(ChatSession.user_id == user_id)
             .order_by(ChatSession.pinned.desc(), ChatSession.id.desc())
+            .offset(skip)
+            .limit(limit)
             .all()
         )
+
+    def count_by_user_id(self, user_id: int) -> int:
+        return self.db.query(ChatSession).filter(ChatSession.user_id == user_id).count()
 
     def get_by_id(self, session_id: int) -> ChatSession | None:
         return self.db.query(ChatSession).filter(ChatSession.id == session_id).first()

@@ -19,7 +19,7 @@ interface WorkspaceSidebarProps {
 export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const { logout } = useAuth();
   const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions } = useSessions(email);
-  const { documents, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
+  const { documents, retentionDays, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
   const [isCreating, setIsCreating] = useState(false);
 
   // Handle drag-drop uploads dispatched by ChatWindow and command-palette palette uploads
@@ -123,6 +123,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
             onDelete={async (id) => { await deleteDocument(id); }}
             isUploading={isUploadingDocument}
             isLoading={isLoadingDocuments}
+            retentionDays={retentionDays}
           />
 
           {/* Divider */}

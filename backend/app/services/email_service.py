@@ -22,12 +22,12 @@ def _otp_html(code: str, purpose: str = "verify") -> str:
       <table width="480" cellpadding="0" cellspacing="0" style="background:#111;border:1px solid rgba(255,255,255,0.08);border-radius:16px;overflow:hidden;">
         <!-- Header -->
         <tr><td style="padding:32px 40px 24px;border-bottom:1px solid rgba(255,255,255,0.06);">
-          <p style="margin:0;font-size:20px;font-weight:600;color:#fff;">AI Research Copilot</p>
+          <p style="margin:0;font-size:20px;font-weight:600;color:#fff;">Querex</p>
           <p style="margin:4px 0 0;font-size:13px;color:#71717a;">Your intelligent research workspace</p>
         </td></tr>
         <!-- Body -->
         <tr><td style="padding:32px 40px;">
-          <p style="margin:0 0 8px;font-size:14px;color:#a1a1aa;">Use this code to {action} AI Research Copilot.</p>
+          <p style="margin:0 0 8px;font-size:14px;color:#a1a1aa;">Use this code to {action} Querex.</p>
           <p style="margin:0 0 24px;font-size:14px;color:#71717a;">This code expires in <strong style="color:#a1a1aa;">10 minutes</strong>.</p>
           <!-- Code box -->
           <div style="background:#0d0d0d;border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
@@ -38,7 +38,7 @@ def _otp_html(code: str, purpose: str = "verify") -> str:
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:20px 40px;border-top:1px solid rgba(255,255,255,0.06);">
-          <p style="margin:0;font-size:12px;color:#3f3f46;">AI Research Copilot · Sent because you attempted to sign in</p>
+          <p style="margin:0;font-size:12px;color:#3f3f46;">Querex · Sent because you attempted to sign in</p>
         </td></tr>
       </table>
     </td></tr>
@@ -47,7 +47,7 @@ def _otp_html(code: str, purpose: str = "verify") -> str:
 </html>"""
 
 def _otp_text(code: str) -> str:
-    return f"Your AI Research Copilot verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email."
+    return f"Your Querex verification code is: {code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email."
 
 
 # ── Email service ───────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ class EmailService:
         """
         from app.core.exceptions import AppError
 
-        subject = "Your verification code — AI Research Copilot"
+        subject = "Your verification code — Querex"
         html = _otp_html(code, purpose)
         text = _otp_text(code)
 

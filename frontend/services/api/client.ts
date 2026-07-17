@@ -10,16 +10,17 @@ type RequestOptions = RequestInit & {
 };
 
 async function tryRefreshToken(): Promise<string | null> {
+  // Primary channel: the httpOnly refresh cookie (sent via credentials:include).
+  // Fallback: a legacy localStorage refresh token from pre-migration sessions,
+  // or Safari where cross-site cookies are blocked.
   const { refreshToken } = getStoredTokens();
-  if (!refreshToken) {
-    return null;
-  }
 
   const refreshUrl = buildApiUrl("/refresh");
   const response = await fetch(refreshUrl, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    credentials: "include",
+    body: JSON.stringify(refreshToken ? { refresh_token: refreshToken } : {}),
   });
 
   if (!response.ok) {

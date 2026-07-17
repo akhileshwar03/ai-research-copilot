@@ -1,9 +1,13 @@
 const ACCESS_TOKEN_KEY = "token";
-const REFRESH_TOKEN_KEY = "refresh_token";
+// Legacy key: refresh tokens used to be persisted here. They now live in an
+// httpOnly cookie (XSS cannot read those). We still READ the legacy key so
+// sessions created before the migration keep working, but we never write it.
+const LEGACY_REFRESH_TOKEN_KEY = "refresh_token";
 const TOKEN_TYPE_KEY = "token_type";
 
 export interface StoredTokens {
   accessToken: string | null;
+  /** Legacy localStorage refresh token — null for sessions created after the cookie migration. */
   refreshToken: string | null;
   tokenType: string;
 }
@@ -14,19 +18,16 @@ export function getStoredTokens(): StoredTokens {
   }
   return {
     accessToken: localStorage.getItem(ACCESS_TOKEN_KEY),
-    refreshToken: localStorage.getItem(REFRESH_TOKEN_KEY),
+    refreshToken: localStorage.getItem(LEGACY_REFRESH_TOKEN_KEY),
     tokenType: localStorage.getItem(TOKEN_TYPE_KEY) || "bearer",
   };
 }
 
-export function setStoredTokens(tokens: { accessToken: string; refreshToken?: string | null; tokenType?: string | null }): void {
+export function setStoredTokens(tokens: { accessToken: string; tokenType?: string | null }): void {
   if (typeof window === "undefined") {
     return;
   }
   localStorage.setItem(ACCESS_TOKEN_KEY, tokens.accessToken);
-  if (tokens.refreshToken) {
-    localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refreshToken);
-  }
   if (tokens.tokenType) {
     localStorage.setItem(TOKEN_TYPE_KEY, tokens.tokenType);
   }
@@ -37,7 +38,7 @@ export function clearStoredTokens(): void {
     return;
   }
   localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  localStorage.removeItem(LEGACY_REFRESH_TOKEN_KEY);
   localStorage.removeItem(TOKEN_TYPE_KEY);
 }
 

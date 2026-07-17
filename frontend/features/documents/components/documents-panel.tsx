@@ -21,6 +21,8 @@ interface DocumentsPanelProps {
   onDelete: (id: string) => Promise<void>;
   isUploading: boolean;
   isLoading?: boolean;
+  /** Free-tier retention window in days; 0 hides all retention UI. */
+  retentionDays?: number;
 }
 
 function SortIcon() {
@@ -86,7 +88,16 @@ function formatBytes(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isLoading = false }: DocumentsPanelProps) {
+/** Whole days until a document reaches the retention limit; null when unknown. */
+function daysUntilExpiry(createdAt: string | undefined, retentionDays: number): number | null {
+  if (!createdAt || retentionDays <= 0) return null;
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return null;
+  const expiresAt = created + retentionDays * 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
+export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isLoading = false, retentionDays = 0 }: DocumentsPanelProps) {
   const {
     selectedDocument, setSelectedDocument,
     checkedDocuments, toggleChecked, setAllChecked, clearChecked,
@@ -184,6 +195,13 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
         </div>
       </div>
 
+      {/* Retention policy — shown only when a retention window is active */}
+      {retentionDays > 0 && (
+        <p className="px-1 text-[10px] leading-snug text-zinc-600">
+          Documents and chats are kept for {retentionDays} {retentionDays === 1 ? "day" : "days"} on the free plan.
+        </p>
+      )}
+
       {/* Batch action bar */}
       {someChecked && (
         <div className="flex items-center justify-between rounded-lg border border-[var(--border-medium)] bg-[var(--surface-3)] px-3 py-2">
@@ -241,6 +259,8 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
             const isChecked = checkedDocuments.includes(doc.id);
             const isPinned = pinnedDocuments.includes(doc.id);
             const isDeleting = deletingId === doc.id;
+            const daysLeft = daysUntilExpiry(doc.created_at, retentionDays);
+            const expiresSoon = daysLeft !== null && daysLeft <= 2;
 
             return (
               <div
@@ -278,6 +298,14 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                     </p>
                     <p className="text-[10px] text-zinc-700">
                       PDF{doc.size_bytes ? ` · ${formatBytes(doc.size_bytes)}` : ""}
+                      {daysLeft !== null && (
+                        <span className={expiresSoon ? "text-amber-500/90" : ""}>
+                          {" · "}
+                          {daysLeft === 0
+                            ? "expires today"
+                            : `expires in ${daysLeft} ${daysLeft === 1 ? "day" : "days"}`}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </button>

@@ -10,5 +10,6 @@ export interface ChatSession {
   id: number;
   title: string;
   pinned?: boolean;
+  created_at?: string | null;
   messages: Message[];
 }
