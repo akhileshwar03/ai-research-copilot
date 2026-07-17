@@ -170,6 +170,17 @@ def patch_user(
             status_code=400,
         )
 
+    # The platform must always retain at least one admin, so demoting or
+    # suspending the last one is blocked — promote a replacement first.
+    if user.is_admin and (body.is_admin is False or body.is_active is False):
+        admin_count = db.query(func.count(User.id)).filter(User.is_admin.is_(True)).scalar() or 0
+        if admin_count <= 1:
+            raise AppError(
+                code="LAST_ADMIN",
+                message="This is the only admin account. Promote another user to admin before demoting or suspending this one.",
+                status_code=400,
+            )
+
     changes = []
     if body.is_active is not None:
         user.is_active = body.is_active
@@ -202,6 +213,15 @@ def delete_user(
             message="Delete your own account from profile settings, not the admin panel.",
             status_code=400,
         )
+
+    if user.is_admin:
+        admin_count = db.query(func.count(User.id)).filter(User.is_admin.is_(True)).scalar() or 0
+        if admin_count <= 1:
+            raise AppError(
+                code="LAST_ADMIN",
+                message="This is the only admin account. Promote another user to admin before deleting this one.",
+                status_code=400,
+            )
 
     target_email = user.email
     auth_service.delete_account(email=target_email)

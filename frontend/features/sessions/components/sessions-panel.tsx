@@ -184,13 +184,16 @@ export function SessionsPanel({
           isDeleting ? "opacity-40 pointer-events-none" : "",
         ].join(" ")}
       >
-        {/* Active indicator stripe */}
+        {/* Active indicator stripe — brand accent, not plain white */}
         {isActive && (
-          <div className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-white/60" />
+          <div
+            className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
+            style={{ backgroundColor: "var(--marketing-accent)" }}
+          />
         )}
 
         {/* Icon */}
-        <span className={isActive ? "text-zinc-300" : "text-zinc-600 group-hover:text-zinc-500"}>
+        <span style={isActive ? { color: "var(--marketing-accent-text)" } : undefined} className={!isActive ? "text-zinc-600 group-hover:text-zinc-500" : ""}>
           <ChatBubbleIcon />
         </span>
 
