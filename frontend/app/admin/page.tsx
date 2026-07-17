@@ -12,6 +12,15 @@ import {
   type AdminUser,
 } from "@/services/api/admin-api";
 
+const SETTING_LABELS: Record<string, string> = {
+  max_upload_size_mb: "Maximum upload size (MB)",
+  rag_top_k: "Retrieved chunks per query (top-k)",
+  rag_similarity_threshold: "Similarity threshold (0–2, lower = stricter)",
+  chat_rate_limit_per_minute: "Chat rate limit (requests/min per IP)",
+  upload_rate_limit_per_minute: "Upload rate limit (requests/min per IP)",
+  retention_days: "Data retention window (days, 0 = keep forever)",
+};
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -251,7 +260,9 @@ function SettingsSection() {
             {(settings ?? []).map((setting: AdminSetting) => (
               <div key={setting.key} className="flex items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[13px] font-medium text-zinc-200">{setting.key}</p>
+                  <p className="text-[13px] font-medium text-zinc-200">
+                    {SETTING_LABELS[setting.key] ?? setting.key}
+                  </p>
                   <p className="text-[12px] text-zinc-500">
                     {setting.description} · range {setting.min}–{setting.max} · default {setting.default}
                   </p>
