@@ -30,9 +30,10 @@ export const metadata: Metadata = {
   description: "AI-powered research workspace for PDFs and documents",
 };
 
-// Inline script: reads the saved theme from localStorage and applies the
-// `light-theme` class to <html> BEFORE the first paint, preventing FOUC.
-const themeInitScript = `(function(){try{var t=localStorage.getItem('pf_theme');if(t==='light')document.documentElement.classList.add('light-theme');}catch(e){}})();`;
+// Inline script: applies the theme BEFORE first paint, preventing FOUC.
+// Light is the default; dark only when explicitly chosen, "system" follows
+// the OS preference.
+const themeInitScript = `(function(){try{var t=localStorage.getItem('pf_theme');var dark=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(!dark)document.documentElement.classList.add('light-theme');}catch(e){document.documentElement.classList.add('light-theme');}})();`;
 
 export default function RootLayout({
   children,
@@ -40,7 +41,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      // The theme script adds `light-theme` to <html> before hydration —
+      // an intentional, attribute-only mismatch (standard theming pattern).
+      suppressHydrationWarning
+    >
       <body className="min-h-full flex flex-col">
         {/* Runs before React hydrates — prevents light/dark flash on reload (FOUC fix) */}
         <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeInitScript }} />

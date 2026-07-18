@@ -26,7 +26,19 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
   useEffect(() => { textareaRef.current?.focus(); }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key !== "Enter") return;
+
+    // ⌘/Ctrl+Enter always sends, regardless of the preference.
+    if (e.metaKey || e.ctrlKey) {
+      e.preventDefault();
+      if (!isStreaming && value.trim()) onSubmit();
+      return;
+    }
+
+    // Plain Enter sends only when the "Press Enter to send" setting is on
+    // (default). Shift+Enter always inserts a newline.
+    const enterToSend = localStorage.getItem("pf_enter_send") !== "off";
+    if (!e.shiftKey && enterToSend) {
       e.preventDefault();
       if (!isStreaming && value.trim()) onSubmit();
     }

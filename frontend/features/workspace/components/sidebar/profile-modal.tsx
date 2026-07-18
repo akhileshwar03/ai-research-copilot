@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { adminApi } from "@/services/api/admin-api";
 import { authApi } from "@/services/api/auth-api";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { useSessionStore } from "@/stores/session-store";
 
 
 
@@ -182,70 +183,224 @@ function ProfileSection({ email }: { email: string | null }) {
 
 // ─── Settings section ─────────────────────────────────────────────────────────
 
-function SettingsSection() {
+/** Apply a theme choice to the document. "system" follows the OS. */
+function applyTheme(t: string) {
+  const dark =
+    t === "dark" ||
+    (t === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.classList.toggle("light-theme", !dark);
+}
+
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+      style={{ backgroundColor: checked ? "var(--marketing-accent)" : "var(--border-strong)" }}
+    >
+      <span
+        className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
+        style={{ left: checked ? "22px" : "2px" }}
+      />
+    </button>
+  );
+}
+
+function SettingRow({
+  title, description, children,
+}: { title: string; description: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-4">
+      <div className="min-w-0">
+        <p className="text-[13px] font-medium text-[var(--text-primary)]">{title}</p>
+        <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function SettingsSection({ email }: { email: string | null }) {
   const { logout } = useAuth();
-  const [theme, setTheme] = useState(() => ls("pf_theme", "dark"));
+  const [theme, setTheme] = useState(() => ls("pf_theme", "light"));
+  const [enterToSend, setEnterToSend] = useState(() => ls("pf_enter_send", "on") !== "off");
 
   // Delete account state
   const [showDeleteZone, setShowDeleteZone] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // "System" theme: follow live OS changes while the preference is active.
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
+
   const handleTheme = (t: string) => {
     setTheme(t);
     saveLs("pf_theme", t);
-    if (t === "light") {
-      document.documentElement.classList.add("light-theme");
-    } else {
-      document.documentElement.classList.remove("light-theme");
-    }
+    applyTheme(t);
+  };
+
+  const handleEnterToSend = (v: boolean) => {
+    setEnterToSend(v);
+    saveLs("pf_enter_send", v ? "on" : "off");
+  };
+
+  const handleExportChats = () => {
+    const sessions = useSessionStore.getState().sessions;
+    const payload = {
+      exported_at: new Date().toISOString(),
+      account: email,
+      sessions: sessions.map((s) => ({
+        title: s.title,
+        pinned: s.pinned ?? false,
+        messages: s.messages,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `querex-chats-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${sessions.length} chat${sessions.length === 1 ? "" : "s"}`);
+  };
+
+  const handleClearDeviceData = () => {
+    if (!window.confirm("Clear all data stored on this device? This signs you out and resets local preferences. Your account and chats on the server are not affected.")) return;
+    localStorage.clear();
+    window.location.href = "/login";
   };
 
   return (
     <div>
-      <SectionHeader title="Settings" subtitle="Appearance and account preferences" />
+      <SectionHeader title="Settings" subtitle="Appearance, chat behaviour, data, and account" />
 
       {/* Appearance */}
       <div className="mb-8">
         <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
           Appearance
         </h3>
-        <div className="grid grid-cols-2 gap-3">
-          {(["dark", "light"] as const).map((t) => (
+        <div className="grid grid-cols-3 gap-3">
+          {([
+            { id: "light", label: "Light", hint: "Bright & clean" },
+            { id: "dark", label: "Dark", hint: "Easy on the eyes" },
+            { id: "system", label: "System", hint: "Match your OS" },
+          ] as const).map(({ id, label, hint }) => (
             <button
-              key={t}
-              onClick={() => handleTheme(t)}
+              key={id}
+              onClick={() => handleTheme(id)}
               className={[
-                "flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition",
-                theme === t
+                "flex flex-col items-start gap-2 rounded-xl border px-4 py-3 text-left transition",
+                theme === id
                   ? "border-[var(--border-strong)] bg-white/[0.08] text-[var(--text-primary)]"
                   : "border-[var(--border-subtle)] bg-white/[0.02] text-zinc-500 hover:border-[var(--border-medium)] hover:text-zinc-300",
               ].join(" ")}
+              style={theme === id ? { borderColor: "var(--marketing-accent)" } : undefined}
             >
-              {t === "dark" ? (
+              {id === "dark" ? (
                 <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z" />
                 </svg>
-              ) : (
+              ) : id === "light" ? (
                 <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
                 </svg>
+              ) : (
+                <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+                </svg>
               )}
               <div>
-                <p className="text-[13px] font-medium capitalize">{t} Theme</p>
-                <p className="text-[11px] text-zinc-600">
-                  {t === "dark" ? "Easy on the eyes" : "Bright & clean"}
-                </p>
+                <p className="text-[13px] font-medium">{label}</p>
+                <p className="text-[11px] text-zinc-600">{hint}</p>
               </div>
-              {theme === t && (
-                <div className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-[var(--text-primary)]">
-                  <svg className="h-2.5 w-2.5 text-[var(--app-bg)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-              )}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* ── Chat preferences ─────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
+          Chat
+        </h3>
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+          <SettingRow
+            title="Press Enter to send"
+            description="When off, Enter inserts a newline — send with the button or ⌘+Enter."
+          >
+            <Toggle checked={enterToSend} onChange={handleEnterToSend} />
+          </SettingRow>
+        </div>
+      </div>
+
+      {/* ── Data & storage ───────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
+          Data &amp; storage
+        </h3>
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+          <SettingRow
+            title="Export all chats"
+            description="Download every conversation in this workspace as a JSON file."
+          >
+            <button
+              onClick={handleExportChats}
+              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+            >
+              Export
+            </button>
+          </SettingRow>
+          <SettingRow
+            title="Clear device data"
+            description="Removes local preferences and signs you out. Server data is untouched."
+          >
+            <button
+              onClick={handleClearDeviceData}
+              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+            >
+              Clear
+            </button>
+          </SettingRow>
+          <SettingRow
+            title="Retention policy"
+            description="Documents and chats are kept for 7 days on the free plan, then removed automatically."
+          >
+            <span
+              className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
+              style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+            >
+              7 days
+            </span>
+          </SettingRow>
+        </div>
+      </div>
+
+      {/* ── Account ──────────────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
+          Account
+        </h3>
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+          <SettingRow
+            title="Signed in as"
+            description={email ?? "Unknown account"}
+          >
+            <button
+              onClick={logout}
+              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+            >
+              Sign out
+            </button>
+          </SettingRow>
         </div>
       </div>
 
@@ -665,7 +820,7 @@ export function ProfileModal({
           className="flex-1 overflow-y-auto p-8 scrollbar-thin"
         >
           {active === "profile"   && <ProfileSection email={email} />}
-          {active === "settings"  && <SettingsSection />}
+          {active === "settings"  && <SettingsSection email={email} />}
           {active === "shortcuts" && <ShortcutsSection />}
           {active === "tutorial"  && <TutorialSection />}
           {active === "whatsnew"  && <WhatsNewSection />}

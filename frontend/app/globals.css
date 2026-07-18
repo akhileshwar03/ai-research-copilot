@@ -172,6 +172,13 @@
   --marketing-accent-text:  #f0ac6e;
 }
 
+/* On light surfaces the pale copper fails contrast — deepen it. */
+html.light-theme,
+.marketing-light {
+  --marketing-accent-soft:  #e08a3e24;
+  --marketing-accent-text:  #9a5517;
+}
+
 /* Fade + rise entrance for newly rendered chat bubbles. */
 @keyframes message-in {
   from { opacity: 0; transform: translateY(6px); }
@@ -179,6 +186,63 @@
 }
 .animate-message-in {
   animation: message-in 0.25s ease-out both;
+}
+
+/* ── Live demo widget effects ──────────────────────────────────────────────── */
+
+/* Sweeping light sheen across the demo card — signals "alive". */
+@keyframes demo-sheen {
+  0%   { transform: translateX(-140%) skewX(-14deg); }
+  100% { transform: translateX(240%)  skewX(-14deg); }
+}
+.demo-sheen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.55) 50%, transparent 70%);
+  transform: translateX(-140%) skewX(-14deg);
+  animation: demo-sheen 5.5s ease-in-out 1.5s infinite;
+}
+
+/* Retrieval scan line sweeping down the mini document. */
+@keyframes demo-scan {
+  0%   { top: 0%;   opacity: 0; }
+  15%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+.demo-scan-line {
+  animation: demo-scan 1s ease-in-out infinite;
+}
+
+/* Breathing glow behind the whole card. */
+@keyframes demo-glow-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.06); }
+}
+.demo-glow {
+  animation: demo-glow-pulse 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-sheen::after, .demo-scan-line, .demo-glow { animation: none; }
+  .demo-sheen::after { display: none; }
+}
+
+/* Gentle vertical drift for the marketing page's floating depth cards. */
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.animate-float-slow {
+  animation: float-slow 7s ease-in-out infinite;
+}
+.animate-float-slower {
+  animation: float-slow 10s ease-in-out 1.2s infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-float-slow, .animate-float-slower { animation: none; }
 }
 
 /* Faint film-grain overlay — apply via .bg-grain. Pure CSS, no image asset. */
@@ -254,6 +318,12 @@ html.light-theme .text-white      { color: rgb(15 23 42); }
 html.light-theme .text-zinc-200   { color: rgb(39 39 42); }
 html.light-theme .text-zinc-300   { color: rgb(63 63 70); }
 html.light-theme .text-zinc-400   { color: rgb(82 82 91); }
+
+/* The marketing page manages its own palette (incl. dark CTA panels) — the
+   app-level text remaps above must not leak into it. */
+html.light-theme .marketing-light .text-white    { color: #ffffff; }
+html.light-theme .marketing-light .text-zinc-200 { color: rgb(228 228 231); }
+html.light-theme .marketing-light .text-zinc-400 { color: rgb(161 161 170); }
 
 /* Scrollbar in light mode */
 html.light-theme .scrollbar-thin                         { scrollbar-color: rgba(0,0,0,0.10) transparent; }

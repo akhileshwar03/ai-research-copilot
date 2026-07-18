@@ -308,20 +308,27 @@ export function ChatMessageList({
         {/* Welcome / empty state */}
         {visibleMessages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-2xl ring-1"
-              style={{ backgroundColor: "var(--marketing-accent-soft)", borderColor: "var(--marketing-accent-soft)" }}
-            >
-              <svg
-                className="h-7 w-7"
-                style={{ color: "var(--marketing-accent-text)" }}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
+            <div className="relative">
+              <div
+                className="demo-glow pointer-events-none absolute -inset-4 -z-10 rounded-full blur-xl"
+                style={{ background: "radial-gradient(circle, rgba(224,138,62,0.35), transparent 70%)" }}
+                aria-hidden
+              />
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-2xl ring-1"
+                style={{ backgroundColor: "var(--marketing-accent-soft)", borderColor: "var(--marketing-accent-soft)" }}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
+                <svg
+                  className="h-7 w-7"
+                  style={{ color: "var(--marketing-accent-text)" }}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
             </div>
             <div>
               <p className="text-[19px] text-zinc-200" style={{ fontFamily: "var(--font-display)" }}>
