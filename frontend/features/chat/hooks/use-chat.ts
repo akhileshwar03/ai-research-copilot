@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import type { DocumentsResponse } from "@/shared/types/api";
+import type { DocumentsResponse, SessionsResponse } from "@/shared/types/api";
 import type { Message } from "@/shared/types/chat";
 import { useSessionStore } from "@/stores/session-store";
 import { sessionsApi } from "@/services/api/sessions-api";
@@ -21,7 +21,7 @@ function deriveTitle(message: string): string {
   return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + "…";
 }
 
-export function useChat(email: string | null, selectedDocument: string) {
+export function useChat(email: string | null) {
   const [input, setInput] = useState("");
   const [chatError, setChatError] = useState<string>("");
   const lastSentMessageRef = useRef<string>("");
@@ -40,12 +40,42 @@ export function useChat(email: string | null, selectedDocument: string) {
   };
 
   const setSessions = useSessionStore((s) => s.setSessions);
+  const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
 
   const updateMutation = useMutation({
     mutationFn: async (sessionId: number) => {
       const session = useSessionStore.getState().sessions.find((s) => s.id === sessionId);
       if (!session) return;
-      await sessionsApi.update(sessionId, { session });
+
+      // Cancel any in-flight ["sessions"] fetch first. Without this, a
+      // slower/older request (e.g. one queued by a create() elsewhere)
+      // could resolve *after* our write below and silently clobber it with
+      // stale (pre-message) data — this is exactly how a just-created
+      // session used to go blank after a save.
+      await queryClient.cancelQueries({ queryKey: ["sessions"] });
+
+      let persisted = session;
+      try {
+        await sessionsApi.update(sessionId, { session });
+      } catch {
+        // The session shown to a brand-new account (before it's ever been
+        // renamed or messaged) is a local-only placeholder that was never
+        // POSTed to the backend — update() 404s. Create it now instead and
+        // remap the local id to the real one.
+        const created = await sessionsApi.create({ session });
+        persisted = { ...session, id: created.id };
+        const { sessions: latest, activeSessionId: activeId } = useSessionStore.getState();
+        setSessions(latest.map((s) => (s.id === sessionId ? persisted : s)));
+        if (activeId === sessionId) setActiveSessionId(created.id);
+      }
+
+      // Keep the query cache in lockstep with Zustand so no later refetch
+      // (of a stale, still-live request) can ever present older data as new.
+      queryClient.setQueryData<SessionsResponse>(["sessions"], (old) => {
+        if (!old) return old;
+        const withoutStale = old.sessions.filter((s) => s.id !== sessionId && s.id !== persisted.id);
+        return { ...old, sessions: [persisted, ...withoutStale] };
+      });
     },
   });
 
@@ -88,7 +118,7 @@ export function useChat(email: string | null, selectedDocument: string) {
     try {
       await stream({
         messages: baselineMessages,
-        documentId: selectedDocument,
+        documentIds: activeSession.document_ids ?? [],
         onAssistantToken: (text, sources) => {
           updateMessages(activeSession.id, [
             ...baselineMessages,
@@ -110,6 +140,19 @@ export function useChat(email: string | null, selectedDocument: string) {
       await updateMutation.mutateAsync(activeSession.id);
     } catch {
       toast.error("Session not saved — check your connection", { duration: 4000 });
+    }
+  };
+
+  /** Change which documents this session's retrieval is scoped to — persisted
+   *  per-session, independent of any other session's selection. */
+  const setSessionDocuments = async (documentIds: string[]) => {
+    if (!activeSession) return;
+    const { sessions: current } = useSessionStore.getState();
+    setSessions(current.map((s) => (s.id === activeSession.id ? { ...s, document_ids: documentIds } : s)));
+    try {
+      await updateMutation.mutateAsync(activeSession.id);
+    } catch {
+      toast.error("Could not save document selection", { duration: 4000 });
     }
   };
 
@@ -135,5 +178,6 @@ export function useChat(email: string | null, selectedDocument: string) {
     isStreaming,
     activeSession,
     chatError,
+    setSessionDocuments,
   };
 }

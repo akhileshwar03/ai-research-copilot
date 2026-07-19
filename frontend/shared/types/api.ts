@@ -61,7 +61,7 @@ export interface SessionsResponse {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-export interface ChatRequest { messages: Message[]; document_id?: string | null }
+export interface ChatRequest { messages: Message[]; document_ids?: string[] | null }
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 

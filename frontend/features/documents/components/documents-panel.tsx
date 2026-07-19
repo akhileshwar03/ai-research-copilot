@@ -163,32 +163,37 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Documents</span>
         <div className="flex items-center gap-1">
-          {/* Sort dropdown */}
-          <DropdownMenuRoot>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
-                title="Sort documents"
-              >
-                <SortIcon />
-                <span>{sortOrder === "latest" ? "Latest" : "A–Z"}</span>
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => setSortOrder("latest")}>
-                <span className={sortOrder === "latest" ? "text-white" : ""}>Latest added</span>
-                {sortOrder === "latest" && <CheckIcon />}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setSortOrder("alpha")}>
-                <span className={sortOrder === "alpha" ? "text-white" : ""}>Alphabetical</span>
-                {sortOrder === "alpha" && <CheckIcon />}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenuRoot>
+          {/* Sort dropdown — hidden until there's actually something to sort */}
+          {documents.length > 1 && (
+            <DropdownMenuRoot>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
+                  title="Sort documents"
+                >
+                  <SortIcon />
+                  <span>{sortOrder === "latest" ? "Latest" : "A–Z"}</span>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setSortOrder("latest")}>
+                  <span className={sortOrder === "latest" ? "text-white" : ""}>Latest added</span>
+                  {sortOrder === "latest" && <CheckIcon />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortOrder("alpha")}>
+                  <span className={sortOrder === "alpha" ? "text-white" : ""}>Alphabetical</span>
+                  {sortOrder === "alpha" && <CheckIcon />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuRoot>
+          )}
 
           {/* Upload */}
-          <label className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300">
+          <label
+            className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
+            title="Upload a PDF"
+          >
             <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
             <UploadIcon />
           </label>
@@ -231,28 +236,43 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
           <DocumentSkeleton />
         </div>
       ) : sorted.length === 0 ? (
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[var(--surface-0)] px-4 py-8 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02]">
+        <label
+          className="group flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-8 text-center transition hover:bg-white/[0.02]"
+          style={{ borderColor: "var(--border-medium)" }}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
+          onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-medium)")}
+        >
           <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
-          <UploadIcon />
-          <span className="text-[12px] text-zinc-600">{isUploading ? "Uploading…" : "Drop PDF or click to upload"}</span>
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
+            style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+          >
+            <UploadIcon />
+          </div>
+          <span className="text-[12px] font-medium text-zinc-400">
+            {isUploading ? "Uploading…" : "Upload your first PDF"}
+          </span>
+          <span className="text-[10.5px] text-zinc-700">Drop it here, or click to browse</span>
         </label>
       ) : (
         <div className="flex flex-col gap-1">
-          {/* Select-all row */}
-          <div className="flex items-center gap-2 px-1 pb-1">
-            <button
-              onClick={() => allChecked ? clearChecked() : setAllChecked(documents.map((d) => d.id))}
-              className={[
-                "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
-                allChecked
-                  ? "border-white bg-white text-black"
-                  : "border-white/[0.15] bg-transparent hover:border-white/30",
-              ].join(" ")}
-            >
-              {allChecked && <CheckIcon />}
-            </button>
-            <span className="text-[11px] text-zinc-700">Select all</span>
-          </div>
+          {/* Select-all row — hidden until there's more than one to select */}
+          {documents.length > 1 && (
+            <div className="flex items-center gap-2 px-1 pb-1">
+              <button
+                onClick={() => allChecked ? clearChecked() : setAllChecked(documents.map((d) => d.id))}
+                className={[
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
+                  allChecked
+                    ? "border-white bg-white text-black"
+                    : "border-white/[0.15] bg-transparent hover:border-white/30",
+                ].join(" ")}
+              >
+                {allChecked && <CheckIcon />}
+              </button>
+              <span className="text-[11px] text-zinc-700">Select all</span>
+            </div>
+          )}
 
           {sorted.map((doc) => {
             const isActive = selectedDocument === doc.id;
@@ -266,13 +286,21 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
               <div
                 key={doc.id}
                 className={[
-                  "group flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
+                  "group relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
                   isActive
                     ? "border-white/20 bg-white/[0.07]"
                     : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)] hover:bg-white/[0.04]",
                   isDeleting ? "opacity-50" : "",
                 ].join(" ")}
               >
+                {/* Active indicator stripe — brand accent, matches the sessions list */}
+                {isActive && (
+                  <div
+                    className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
+                    style={{ backgroundColor: "var(--marketing-accent)" }}
+                  />
+                )}
+
                 {/* Checkbox */}
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleChecked(doc.id); }}
@@ -291,7 +319,9 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   onClick={() => setSelectedDocument(isActive ? "" : doc.id)}
                   className="flex min-w-0 flex-1 items-center gap-2"
                 >
-                  <FileIcon />
+                  <span style={isActive ? { color: "var(--marketing-accent-text)" } : undefined} className={!isActive ? "text-zinc-600" : ""}>
+                    <FileIcon />
+                  </span>
                   <div className="min-w-0 text-left">
                     <p className={["truncate text-[12px] font-medium leading-tight", isActive ? "text-white" : "text-zinc-300"].join(" ")}>
                       {doc.name.replace(/\.pdf$/i, "")}

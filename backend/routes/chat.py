@@ -28,16 +28,25 @@ async def chat(
     service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db),
 ):
-    if body.document_id:
-        doc = DocumentRepository(db).get_by_stored_filename(body.document_id)
-        if not doc or doc.user_email != email:
-            raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
+    # Resolve each selected document's display name up front — the model
+    # only ever sees stored_filename (a UUID) via retrieval metadata, and
+    # without this it cites and reasons about that raw UUID instead of a
+    # human-readable name.
+    document_names: dict[str, str] = {}
+    if body.document_ids:
+        doc_repo = DocumentRepository(db)
+        for document_id in body.document_ids:
+            doc = doc_repo.get_by_stored_filename(document_id)
+            if not doc or doc.user_email != email:
+                raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
+            document_names[document_id] = doc.original_filename
 
     async def event_stream():
         try:
             async for event in service.stream_response(
                 messages=[message.model_dump() for message in body.messages],
-                document_id=body.document_id,
+                document_ids=body.document_ids,
+                document_names=document_names,
                 user_email=email,
             ):
                 if event["type"] == "sources":
@@ -46,7 +55,7 @@ async def chat(
                     # JSON-encode each token so newlines inside markdown don't break SSE framing.
                     yield f"data: {json.dumps(event['value'])}\n\n"
         except Exception:
-            logger.exception("stream_error document_id=%s", body.document_id)
+            logger.exception("stream_error document_ids=%s", body.document_ids)
             error_payload = json.dumps({"message": "Stream processing failed. Please try again."})
             yield f"event: error\ndata: {error_payload}\n\n"
         finally:

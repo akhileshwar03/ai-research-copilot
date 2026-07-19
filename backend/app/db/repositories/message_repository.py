@@ -10,7 +10,7 @@ class MessageRepository:
 
     def create_many(self, session_id: int, messages: list[dict]) -> None:
         self.db.add_all(
-            ChatMessage(role=m["role"], content=m["content"], session_id=session_id)
+            ChatMessage(role=m["role"], content=m["content"], session_id=session_id, sources=m.get("sources"))
             for m in messages
         )
 

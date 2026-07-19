@@ -31,8 +31,8 @@ class SessionRepository:
             .first()
         )
 
-    def create(self, user_id: int, title: str, pinned: bool = False) -> ChatSession:
-        session = ChatSession(user_id=user_id, title=title, pinned=pinned)
+    def create(self, user_id: int, title: str, pinned: bool = False, document_ids_json: str | None = None) -> ChatSession:
+        session = ChatSession(user_id=user_id, title=title, pinned=pinned, document_ids=document_ids_json)
         self.db.add(session)
         self.db.flush()
         return session

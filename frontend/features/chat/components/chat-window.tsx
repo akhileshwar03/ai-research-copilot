@@ -6,15 +6,16 @@ import { ChatHeader } from "@/features/chat/components/chat-header";
 import { ChatInput } from "@/features/chat/components/chat-input";
 import { ChatMessageList } from "@/features/chat/components/chat-message-list";
 import { useChat } from "@/features/chat/hooks/use-chat";
+import type { DocumentItem } from "@/shared/types/api";
 
 interface ChatWindowProps {
   email: string | null;
-  selectedDocument: string;
+  documents: DocumentItem[];
   sidebarOpen?: boolean;
 }
 
-export default function ChatWindow({ email, selectedDocument, sidebarOpen = true }: ChatWindowProps) {
-  const { input, setInput, sendMessage, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError } = useChat(email, selectedDocument);
+export default function ChatWindow({ email, documents, sidebarOpen = true }: ChatWindowProps) {
+  const { input, setInput, sendMessage, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat(email);
   const [isDragging, setIsDragging] = useState(false);
 
   // Derive user initial from email for avatar
@@ -65,7 +66,12 @@ export default function ChatWindow({ email, selectedDocument, sidebarOpen = true
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <ChatHeader sidebarOpen={sidebarOpen} />
+      <ChatHeader
+        sidebarOpen={sidebarOpen}
+        documents={documents}
+        selectedDocumentIds={activeSession?.document_ids ?? []}
+        onChangeSelectedDocuments={setSessionDocuments}
+      />
 
       {/* Error banner with Retry */}
       {chatError && (

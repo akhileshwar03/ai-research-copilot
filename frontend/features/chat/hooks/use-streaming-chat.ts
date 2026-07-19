@@ -7,7 +7,7 @@ import type { Message } from "@/shared/types/chat";
 
 interface StreamArgs {
   messages: Message[];
-  documentId?: string;
+  documentIds?: string[];
   onAssistantToken: (text: string, sources?: string[]) => void;
 }
 
@@ -115,7 +115,7 @@ export function useStreamingChat() {
   }, []);
 
   const stream = useCallback(
-    async ({ messages, documentId, onAssistantToken }: StreamArgs) => {
+    async ({ messages, documentIds, onAssistantToken }: StreamArgs) => {
       cancel();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -123,7 +123,7 @@ export function useStreamingChat() {
 
       try {
         const response = await chatApi.stream(
-          { messages, document_id: documentId || undefined },
+          { messages, document_ids: documentIds && documentIds.length > 0 ? documentIds : undefined },
           controller.signal,
         );
 

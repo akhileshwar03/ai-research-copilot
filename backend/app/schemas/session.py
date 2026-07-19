@@ -4,6 +4,9 @@ from pydantic import BaseModel
 class MessageRequest(BaseModel):
     role: str
     content: str
+    # Pre-formatted citation string (e.g. "Report A.pdf, Report B.pdf"), as
+    # shown in the UI. Persisted verbatim so citation chips survive reload.
+    sources: str | None = None
 
 
 class SessionData(BaseModel):
@@ -11,6 +14,9 @@ class SessionData(BaseModel):
     title: str
     pinned: bool = False
     messages: list[MessageRequest]
+    # Document (stored_filename) ids this session's chat retrieval is scoped
+    # to. Empty/omitted means "search all of the user's documents."
+    document_ids: list[str] = []
 
 
 class SessionRequest(BaseModel):
@@ -25,6 +31,7 @@ class SessionSummary(BaseModel):
     pinned: bool = False
     created_at: str | None = None
     messages: list[MessageRequest] = []
+    document_ids: list[str] = []
 
 
 class SessionListResponse(BaseModel):

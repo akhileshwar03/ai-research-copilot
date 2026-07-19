@@ -245,6 +245,80 @@ html.light-theme,
   .animate-float-slow, .animate-float-slower { animation: none; }
 }
 
+/* Hero 3D grid floor: a perspective-tilted, slowly drifting horizon plane —
+   the primary "this page has depth" cue behind the split hero. */
+.hero-grid-floor {
+  transform-origin: bottom center;
+  background-image:
+    linear-gradient(rgba(224, 138, 62, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(224, 138, 62, 0.12) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to top, black 0%, transparent 82%);
+  -webkit-mask-image: linear-gradient(to top, black 0%, transparent 82%);
+  animation: grid-drift 16s linear infinite;
+}
+@keyframes grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 56px, 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-grid-floor { animation: none; }
+}
+
+/* Flat, continuous engineering-grid texture spanning the whole marketing
+   page — the persistent "this is a technical, engineered product" cue that
+   the hero's perspective floor hands off to once you scroll past it. */
+.site-grid {
+  background-image:
+    linear-gradient(rgba(224, 138, 62, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(224, 138, 62, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  animation: site-grid-drift 40s linear infinite;
+}
+@keyframes site-grid-drift {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 64px 64px, 64px 64px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .site-grid { animation: none; }
+}
+
+/* Orbiting depth masses — organic (not simple up/down) drift, one distinct
+   path per layer so the scene never reads as three copies of one motion. */
+@keyframes orbit-a {
+  0%   { transform: translate(0, 0) scale(1); }
+  33%  { transform: translate(30px, 40px) scale(1.06); }
+  66%  { transform: translate(-20px, 60px) scale(0.97); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes orbit-b {
+  0%   { transform: translate(0, 0) scale(1); }
+  40%  { transform: translate(-36px, -24px) scale(1.05); }
+  75%  { transform: translate(24px, -48px) scale(0.96); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes orbit-c {
+  0%   { transform: translate(0, 0) scale(1); }
+  30%  { transform: translate(26px, -32px) scale(0.95); }
+  70%  { transform: translate(-32px, -16px) scale(1.07); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+.orbit-a { animation: orbit-a 26s ease-in-out infinite; }
+.orbit-b { animation: orbit-b 32s ease-in-out infinite; }
+.orbit-c { animation: orbit-c 22s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .orbit-a, .orbit-b, .orbit-c { animation: none; }
+}
+
+/* ── Theme-aware surface tints ────────────────────────────────────────────── */
+/* Raw white/[alpha] utilities read as a raised tint on dark backgrounds but
+   are the wrong direction on light ones. Used by the admin panel. */
+.hover-surface:hover { background-color: rgba(255, 255, 255, 0.05); }
+html.light-theme .hover-surface:hover { background-color: rgba(0, 0, 0, 0.04); }
+
+.focus-accent:focus { outline: none; border-color: rgba(255, 255, 255, 0.20); }
+html.light-theme .focus-accent:focus { border-color: rgba(0, 0, 0, 0.18); }
+
 /* Faint film-grain overlay — apply via .bg-grain. Pure CSS, no image asset. */
 .bg-grain::before {
   content: "";

@@ -34,6 +34,7 @@ def create_session(
         title=request.session.title,
         messages=[message.model_dump() for message in request.session.messages],
         pinned=request.session.pinned,
+        document_ids=request.session.document_ids,
     )
 
 
@@ -50,6 +51,7 @@ def update_session(
         title=request.session.title,
         messages=[message.model_dump() for message in request.session.messages],
         pinned=request.session.pinned,
+        document_ids=request.session.document_ids,
     )
 
 

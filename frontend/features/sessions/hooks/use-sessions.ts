@@ -69,10 +69,15 @@ export function useSessions(email: string | null) {
   }, [query.data, query.isError, setSessions, setActiveSessionId, activeSessionId, sessions.length]);
 
   const createMutation = useMutation({
+    // No onSuccess invalidation here on purpose: the caller (handleNewSession)
+    // already remaps the local placeholder id into Zustand directly. An
+    // invalidate here used to schedule a background refetch that could land
+    // *after* the session's first message was saved (via useChat's own
+    // update, which bypasses this query entirely) but reflect the
+    // pre-message snapshot — silently overwriting the newer local state with
+    // a blank session. See use-chat.ts's updateMutation for the other half
+    // of this fix (it write-throughs the cache instead of invalidating).
     mutationFn: (session: ChatSession) => sessionsApi.create({ session }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["sessions"] });
-    },
   });
 
   const updateMutation = useMutation({
@@ -96,5 +101,6 @@ export function useSessions(email: string | null) {
     deleteSession: deleteMutation.mutateAsync,
     isLoadingSessions: query.isLoading,
     refetchSessions: query.refetch,
+    retentionDays: query.data?.retention_days ?? 0,
   };
 }

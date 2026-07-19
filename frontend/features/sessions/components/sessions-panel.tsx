@@ -25,6 +25,17 @@ interface SessionsPanelProps {
   onNewSession: () => Promise<void>;
   isCreating?: boolean;
   isLoading?: boolean;
+  /** Free-tier retention window in days; 0 or undefined hides expiry captions. */
+  retentionDays?: number;
+}
+
+/** Whole days until a session reaches the retention limit; null when unknown. */
+function daysUntilExpiry(createdAt: string | null | undefined, retentionDays: number): number | null {
+  if (!createdAt || retentionDays <= 0) return null;
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return null;
+  const expiresAt = created + retentionDays * 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
 function SortIcon() {
@@ -125,6 +136,7 @@ export function SessionsPanel({
   onNewSession,
   isCreating = false,
   isLoading = false,
+  retentionDays = 0,
 }: SessionsPanelProps) {
   const { sortOrder, setSortOrder, togglePin } = useSessionStore();
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -172,6 +184,8 @@ export function SessionsPanel({
     const isRenaming = renamingId === session.id;
     const isDeleting = deletingId === session.id;
     const isPinned = session.pinned ?? false;
+    const daysLeft = daysUntilExpiry(session.created_at, retentionDays);
+    const expiresSoon = daysLeft !== null && daysLeft <= 2;
 
     return (
       <div
@@ -210,12 +224,19 @@ export function SessionsPanel({
               onCancel={() => setRenamingId(null)}
             />
           ) : (
-            <span className={[
-              "truncate text-[12px] font-medium leading-snug",
-              isActive ? "text-white" : "text-zinc-400 group-hover:text-zinc-300",
-            ].join(" ")}>
-              {session.title}
-            </span>
+            <div className="min-w-0">
+              <span className={[
+                "block truncate text-[12px] font-medium leading-snug",
+                isActive ? "text-white" : "text-zinc-400 group-hover:text-zinc-300",
+              ].join(" ")}>
+                {session.title}
+              </span>
+              {daysLeft !== null && (
+                <span className={["text-[10px]", expiresSoon ? "text-amber-500/90" : "text-zinc-700"].join(" ")}>
+                  {daysLeft === 0 ? "expires today" : `expires in ${daysLeft} ${daysLeft === 1 ? "day" : "days"}`}
+                </span>
+              )}
+            </div>
           )}
         </button>
 
