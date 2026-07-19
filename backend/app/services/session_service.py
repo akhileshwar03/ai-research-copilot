@@ -1,3 +1,4 @@
+import json
 import logging
 
 from app.core.exceptions import AppError
@@ -7,6 +8,16 @@ from app.db.repositories.user_repository import UserRepository
 from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
+
+
+def _decode_document_ids(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        decoded = json.loads(raw)
+        return decoded if isinstance(decoded, list) else []
+    except (TypeError, ValueError):
+        return []
 
 
 class SessionService:
@@ -31,7 +42,8 @@ class SessionService:
                     "title": session.title,
                     "pinned": session.pinned,
                     "created_at": session.created_at.isoformat() if session.created_at else None,
-                    "messages": [{"role": m.role, "content": m.content} for m in session.messages],
+                    "messages": [{"role": m.role, "content": m.content, "sources": m.sources} for m in session.messages],
+                    "document_ids": _decode_document_ids(session.document_ids),
                 }
                 for session in sessions
             ],
@@ -40,13 +52,17 @@ class SessionService:
             "limit": limit,
         }
 
-    def create_session(self, email: str, title: str, messages: list[dict], pinned: bool = False) -> dict:
+    def create_session(
+        self, email: str, title: str, messages: list[dict], pinned: bool = False, document_ids: list[str] | None = None
+    ) -> dict:
         user = self.user_repo.get_by_email(email)
         if not user:
             raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
 
         db = self.session_repo.db
-        session = self.session_repo.create(user_id=user.id, title=title, pinned=pinned)
+        session = self.session_repo.create(
+            user_id=user.id, title=title, pinned=pinned, document_ids_json=json.dumps(document_ids or [])
+        )
         self.message_repo.create_many(session_id=session.id, messages=messages)
         db.commit()
         db.refresh(session)
@@ -65,13 +81,22 @@ class SessionService:
             raise AppError(code="SESSION_NOT_FOUND", message="Session not found", status_code=404)
         return session
 
-    def update_session(self, session_id: int, user_email: str, title: str, messages: list[dict], pinned: bool = False) -> dict:
+    def update_session(
+        self,
+        session_id: int,
+        user_email: str,
+        title: str,
+        messages: list[dict],
+        pinned: bool = False,
+        document_ids: list[str] | None = None,
+    ) -> dict:
         user_id = self._resolve_user_id(user_email)
         session = self._get_owned_session(session_id, user_id)
 
         db = self.session_repo.db
         session.title = title
         session.pinned = pinned
+        session.document_ids = json.dumps(document_ids or [])
         self.message_repo.delete_by_session_id(session_id=session.id)
         self.message_repo.create_many(session_id=session.id, messages=messages)
         db.commit()

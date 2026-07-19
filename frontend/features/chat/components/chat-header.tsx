@@ -4,11 +4,14 @@ import { useRef, useState, useEffect } from "react";
 import { toast } from "sonner";
 
 import { useSessionStore } from "@/stores/session-store";
-import { useDocumentStore } from "@/stores/document-store";
+import type { DocumentItem } from "@/shared/types/api";
 import type { Message } from "@/shared/types/chat";
 
 interface ChatHeaderProps {
   sidebarOpen?: boolean;
+  documents: DocumentItem[];
+  selectedDocumentIds: string[];
+  onChangeSelectedDocuments: (documentIds: string[]) => void;
 }
 
 // ─── Markdown export helper ───────────────────────────────────────────────────
@@ -109,10 +112,116 @@ function ExportMenu({ title, messages }: { title: string; messages: Message[] })
   );
 }
 
-export function ChatHeader({ sidebarOpen = true }: ChatHeaderProps) {
+// ─── Sources picker: which documents this session's chat is scoped to ────────
+
+function SourcesPicker({
+  documents,
+  selectedDocumentIds,
+  onChange,
+}: {
+  documents: DocumentItem[];
+  selectedDocumentIds: string[];
+  onChange: (documentIds: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  if (documents.length === 0) return null;
+
+  const selectedCount = selectedDocumentIds.length;
+  const isScoped = selectedCount > 0;
+
+  const toggle = (id: string) => {
+    onChange(
+      selectedDocumentIds.includes(id)
+        ? selectedDocumentIds.filter((d) => d !== id)
+        : [...selectedDocumentIds, id],
+    );
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        title="Choose which documents this chat can see"
+        className="flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition"
+        style={
+          isScoped
+            ? { borderColor: "var(--marketing-accent-soft)", backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }
+            : { borderColor: "var(--border-medium)", color: "var(--text-secondary, #71717a)" }
+        }
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        {isScoped ? `${selectedCount} source${selectedCount === 1 ? "" : "s"}` : "All documents"}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-72 overflow-hidden rounded-xl border border-[var(--border-medium)] bg-[var(--surface-2)] shadow-2xl shadow-black/50">
+          <div className="border-b border-[var(--border-subtle)] px-3.5 py-2.5">
+            <p className="text-[12px] font-semibold text-[var(--text-primary)]">Sources for this chat</p>
+            <p className="mt-0.5 text-[11px] text-zinc-500">
+              Pick specific documents to compare, or leave none selected to search everything.
+            </p>
+          </div>
+          <div className="max-h-64 overflow-y-auto scrollbar-thin py-1">
+            {documents.map((doc) => {
+              const checked = selectedDocumentIds.includes(doc.id);
+              return (
+                <button
+                  key={doc.id}
+                  onClick={() => toggle(doc.id)}
+                  className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left transition hover:bg-white/[0.05]"
+                >
+                  <span
+                    className={[
+                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
+                      checked ? "border-transparent" : "border-white/[0.15] bg-transparent",
+                    ].join(" ")}
+                    style={checked ? { backgroundColor: "var(--marketing-accent)" } : undefined}
+                  >
+                    {checked && (
+                      <svg className="h-2.5 w-2.5 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] text-zinc-300">
+                    {doc.name.replace(/\.pdf$/i, "")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {isScoped && (
+            <div className="border-t border-[var(--border-subtle)] px-3.5 py-2">
+              <button
+                onClick={() => onChange([])}
+                className="text-[11px] text-zinc-500 transition hover:text-zinc-300"
+              >
+                Clear — search all documents
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ChatHeader({ sidebarOpen = true, documents, selectedDocumentIds, onChangeSelectedDocuments }: ChatHeaderProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
-  const selectedDocument = useDocumentStore((s) => s.selectedDocument);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const title = activeSession?.title ?? "Research Session";
@@ -165,14 +274,11 @@ export function ChatHeader({ sidebarOpen = true }: ChatHeaderProps) {
         </div>
       </button>
 
-      {selectedDocument && (
-        <div className="flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border-medium)] bg-white/[0.04] px-2.5 py-1">
-          <svg className="h-3 w-3 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span className="text-[11px] text-zinc-500">PDF attached</span>
-        </div>
-      )}
+      <SourcesPicker
+        documents={documents}
+        selectedDocumentIds={selectedDocumentIds}
+        onChange={onChangeSelectedDocuments}
+      />
     </header>
   );
 }

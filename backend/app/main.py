@@ -123,6 +123,22 @@ def _run_startup_migrations() -> None:
             ))
             conn.commit()
 
+            # ── chat_sessions.document_ids (migration 0009) ────────────────────
+            session_cols = {c["name"] for c in inspector.get_columns("chat_sessions")}
+            if "document_ids" not in session_cols:
+                logger.info("startup_migration: adding chat_sessions.document_ids")
+                conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN document_ids TEXT"))
+                conn.commit()
+                logger.info("startup_migration: chat_sessions.document_ids added")
+
+            # ── chat_messages.sources (migration 0010) ─────────────────────────
+            message_cols = {c["name"] for c in inspector.get_columns("chat_messages")}
+            if "sources" not in message_cols:
+                logger.info("startup_migration: adding chat_messages.sources")
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN sources TEXT"))
+                conn.commit()
+                logger.info("startup_migration: chat_messages.sources added")
+
             existing_index_names = {idx["name"] for idx in inspector.get_indexes("documents")}
             if "uq_documents_user_checksum" not in existing_index_names:
                 logger.info("startup_migration: fixing documents.checksum_sha256 to per-user unique")

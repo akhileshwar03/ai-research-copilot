@@ -27,7 +27,7 @@ export default function ChatPage() {
   const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
   const setSessions = useSessionStore((s) => s.setSessions);
 
-  const { documents } = useDocuments();
+  const { documents } = useDocuments(email);
   const { createSession } = useSessions(email);
   const { blobUrl: pdfBlobUrl, isLoading: isPdfLoading } = useDocumentFile(selectedDocument || null);
 
@@ -115,7 +115,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-hidden">
             <ChatWindow
               email={email}
-              selectedDocument={selectedDocument}
+              documents={documents}
               sidebarOpen={sidebarOpen}
             />
           </div>

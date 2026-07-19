@@ -35,6 +35,24 @@ export interface AdminUserList {
   limit: number;
 }
 
+export interface AdminUserDocument {
+  id: string;
+  name: string;
+  size_bytes: number;
+  upload_status: string;
+  error_message: string | null;
+  file_exists: boolean;
+  created_at: string | null;
+}
+
+export interface AdminUserSession {
+  id: number;
+  title: string;
+  pinned: boolean;
+  message_count: number;
+  created_at: string | null;
+}
+
 export interface AdminSetting {
   key: string;
   value: number;
@@ -63,6 +81,12 @@ export const adminApi = {
 
   deleteUser: (userId: number) =>
     apiRequest<{ message: string }>(`/admin/users/${userId}`, { method: "DELETE" }),
+
+  userDocuments: (userId: number) =>
+    apiRequest<{ documents: AdminUserDocument[] }>(`/admin/users/${userId}/documents`),
+
+  userSessions: (userId: number) =>
+    apiRequest<{ sessions: AdminUserSession[] }>(`/admin/users/${userId}/sessions`),
 
   settings: () => apiRequest<AdminSetting[]>("/admin/settings"),
 

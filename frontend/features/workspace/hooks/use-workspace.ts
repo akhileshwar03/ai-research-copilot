@@ -5,7 +5,7 @@ import { useSessions } from "@/features/sessions/hooks/use-sessions";
 
 export function useWorkspace(email: string | null) {
   const sessions = useSessions(email);
-  const documents = useDocuments();
+  const documents = useDocuments(email);
 
   return {
     ...sessions,

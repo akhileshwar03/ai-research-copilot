@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { DocumentsPanel } from "@/features/documents/components/documents-panel";
 import { SessionsPanel } from "@/features/sessions/components/sessions-panel";
@@ -9,6 +10,7 @@ import { useSessions, makeDefaultSession } from "@/features/sessions/hooks/use-s
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { useSessionStore } from "@/stores/session-store";
 import { ProfileModal, type ProfileSection } from "@/features/workspace/components/sidebar/profile-modal";
+import type { SessionsResponse } from "@/shared/types/api";
 
 interface WorkspaceSidebarProps {
   email: string | null;
@@ -18,8 +20,9 @@ interface WorkspaceSidebarProps {
 
 export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const { logout } = useAuth();
-  const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions } = useSessions(email);
-  const { documents, retentionDays, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments();
+  const queryClient = useQueryClient();
+  const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions, retentionDays: sessionRetentionDays } = useSessions(email);
+  const { documents, retentionDays, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments(email);
   const [isCreating, setIsCreating] = useState(false);
 
   // Handle drag-drop uploads dispatched by ChatWindow and command-palette palette uploads
@@ -52,7 +55,11 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
   const handleNewSession = async () => {
     setIsCreating(true);
     try {
-      const draft = makeDefaultSession();
+      // Stamp created_at immediately (rather than waiting for a refetch to
+      // pick up the server's value) so the sessions panel's "expires in Nd"
+      // caption renders right away instead of staying blank until the next
+      // full sessions list reload.
+      const draft = { ...makeDefaultSession(), created_at: new Date().toISOString() };
       // Read current sessions from store to avoid stale closure
       const currentSessions = useSessionStore.getState().sessions;
       setSessions([draft, ...currentSessions]);
@@ -61,10 +68,22 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
       if (email) {
         const created = await createSession(draft);
         const persisted = { ...draft, id: created.id };
+
+        // Cancel any in-flight ["sessions"] fetch before writing — otherwise
+        // a slower, older response (e.g. one already queued when this call
+        // started) could resolve afterward and silently overwrite this
+        // session with a pre-message snapshot, making it appear blank.
+        await queryClient.cancelQueries({ queryKey: ["sessions"] });
+
         // Read again — state may have changed during the async call
         const latestSessions = useSessionStore.getState().sessions;
         setSessions([persisted, ...latestSessions.filter((s) => s.id !== draft.id)]);
         setActiveSessionId(persisted.id);
+
+        queryClient.setQueryData<SessionsResponse>(["sessions"], (old) => {
+          if (!old) return old;
+          return { ...old, sessions: [persisted, ...old.sessions.filter((s) => s.id !== draft.id && s.id !== persisted.id)] };
+        });
       }
     } finally {
       setIsCreating(false);
@@ -140,6 +159,7 @@ export default function WorkspaceSidebar({ email }: WorkspaceSidebarProps) {
             onNewSession={handleNewSession}
             isCreating={isCreating}
             isLoading={isLoadingSessions}
+            retentionDays={sessionRetentionDays}
           />
         </div>
 

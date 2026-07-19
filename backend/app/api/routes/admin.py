@@ -258,6 +258,44 @@ def list_user_documents(
     }
 
 
+@router.get("/users/{user_id}/sessions")
+def list_user_sessions(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Inspect a user's chat sessions — for guiding users through support issues."""
+    user = db.get(User, user_id)
+    if not user:
+        raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
+
+    sessions = (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == user_id)
+        .order_by(ChatSession.created_at.desc())
+        .all()
+    )
+    message_counts = dict(
+        db.query(ChatMessage.session_id, func.count(ChatMessage.id))
+        .filter(ChatMessage.session_id.in_([s.id for s in sessions]))
+        .group_by(ChatMessage.session_id)
+        .all()
+    ) if sessions else {}
+
+    return {
+        "sessions": [
+            {
+                "id": s.id,
+                "title": s.title,
+                "pinned": s.pinned,
+                "message_count": message_counts.get(s.id, 0),
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in sessions
+        ]
+    }
+
+
 # ── Runtime settings ───────────────────────────────────────────────────────────
 
 @router.get("/settings", response_model=list[SettingDescriptor])

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
  * prefers-reduced-motion by rendering static content.
  */
 
-function usePrefersReducedMotion() {
+export function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {
     setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);

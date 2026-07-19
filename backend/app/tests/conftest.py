@@ -54,7 +54,7 @@ def _override_get_db():
 # ── Fakes ──────────────────────────────────────────────────────────────────────
 
 class FakeChatService:
-    async def stream_response(self, messages, document_id=None, user_email=""):
+    async def stream_response(self, messages, document_ids=None, document_names=None, user_email=""):
         # Mirrors the real ChatService contract: a sources event first,
         # then token events.
         yield {"type": "sources", "sources": ["seed.pdf"]}

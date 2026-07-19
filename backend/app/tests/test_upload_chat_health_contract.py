@@ -23,7 +23,7 @@ def test_documents_list_is_paginated(client, auth_headers):
 
 
 def test_chat_streaming_uses_sse_format(client, auth_headers):
-    payload = {"messages": [{"role": "user", "content": "hi"}], "document_id": None}
+    payload = {"messages": [{"role": "user", "content": "hi"}], "document_ids": None}
     resp = client.post("/api/v1/chat", json=payload, headers=auth_headers)
 
     assert resp.status_code == 200

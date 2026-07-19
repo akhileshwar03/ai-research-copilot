@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import { Reveal, Tilt3D } from "@/features/landing/motion";
+import { SiteBackground } from "@/features/landing/site-background";
 
 const GITHUB_REPO_URL = "https://github.com/akhileshwar03/ai-research-copilot";
 
@@ -74,7 +75,11 @@ const WORKFLOW = [
 
 export default function LandingPage() {
   return (
-    <main className="marketing-light min-h-screen bg-[#faf9f7] text-zinc-900">
+    <main className="marketing-light relative min-h-screen text-zinc-900">
+      {/* Persistent 3D atmosphere — fixed, spans the entire scroll, not just the hero */}
+      <SiteBackground />
+
+      <div className="relative z-10">
       {/* ── Navigation: sticky, frosted ────────────────────────────────────── */}
       <nav className="sticky top-0 z-40 border-b border-black/[0.05] bg-[#faf9f7]/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -105,15 +110,10 @@ export default function LandingPage() {
 
       {/* ── Hero: asymmetric split with 3D demo ────────────────────────────── */}
       <section className="relative overflow-hidden">
-        {/* Ambient color wash + grain */}
-        <div
-          className="bg-grain pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(700px 480px at 12% 12%, rgba(224,138,62,0.12), transparent 60%), radial-gradient(600px 420px at 95% 70%, rgba(224,138,62,0.07), transparent 60%)",
-          }}
-          aria-hidden
-        />
+        {/* Perspective floor — the ground the demo card sits on; the rest of
+            the page's depth (grid texture, orbs, particles) is SiteBackground,
+            fixed behind the whole scroll. */}
+        <div className="hero-grid-floor pointer-events-none absolute inset-x-[-10%] bottom-0 h-[65%]" aria-hidden />
 
         <div className="relative mx-auto grid max-w-7xl gap-14 px-6 pb-28 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
           {/* Left: headline + CTA */}
@@ -191,9 +191,11 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Floating ingestion card, behind-right */}
+              {/* Floating ingestion card, below-right — the column has zero
+                  slack on the right (flush via justify-end), so this sits
+                  below the card's bottom edge instead of beside it. */}
               <div
-                className="animate-float-slow absolute -right-14 bottom-6 z-0 hidden rotate-[5deg] rounded-xl border border-black/[0.05] bg-white px-3.5 py-2.5 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.18)] lg:block"
+                className="animate-float-slow absolute -bottom-12 right-6 z-20 hidden rotate-[5deg] rounded-xl border border-black/[0.05] bg-white px-3.5 py-2.5 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.18)] lg:block"
                 aria-hidden
               >
                 <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
@@ -538,6 +540,7 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+      </div>
     </main>
   );
 }
