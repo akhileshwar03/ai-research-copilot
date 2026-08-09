@@ -15,7 +15,7 @@ interface ChatWindowProps {
 }
 
 export default function ChatWindow({ email, documents, sidebarOpen = true }: ChatWindowProps) {
-  const { input, setInput, sendMessage, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat(email);
+  const { input, setInput, sendMessage, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat();
   const [isDragging, setIsDragging] = useState(false);
 
   // Derive user initial from email for avatar
@@ -61,7 +61,7 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
 
   return (
     <div
-      className="relative flex h-full flex-col bg-[var(--app-bg)] text-white"
+      className="relative flex h-full flex-col text-white"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -115,14 +115,14 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
       {/* Drag & drop overlay */}
       {isDragging && (
         <div className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 rounded-none bg-[var(--app-bg)]/80 backdrop-blur-sm">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-dashed border-white/30 bg-white/[0.04]">
-            <svg className="h-9 w-9 text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-2)]">
+            <svg className="h-9 w-9 text-[var(--text-primary)] opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-[16px] font-medium text-white/70">Drop PDF to upload</p>
-            <p className="mt-1 text-[13px] text-white/35">Release to add it to your documents</p>
+            <p className="text-[16px] font-medium text-[var(--text-primary)] opacity-70">Drop PDF to upload</p>
+            <p className="mt-1 text-[13px] text-[var(--text-primary)] opacity-40">Release to add it to your documents</p>
           </div>
         </div>
       )}

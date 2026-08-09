@@ -4,28 +4,37 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from app.db.repositories.document_repository import DocumentRepository
+from app.db.repositories.humanizer_run_repository import HumanizerRunRepository
 from app.db.repositories.message_repository import MessageRepository
 from app.db.repositories.otp_repository import OtpRepository
+from app.db.repositories.realtime_repository import RealtimeMessageRepository, RealtimeSessionRepository
 from app.db.repositories.session_repository import SessionRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import get_db
 from app.modules.rag.embedding_service import EmbeddingService
 from app.modules.rag.ingestion_service import IngestionService
+from app.modules.rag.pgvector_store import PgVectorStore
 from app.modules.rag.retrieval_service import RetrievalService
-from app.modules.rag.vector_store_manager import VectorStoreManager
 from app.services.ai_service import AIService
 from app.services.auth_service import AuthService
 from app.services.chat_service import ChatService
+from app.services.checker_service import CheckerService
 from app.services.document_service import DocumentService
 from app.services.email_service import EmailService
 from app.services.health_service import HealthService
+from app.services.humanizer_service import HumanizerService
 from app.services.otp_service import OtpService
+from app.services.paper_analyzer_service import PaperAnalyzerService
+from app.services.realtime_service import RealtimeService
+from app.services.realtime_session_service import RealtimeSessionService
 from app.services.session_service import SessionService
+from app.services.web_search_service import WebSearchService
+from app.services.writing_feedback_service import WritingFeedbackService
 
 
 @lru_cache
-def get_vector_store_manager() -> VectorStoreManager:
-    return VectorStoreManager()
+def get_vector_store_manager() -> PgVectorStore:
+    return PgVectorStore()
 
 
 @lru_cache
@@ -82,6 +91,43 @@ def get_chat_service() -> ChatService:
         vector_store=get_vector_store_manager(),
     )
     return ChatService(retrieval_service=retrieval_service, ai_service=get_ai_service())
+
+
+def get_humanizer_service(db: Session = Depends(get_db)) -> HumanizerService:
+    return HumanizerService(
+        ai_service=get_ai_service(),
+        run_repo=HumanizerRunRepository(db),
+        user_repo=UserRepository(db),
+    )
+
+
+def get_checker_service() -> CheckerService:
+    return CheckerService(ai_service=get_ai_service())
+
+
+def get_writing_feedback_service() -> WritingFeedbackService:
+    return WritingFeedbackService(ai_service=get_ai_service())
+
+
+def get_paper_analyzer_service() -> PaperAnalyzerService:
+    return PaperAnalyzerService()
+
+
+@lru_cache
+def get_web_search_service() -> WebSearchService:
+    return WebSearchService()
+
+
+def get_realtime_service() -> RealtimeService:
+    return RealtimeService(ai_service=get_ai_service(), web_search_service=get_web_search_service())
+
+
+def get_realtime_session_service(db: Session = Depends(get_db)) -> RealtimeSessionService:
+    return RealtimeSessionService(
+        session_repo=RealtimeSessionRepository(db),
+        message_repo=RealtimeMessageRepository(db),
+        user_repo=UserRepository(db),
+    )
 
 
 def get_health_service() -> HealthService:

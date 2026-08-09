@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse, Response
 
 from app.api.dependencies.auth import get_current_user_email
 from app.api.dependencies.services import get_document_service
@@ -18,14 +18,17 @@ def get_document_file(
     """Serve a document's PDF, restricted to its owner.
 
     Replaces the public /uploads static mount: files are now only reachable
-    with a valid access token belonging to the document's owner.
+    with a valid access token belonging to the document's owner. On R2, this
+    redirects to a short-lived presigned URL instead of proxying bytes
+    through the backend; locally it streams the file directly.
     """
-    filepath, original_filename = service.get_document_filepath(document_id, user_email=email)
-    return FileResponse(
-        filepath,
+    download = service.get_document_download(document_id, user_email=email)
+    if download["mode"] == "redirect":
+        return RedirectResponse(url=download["url"])
+    return Response(
+        content=download["content"],
         media_type="application/pdf",
-        filename=original_filename,
-        content_disposition_type="inline",
+        headers={"Content-Disposition": f'inline; filename="{download["filename"]}"'},
     )
 
 

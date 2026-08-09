@@ -20,6 +20,29 @@ class Settings(BaseSettings):
     openai_chat_model: str = "gpt-4.1-mini"
     openai_healthcheck_timeout_seconds: float = 2.0
 
+    # Humaniser pipeline models — deliberately separate from openai_chat_model
+    # (Checker/Chat/OCR) so the Humaniser's model choice never drifts with the
+    # app-wide default. Rewrite is the creative pass; classify backs the cheap
+    # analyze/verify passes.
+    #
+    # Rewrite deliberately uses a classic chat-completions model, not a
+    # reasoning model (gpt-5-mini/nano reject temperature/top_p/frequency_penalty/
+    # presence_penalty outright — confirmed via direct 400 errors). Perplexity and
+    # burstiness, the two signals every major AI detector scores first, are exactly
+    # what those sampling params let us push on. Losing them for a reasoning model
+    # meant rewriting with the least controllable output for the one pass where
+    # control over lexical unpredictability matters most.
+    humanizer_rewrite_model: str = "gpt-4.1-mini"
+    humanizer_classify_model: str = "gpt-5-nano"
+    # Sampling params for the rewrite pass only (Pass 1/3 classify calls stay
+    # deterministic — these don't apply there). Tuned toward the human range of
+    # burstiness (sentence-to-sentence perplexity swings of 0.6-1.2) rather than
+    # the tight, low-variance band typical of raw LLM output (~0.2-0.4).
+    humanizer_rewrite_temperature: float = 1.05
+    humanizer_rewrite_top_p: float = 0.97
+    humanizer_rewrite_frequency_penalty: float = 0.55
+    humanizer_rewrite_presence_penalty: float = 0.35
+
     jwt_secret_key: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
@@ -27,11 +50,20 @@ class Settings(BaseSettings):
 
     uploads_dir: str = "uploads"
     max_upload_size_mb: int = 20
+
+    # Cloudflare R2 (S3-compatible). Leave all blank to use local disk storage
+    # instead (default for development). All four must be set to enable R2.
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = ""
+
+    # Tavily web search — powers Real-time AI. Leave blank to disable (the
+    # feature degrades to a plain assistant with no live search grounding).
+    tavily_api_key: str = ""
     # Free-tier retention: documents and chats older than this are purged by
     # the daily cleanup. 0 disables retention entirely (keep forever).
     retention_days: int = 7
-    chroma_path: str = "chroma_db"
-    chroma_collection: str = "documents"
 
     rate_limit_enabled: bool = True
 

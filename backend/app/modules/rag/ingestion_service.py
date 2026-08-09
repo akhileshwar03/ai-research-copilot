@@ -1,3 +1,4 @@
+import io
 import uuid
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -5,16 +6,15 @@ from pypdf import PdfReader
 
 from app.core.config import get_settings
 from app.modules.rag.embedding_service import EmbeddingService
-from app.modules.rag.vector_store_manager import VectorStoreManager
 
 
 class IngestionService:
-    def __init__(self, embedding_service: EmbeddingService, vector_store: VectorStoreManager):
+    def __init__(self, embedding_service: EmbeddingService, vector_store):
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.settings = get_settings()
 
-    def process_pdf(self, filepath: str, source_id: str, user_email: str = "") -> None:
+    def process_pdf(self, content: bytes, source_id: str, user_email: str = "") -> None:
         """Ingest a PDF and store chunks in the vector store.
 
         Text is split per page so every chunk carries its page number — the
@@ -22,7 +22,7 @@ class IngestionService:
         chunk also carries ``user_email`` so retrieval stays scoped to one
         user without leaking other users' data.
         """
-        reader = PdfReader(filepath)
+        reader = PdfReader(io.BytesIO(content))
         splitter = RecursiveCharacterTextSplitter(
             chunk_size=self.settings.rag_chunk_size,
             chunk_overlap=self.settings.rag_chunk_overlap,

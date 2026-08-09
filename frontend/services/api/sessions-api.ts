@@ -1,5 +1,4 @@
 import { apiRequest } from "@/services/api/client";
-import type { ChatSession } from "@/shared/types/chat";
 import type { SessionCreateResponse, SessionPayload, SessionsResponse } from "@/shared/types/api";
 
 export const sessionsApi = {

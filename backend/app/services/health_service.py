@@ -1,12 +1,11 @@
 from sqlalchemy import text
 
 from app.db.session import SessionLocal
-from app.modules.rag.vector_store_manager import VectorStoreManager
 from app.services.ai_service import AIService
 
 
 class HealthService:
-    def __init__(self, vector_store: VectorStoreManager, ai_service: AIService):
+    def __init__(self, vector_store, ai_service: AIService):
         self.vector_store = vector_store
         self.ai_service = ai_service
 

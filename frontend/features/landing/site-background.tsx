@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import { usePrefersReducedMotion } from "@/features/landing/motion";
+import { usePrefersReducedMotion } from "@/features/shared/motion/motion";
 
 /**
  * The marketing page's persistent atmosphere: a fixed, full-viewport 3D scene
@@ -47,12 +47,16 @@ export function SiteBackground() {
 
   return (
     <div ref={containerRef} className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
-      {/* Base wash: warm gradient with subtle top-to-bottom depth */}
+      {/* Base wash: warm gradient with subtle top-to-bottom depth. Hardcoded
+          (not var(--app-bg) etc.) on purpose — this page is always light
+          regardless of the app's dark/light toggle, so it can't safely read
+          the mutable app tokens; these literals match Tier 0's new warm
+          parchment scale so Landing still reads as the same material. */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, #fbf9f6 0%, #faf8f4 38%, #f7f4ee 100%)",
+            "linear-gradient(180deg, #fdf8f0 0%, #f7efe2 38%, #efe1cc 100%)",
         }}
       />
 
@@ -67,19 +71,19 @@ export function SiteBackground() {
         className="absolute left-[6%] top-[4%]"
         style={{ transform: "translate3d(calc(var(--px, 0) * -16px), calc(var(--py, 0) * -16px), 0)" }}
       >
-        <div className="orbit-a h-[520px] w-[520px] rounded-full blur-3xl" style={{ background: "radial-gradient(circle, rgba(224,138,62,0.18), transparent 70%)" }} />
+        <div className="orbit-a h-[520px] w-[520px] rounded-full blur-2xl" style={{ background: "radial-gradient(circle, rgba(197,105,31,0.18), transparent 70%)" }} />
       </div>
       <div
         className="absolute right-[4%] top-[22%]"
         style={{ transform: "translate3d(calc(var(--px, 0) * -11px), calc(var(--py, 0) * -11px), 0)" }}
       >
-        <div className="orbit-b h-[420px] w-[420px] rounded-full blur-3xl" style={{ background: "radial-gradient(circle, rgba(120,113,108,0.12), transparent 70%)" }} />
+        <div className="orbit-b h-[420px] w-[420px] rounded-full blur-2xl" style={{ background: "radial-gradient(circle, rgba(120,113,108,0.12), transparent 70%)" }} />
       </div>
       <div
         className="absolute left-[20%] top-[62%]"
         style={{ transform: "translate3d(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px), 0)" }}
       >
-        <div className="orbit-c h-[460px] w-[460px] rounded-full blur-3xl" style={{ background: "radial-gradient(circle, rgba(224,138,62,0.14), transparent 72%)" }} />
+        <div className="orbit-c h-[460px] w-[460px] rounded-full blur-2xl" style={{ background: "radial-gradient(circle, rgba(197,105,31,0.14), transparent 72%)" }} />
       </div>
 
       {/* Foreground particle field — fixed, so it reads throughout the scroll */}

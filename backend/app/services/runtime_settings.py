@@ -40,6 +40,31 @@ def _defs() -> dict[str, SettingDef]:
         "retention_days": SettingDef(
             int, 0, 365, "Days documents and chats are kept before automatic cleanup (0 = keep forever)"
         ),
+        "humanize_max_chars": SettingDef(int, 500, 50000, "Maximum characters accepted per Humaniser request"),
+        "humanize_min_words": SettingDef(
+            int,
+            0,
+            500,
+            "Minimum words required per Humaniser request (0 = no minimum). Very short text reads "
+            "as low-confidence to any AI detector regardless of authorship, so rewriting it can't "
+            "reliably move the needle — see the AI Checker's own confidence threshold.",
+        ),
+        "humanize_max_words": SettingDef(
+            int, 100, 20000, "Maximum words accepted per Humaniser request (in addition to humanize_max_chars)"
+        ),
+        "humanize_rate_limit_per_hour": SettingDef(int, 1, 1000, "Humaniser requests allowed per IP per hour"),
+        "checker_max_chars": SettingDef(int, 200, 50000, "Maximum characters accepted per AI Checker request"),
+        "checker_rate_limit_per_hour": SettingDef(int, 1, 1000, "AI Checker requests allowed per IP per hour"),
+        "realtime_rate_limit_per_hour": SettingDef(int, 1, 1000, "Real-time AI requests allowed per IP per hour"),
+        "feedback_max_chars": SettingDef(int, 200, 50000, "Maximum characters accepted per Writing Feedback request"),
+        "feedback_rate_limit_per_hour": SettingDef(int, 1, 1000, "Writing Feedback requests allowed per IP per hour"),
+        "extract_rate_limit_per_hour": SettingDef(
+            int, 1, 1000, "URL/image text-extraction requests allowed per IP per hour"
+        ),
+        "paper_analyzer_max_pages": SettingDef(int, 1, 300, "Maximum PDF pages accepted per Paper Analyzer request"),
+        "paper_analyzer_rate_limit_per_hour": SettingDef(
+            int, 1, 1000, "Paper Analyzer requests allowed per IP per hour"
+        ),
     }
 
 
@@ -52,6 +77,18 @@ def _env_defaults() -> dict[str, int | float]:
         "chat_rate_limit_per_minute": 20,
         "upload_rate_limit_per_minute": 10,
         "retention_days": s.retention_days,
+        "humanize_max_chars": 20000,
+        "humanize_min_words": 30,
+        "humanize_max_words": 3000,
+        "humanize_rate_limit_per_hour": 30,
+        "checker_max_chars": 20000,
+        "checker_rate_limit_per_hour": 30,
+        "realtime_rate_limit_per_hour": 30,
+        "feedback_max_chars": 20000,
+        "feedback_rate_limit_per_hour": 30,
+        "extract_rate_limit_per_hour": 20,
+        "paper_analyzer_max_pages": 60,
+        "paper_analyzer_rate_limit_per_hour": 20,
     }
 
 
@@ -167,3 +204,27 @@ def chat_rate_limit() -> str:
 
 def upload_rate_limit() -> str:
     return f"{int(runtime_settings.get('upload_rate_limit_per_minute'))}/minute"
+
+
+def humanize_rate_limit() -> str:
+    return f"{int(runtime_settings.get('humanize_rate_limit_per_hour'))}/hour"
+
+
+def checker_rate_limit() -> str:
+    return f"{int(runtime_settings.get('checker_rate_limit_per_hour'))}/hour"
+
+
+def realtime_rate_limit() -> str:
+    return f"{int(runtime_settings.get('realtime_rate_limit_per_hour'))}/hour"
+
+
+def feedback_rate_limit() -> str:
+    return f"{int(runtime_settings.get('feedback_rate_limit_per_hour'))}/hour"
+
+
+def extract_rate_limit() -> str:
+    return f"{int(runtime_settings.get('extract_rate_limit_per_hour'))}/hour"
+
+
+def paper_analyzer_rate_limit() -> str:
+    return f"{int(runtime_settings.get('paper_analyzer_rate_limit_per_hour'))}/hour"

@@ -19,8 +19,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={[
-        "z-50 min-w-[180px] overflow-hidden rounded-xl border border-white/[0.08]",
-        "bg-[#111]/95 backdrop-blur-xl p-1 shadow-2xl shadow-black/60",
+        "glass-card z-50 min-w-[180px] overflow-hidden rounded-xl p-1",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -45,7 +44,7 @@ export const DropdownMenuItem = React.forwardRef<
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
       destructive
         ? "text-red-400 focus:bg-red-500/10 focus:text-red-300"
-        : "text-zinc-300 focus:bg-white/[0.07] focus:text-white",
+        : "text-zinc-300 focus:bg-[var(--surface-3)] focus:text-[var(--text-primary)]",
       className,
     ].join(" ")}
     {...props}
@@ -59,7 +58,7 @@ export const DropdownMenuSeparator = React.forwardRef<
 >(({ className = "", ...props }, ref) => (
   <DropdownMenu.Separator
     ref={ref}
-    className={["my-1 h-px bg-white/[0.07]", className].join(" ")}
+    className={["my-1 h-px bg-[var(--border-subtle)]", className].join(" ")}
     {...props}
   />
 ));

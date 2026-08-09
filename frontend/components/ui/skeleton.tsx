@@ -2,7 +2,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div
       className={[
-        "animate-pulse rounded-lg bg-white/[0.04]",
+        "animate-pulse rounded-lg bg-[var(--surface-2)]",
         className,
       ].join(" ")}
     />
@@ -11,7 +11,7 @@ export function Skeleton({ className = "" }: { className?: string }) {
 
 export function DocumentSkeleton() {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/[0.04] bg-[#111] px-3 py-2.5">
+    <div className="flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2.5">
       <Skeleton className="h-4 w-4 shrink-0 rounded" />
       <div className="flex-1 space-y-1.5">
         <Skeleton className="h-2.5 w-3/4" />
@@ -23,7 +23,7 @@ export function DocumentSkeleton() {
 
 export function SessionSkeleton() {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/[0.04] bg-[#111] px-3 py-2.5">
+    <div className="flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2.5">
       <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
       <Skeleton className="h-2.5 flex-1" />
     </div>

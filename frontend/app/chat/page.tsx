@@ -42,6 +42,20 @@ export default function ChatPage() {
     return () => window.removeEventListener("toggle-sidebar", handler);
   }, []);
 
+  const handleNewSession = useCallback(async () => {
+    const draft = makeDefaultSession();
+    setSessions([draft, ...sessions]);
+    setActiveSessionId(draft.id);
+    if (email) {
+      try {
+        const created = await createSession(draft);
+        const persisted = { ...draft, id: created.id };
+        setSessions([persisted, ...sessions]);
+        setActiveSessionId(persisted.id);
+      } catch {/* silently ignore */}
+    }
+  }, [sessions, setSessions, setActiveSessionId, email, createSession]);
+
   // ── Settings modal open via custom event ────────────────────────────────────
   // Dispatched by ⌘+, shortcut below
   useEffect(() => {
@@ -75,22 +89,7 @@ export default function ChatPage() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, setSessions, setActiveSessionId, email, createSession]);
-
-  const handleNewSession = useCallback(async () => {
-    const draft = makeDefaultSession();
-    setSessions([draft, ...sessions]);
-    setActiveSessionId(draft.id);
-    if (email) {
-      try {
-        const created = await createSession(draft);
-        const persisted = { ...draft, id: created.id };
-        setSessions([persisted, ...sessions]);
-        setActiveSessionId(persisted.id);
-      } catch {/* silently ignore */}
-    }
-  }, [sessions, setSessions, setActiveSessionId, email, createSession]);
+  }, [handleNewSession]);
 
   // Trigger hidden file input for palette "Upload PDF" action
   const handlePaletteUpload = useCallback(() => {
@@ -110,7 +109,7 @@ export default function ChatPage() {
 
   return (
     <>
-      <MainLayout sidebar={<Sidebar email={email} />} sidebarCollapsed={!sidebarOpen}>
+      <MainLayout sidebar={<Sidebar email={email} onOpenPalette={() => setPaletteOpen(true)} />} sidebarCollapsed={!sidebarOpen}>
         <div className="flex h-full">
           <div className="flex-1 overflow-hidden">
             <ChatWindow

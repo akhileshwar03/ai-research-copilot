@@ -21,7 +21,7 @@ interface DocumentState {
   setSortOrder: (order: DocumentSortOrder) => void;
 }
 
-export const useDocumentStore = create<DocumentState>((set, get) => ({
+export const useDocumentStore = create<DocumentState>((set) => ({
   selectedDocument: "",
   setSelectedDocument: (selectedDocument) => set({ selectedDocument }),
 

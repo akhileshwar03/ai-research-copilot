@@ -45,13 +45,15 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
   };
 
   return (
-    <div className="shrink-0 px-4 pb-5 pt-3">
+    <div className="glass-bar shrink-0 px-4 pb-5 pt-3">
       <div className="mx-auto max-w-3xl">
         <div
           className="relative rounded-2xl border bg-[var(--surface-1)] transition-all focus-within:bg-[var(--surface-2)]"
           style={{
             borderColor: isFocused ? "var(--marketing-accent-soft)" : "var(--border-medium)",
-            boxShadow: isFocused ? "0 0 0 3px var(--marketing-accent-soft)" : "none",
+            boxShadow: isFocused
+              ? "0 0 0 3px var(--marketing-accent-soft), 0 8px 24px -12px var(--accent-glow)"
+              : "0 8px 24px -16px var(--accent-glow)",
           }}
         >
           <textarea
@@ -96,7 +98,7 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
               <button
                 onClick={onSubmit}
                 disabled={!value.trim()}
-                className="flex h-8 w-8 items-center justify-center rounded-xl text-black transition hover:opacity-90 disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-xl text-white transition hover:opacity-90 disabled:opacity-30"
                 style={{ backgroundColor: value.trim() ? "var(--marketing-accent)" : "var(--text-primary)" }}
                 aria-label="Send message"
               >

@@ -27,14 +27,17 @@ class _FakeVectorStore:
 
 @pytest.fixture
 def retention_env(monkeypatch, tmp_path):
-    """Route the cleanup's own session/vector-store/uploads at test doubles."""
+    """Route the cleanup's own session/vector-store/storage at test doubles."""
+    import app.api.dependencies.services as services_module
     import app.db.session as db_session_module
-    import app.modules.rag.vector_store_manager as vsm_module
+    import app.services.storage_service as storage_module
+    from app.services.storage_service import LocalStorageService
 
     fake_store = _FakeVectorStore()
+    fake_storage = LocalStorageService(base_dir=str(tmp_path))
     monkeypatch.setattr(db_session_module, "SessionLocal", TestingSessionLocal)
-    monkeypatch.setattr(vsm_module, "VectorStoreManager", lambda: fake_store)
-    monkeypatch.setattr(retention_service.get_settings(), "uploads_dir", str(tmp_path), raising=False)
+    monkeypatch.setattr(storage_module, "get_storage_service", lambda: fake_storage)
+    monkeypatch.setattr(services_module, "get_vector_store_manager", lambda: fake_store)
     return fake_store
 
 

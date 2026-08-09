@@ -44,8 +44,8 @@ function NavItem({
       className={[
         "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[13px] transition",
         active
-          ? "bg-white/[0.08] text-[var(--text-primary)] font-medium"
-          : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300",
+          ? "bg-[var(--surface-3)] text-[var(--text-primary)] font-medium"
+          : "text-zinc-500 hover:bg-[var(--surface-2)] hover:text-zinc-300",
       ].join(" ")}
     >
       <span className={active ? "text-[var(--text-primary)]" : "text-zinc-600"}>{icon}</span>
@@ -131,7 +131,7 @@ function ProfileSection({ email }: { email: string | null }) {
 
       {/* Avatar */}
       <div className="mb-8 flex items-center gap-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-white/[0.08] text-[28px] font-bold uppercase text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[28px] font-bold uppercase text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]">
           {initial}
         </div>
         <div>
@@ -300,8 +300,8 @@ function SettingsSection({ email }: { email: string | null }) {
               className={[
                 "flex flex-col items-start gap-2 rounded-xl border px-4 py-3 text-left transition",
                 theme === id
-                  ? "border-[var(--border-strong)] bg-white/[0.08] text-[var(--text-primary)]"
-                  : "border-[var(--border-subtle)] bg-white/[0.02] text-zinc-500 hover:border-[var(--border-medium)] hover:text-zinc-300",
+                  ? "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-primary)]"
+                  : "border-[var(--border-subtle)] bg-[var(--surface-1)] text-zinc-500 hover:border-[var(--border-medium)] hover:text-zinc-300",
               ].join(" ")}
               style={theme === id ? { borderColor: "var(--marketing-accent)" } : undefined}
             >
@@ -332,7 +332,7 @@ function SettingsSection({ email }: { email: string | null }) {
         <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
           Chat
         </h3>
-        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)]">
           <SettingRow
             title="Press Enter to send"
             description="When off, Enter inserts a newline — send with the button or ⌘+Enter."
@@ -347,14 +347,14 @@ function SettingsSection({ email }: { email: string | null }) {
         <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
           Data &amp; storage
         </h3>
-        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)]">
           <SettingRow
             title="Export all chats"
             description="Download every conversation in this workspace as a JSON file."
           >
             <button
               onClick={handleExportChats}
-              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+              className="hover-surface shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
             >
               Export
             </button>
@@ -365,7 +365,7 @@ function SettingsSection({ email }: { email: string | null }) {
           >
             <button
               onClick={handleClearDeviceData}
-              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+              className="hover-surface shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
             >
               Clear
             </button>
@@ -389,14 +389,14 @@ function SettingsSection({ email }: { email: string | null }) {
         <h3 className="mb-4 text-[13px] font-semibold uppercase tracking-widest text-zinc-600">
           Account
         </h3>
-        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-white/[0.02]">
+        <div className="divide-y divide-[var(--border-subtle)] rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-1)]">
           <SettingRow
             title="Signed in as"
             description={email ?? "Unknown account"}
           >
             <button
               onClick={logout}
-              className="shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)] hover:bg-white/[0.05]"
+              className="hover-surface shrink-0 rounded-xl border border-[var(--border-medium)] px-3.5 py-1.5 text-[12px] font-medium text-[var(--text-primary)] transition hover:border-[var(--border-strong)]"
             >
               Sign out
             </button>
@@ -520,7 +520,7 @@ function ShortcutsSection() {
                     {keys.map((k) => (
                       <kbd
                         key={k}
-                        className="min-w-[28px] rounded-md border border-[var(--border-medium)] bg-white/[0.06] px-2 py-1 text-center text-[11px] font-mono text-zinc-300"
+                        className="min-w-[28px] rounded-md border border-[var(--border-medium)] bg-[var(--surface-2)] px-2 py-1 text-center text-[11px] font-mono text-zinc-300"
                       >
                         {k}
                       </kbd>
@@ -590,7 +590,7 @@ function TutorialSection() {
             key={step}
             className="flex gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.05] text-[20px]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[20px]">
               {icon}
             </div>
             <div>
@@ -682,7 +682,7 @@ function WhatsNewSection() {
           >
             <div className="flex items-center gap-2">
               <span className="text-[22px]">{icon}</span>
-              <span className="rounded-md border border-[var(--border-medium)] bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+              <span className="rounded-md border border-[var(--border-medium)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
                 {badge}
               </span>
             </div>
@@ -770,10 +770,10 @@ export function ProfileModal({
       />
 
       {/* Panel */}
-      <div className="relative z-10 flex h-[88vh] w-full max-w-[860px] overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--modal-bg)] shadow-2xl shadow-black/60">
+      <div className="glass-card relative z-10 flex h-[88vh] w-full max-w-[860px] overflow-hidden rounded-2xl">
 
         {/* ── Left nav ──────────────────────────────────────────────── */}
-        <div className="flex w-[210px] shrink-0 flex-col border-r border-[var(--border-subtle)] bg-[var(--sidebar-bg)] p-3">
+        <div className="glass-panel flex w-[210px] shrink-0 flex-col border-r p-3">
           {/* Header */}
           <div className="mb-4 px-3 py-2">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
@@ -829,7 +829,7 @@ export function ProfileModal({
         {/* ── Close button ───────────────────────────────────────────── */}
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-white/[0.04] text-zinc-500 transition hover:border-[var(--border-strong)] hover:text-zinc-200"
+          className="absolute right-4 top-4 flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border-medium)] bg-[var(--surface-2)] text-zinc-500 transition hover:border-[var(--border-strong)] hover:text-zinc-200"
         >
           <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -7,6 +7,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import type { Message } from "@/shared/types/chat";
+import { Glare } from "@/features/shared/motion/motion";
+import { CopyButton } from "@/features/shared/components/copy-button";
 
 interface ChatMessageListProps {
   messages: Message[];
@@ -46,50 +48,6 @@ function StreamingDot() {
         }
       `}</style>
     </span>
-  );
-}
-
-// ─── Copy button ──────────────────────────────────────────────────────────────
-
-function CopyButton({ text, className = "" }: { text: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {/* ignore */}
-  }, [text]);
-
-  return (
-    <button
-      onClick={copy}
-      className={[
-        "flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium transition",
-        copied
-          ? "text-emerald-400"
-          : "text-zinc-600 hover:bg-white/[0.06] hover:text-zinc-300",
-        className,
-      ].join(" ")}
-      title={copied ? "Copied!" : "Copy"}
-    >
-      {copied ? (
-        <>
-          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          Copied
-        </>
-      ) : (
-        <>
-          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          Copy
-        </>
-      )}
-    </button>
   );
 }
 
@@ -139,13 +97,15 @@ function ScrollFab({ onClick }: { onClick: () => void }) {
 // ─── Message timestamp ────────────────────────────────────────────────────────
 
 function MessageTimestamp() {
-  // Capture once on mount so the timestamp doesn't update during streaming re-renders
-  const timeRef = useRef(
+  // Lazy initializer runs once on mount, so the timestamp doesn't update
+  // during streaming re-renders — and state (unlike a ref) is safe to read
+  // during render.
+  const [time] = useState(() =>
     new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   );
   return (
     <span className="msg-timestamp shrink-0 text-[10px] text-zinc-700 self-end mb-1">
-      {timeRef.current}
+      {time}
     </span>
   );
 }
@@ -162,22 +122,19 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ring-1",
         isUser
           ? "bg-[var(--bubble-user-bg)] text-[var(--bubble-user-text)] ring-[var(--border-medium)]"
-          : "bg-white/[0.05] text-zinc-500 ring-[var(--border-subtle)]",
+          : "bg-[var(--surface-2)] text-zinc-500 ring-[var(--border-subtle)]",
       ].join(" ")}>
         {isUser ? userInitial : "AI"}
       </div>
 
-      {/* Bubble */}
-      <div className={[
-        "relative max-w-[80%] rounded-2xl",
-        isUser
-          ? "rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)]"
-          : "rounded-tl-sm bg-[var(--bubble-ai-bg)] px-4 py-3 text-[var(--bubble-ai-text)] ring-1 ring-[var(--border-subtle)]",
-      ].join(" ")}>
-        {isUser ? (
+      {/* Bubble — user stays a solid accent fill (the "sent" affordance);
+          AI responses are glass-card, matching the mockup's elevated cards. */}
+      {isUser ? (
+        <div className="relative max-w-[80%] rounded-2xl rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)]">
           <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
-        ) : (
-          <>
+        </div>
+      ) : (
+        <Glare className="glass-card relative block max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 text-[var(--bubble-ai-text)]">
             <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -190,7 +147,7 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
                       return <CodeBlock language={match[1]} code={codeStr} />;
                     }
                     return (
-                      <code className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[13px] font-mono text-zinc-300">
+                      <code className="rounded bg-[var(--surface-3)] px-1.5 py-0.5 text-[13px] font-mono text-zinc-300">
                         {children}
                       </code>
                     );
@@ -203,7 +160,7 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
                   h2: ({ children }) => <h2 className="mb-2 text-[15px] font-semibold">{children}</h2>,
                   h3: ({ children }) => <h3 className="mb-2 text-[14px] font-semibold">{children}</h3>,
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-white/20 pl-4 italic text-zinc-400">{children}</blockquote>
+                    <blockquote className="border-l-2 border-[var(--border-medium)] pl-4 italic text-zinc-400">{children}</blockquote>
                   ),
                   table: ({ children }) => (
                     <div className="mb-3 overflow-x-auto">
@@ -211,7 +168,7 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
                     </div>
                   ),
                   th: ({ children }) => (
-                    <th className="border border-[var(--border-subtle)] bg-white/[0.04] px-3 py-1.5 text-left font-semibold">{children}</th>
+                    <th className="border border-[var(--border-subtle)] bg-[var(--surface-3)] px-3 py-1.5 text-left font-semibold">{children}</th>
                   ),
                   td: ({ children }) => (
                     <td className="border border-[var(--border-subtle)] px-3 py-1.5">{children}</td>
@@ -222,16 +179,23 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
               </ReactMarkdown>
             </div>
 
-            {/* Citation chip — always visible; it's the product's core promise, not a footnote */}
+            {/* Citation chips — always visible; it's the product's core promise, not a footnote.
+                One pill per document, matching the pattern already built for Real-time AI's
+                web sources — split on the ", " separator formatSources() joins with. */}
             {message.sources && (
-              <div
-                className="mt-2.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-              >
-                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                {message.sources}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {message.sources.split(", ").map((name, si) => (
+                  <span
+                    key={si}
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                    style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+                  >
+                    <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    {name}
+                  </span>
+                ))}
               </div>
             )}
 
@@ -239,9 +203,8 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
             <div className="mt-1.5 opacity-0 transition-opacity group-hover:opacity-100">
               <CopyButton text={message.content} />
             </div>
-          </>
-        )}
-      </div>
+        </Glare>
+      )}
 
       {/* Timestamp — fades in on group hover */}
       <MessageTimestamp />
@@ -302,7 +265,7 @@ export function ChatMessageList({
   );
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
+    <div ref={containerRef} className="relative flex-1 overflow-y-auto bg-[var(--app-bg)] scrollbar-thin">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
 
         {/* Welcome / empty state */}
@@ -331,7 +294,7 @@ export function ChatMessageList({
               </div>
             </div>
             <div>
-              <p className="text-[19px] text-zinc-200" style={{ fontFamily: "var(--font-display)" }}>
+              <p className="font-headline text-[19px] font-bold text-zinc-200">
                 Start your research
               </p>
               <p className="mt-1 text-[13px] text-zinc-600">Upload a PDF or ask anything to begin</p>
@@ -342,7 +305,7 @@ export function ChatMessageList({
                 <button
                   key={hint}
                   onClick={() => onSuggestionClick?.(hint)}
-                  className="cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-white/[0.02] px-4 py-2.5 text-[12px] text-zinc-600 text-left transition hover:bg-white/[0.05] hover:text-zinc-400"
+                  className="hover-surface cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-2.5 text-[12px] text-zinc-600 text-left transition hover:text-zinc-400"
                   style={{ borderColor: "var(--border-subtle)" }}
                   onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
                   onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-subtle)")}
@@ -361,10 +324,10 @@ export function ChatMessageList({
         {/* Streaming indicator */}
         {isStreaming && (
           <div className="flex gap-3">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/[0.05] text-[10px] font-semibold text-zinc-500 ring-1 ring-[var(--border-subtle)]">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-semibold text-zinc-500 ring-1 ring-[var(--border-subtle)]">
               AI
             </div>
-            <div className="max-w-[80%] rounded-2xl rounded-tl-sm bg-[var(--bubble-ai-bg)] px-4 py-3 ring-1 ring-[var(--border-subtle)]">
+            <div className="glass-card max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3">
               <StreamingDot />
             </div>
           </div>

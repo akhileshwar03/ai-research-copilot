@@ -79,12 +79,12 @@ export function OtpInput({ value, onChange, onComplete, length = 6, disabled = f
           disabled={disabled}
           className={[
             "h-14 w-12 rounded-xl border text-center text-xl font-mono font-semibold",
-            "bg-[#111] outline-none transition-all duration-150",
+            "bg-[var(--surface-2)] outline-none transition-all duration-150",
             "disabled:cursor-not-allowed disabled:opacity-40",
             value[i]
-              ? "border-white/30 text-white ring-1 ring-white/10"
-              : "border-white/[0.08] text-zinc-400",
-            "focus:border-white/40 focus:ring-1 focus:ring-white/20 focus:text-white",
+              ? "border-[var(--border-strong)] text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]"
+              : "border-[var(--border-subtle)] text-zinc-400",
+            "focus:border-[var(--marketing-accent)] focus:ring-1 focus:ring-[var(--marketing-accent-soft)] focus:text-[var(--text-primary)]",
           ].join(" ")}
         />
       ))}

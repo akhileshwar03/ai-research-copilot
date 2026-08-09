@@ -76,3 +76,19 @@ coverage/
 # =========================
 tmp/
 temp/
+
+# =========================
+# Phase 2 finetune — local artifacts, never commit
+# =========================
+# Corpus exports: 117MB train.jsonl exceeds GitHub's 100MB hard limit outright,
+# and the corpus is third-party text under varied licenses — not for a public repo.
+backend/scripts/finetune/data/
+# Model binaries pulled from the Modal volume for local Ollama QA
+*.gguf
+# Per-run local state / analysis outputs (regenerable, not source)
+backend/scripts/finetune/.modal_run_id.json
+backend/scripts/finetune/.tag_nano_cursor.json
+backend/scripts/finetune/corpus_signal_check_results.json
+backend/scripts/finetune/eval_detector_results.json
+# Kaggle working dirs: corpus chunks staged for/pulled from Kaggle kernels
+backend/scripts/finetune/kaggle/work/

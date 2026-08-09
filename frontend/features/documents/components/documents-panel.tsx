@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CheckIcon } from "@/features/shared/components/icons";
 
 interface DocumentsPanelProps {
   documents: DocumentItem[];
@@ -53,14 +54,6 @@ function DotsIcon() {
   return (
     <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
       <circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
     </svg>
   );
 }
@@ -168,7 +161,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
             <DropdownMenuRoot>
               <DropdownMenuTrigger asChild>
                 <button
-                  className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
+                  className="hover-surface flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:text-zinc-300"
                   title="Sort documents"
                 >
                   <SortIcon />
@@ -191,7 +184,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
 
           {/* Upload */}
           <label
-            className="flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
+            className="hover-surface flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:text-zinc-300"
             title="Upload a PDF"
           >
             <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
@@ -220,7 +213,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
             </button>
             <button
               onClick={clearChecked}
-              className="rounded-md px-2 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05]"
+              className="hover-surface rounded-md px-2 py-1 text-[11px] text-zinc-500 transition"
             >
               Clear
             </button>
@@ -237,7 +230,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
         </div>
       ) : sorted.length === 0 ? (
         <label
-          className="group flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-8 text-center transition hover:bg-white/[0.02]"
+          className="hover-surface group flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-8 text-center transition"
           style={{ borderColor: "var(--border-medium)" }}
           onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
           onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-medium)")}
@@ -264,8 +257,8 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                 className={[
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
                   allChecked
-                    ? "border-white bg-white text-black"
-                    : "border-white/[0.15] bg-transparent hover:border-white/30",
+                    ? "border-transparent bg-[var(--marketing-accent)] text-black"
+                    : "border-[var(--border-medium)] bg-transparent hover:border-[var(--border-strong)]",
                 ].join(" ")}
               >
                 {allChecked && <CheckIcon />}
@@ -288,8 +281,8 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                 className={[
                   "group relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
                   isActive
-                    ? "border-white/20 bg-white/[0.07]"
-                    : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)] hover:bg-white/[0.04]",
+                    ? "border-[var(--border-medium)] bg-[var(--surface-2)]"
+                    : "hover-surface border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)]",
                   isDeleting ? "opacity-50" : "",
                 ].join(" ")}
               >
@@ -307,8 +300,8 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   className={[
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
                     isChecked
-                      ? "border-white bg-white text-black"
-                      : "border-white/[0.15] bg-transparent hover:border-white/30",
+                      ? "border-transparent bg-[var(--marketing-accent)] text-black"
+                      : "border-[var(--border-medium)] bg-transparent hover:border-[var(--border-strong)]",
                   ].join(" ")}
                 >
                   {isChecked && <CheckIcon />}
@@ -352,7 +345,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   <DropdownMenuTrigger asChild>
                     <button
                       onClick={(e) => e.stopPropagation()}
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-700 opacity-0 transition group-hover:opacity-100 hover:bg-white/[0.08] hover:text-zinc-300 focus:opacity-100"
+                      className="hover-surface flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-700 opacity-0 transition group-hover:opacity-100 hover:text-zinc-300 focus:opacity-100"
                     >
                       <DotsIcon />
                     </button>
@@ -391,7 +384,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
           })}
 
           {/* Upload more */}
-          <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] py-2 text-[11px] text-zinc-700 transition hover:border-white/[0.12] hover:text-zinc-500">
+          <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] py-2 text-[11px] text-zinc-700 transition hover:border-[var(--border-medium)] hover:text-zinc-500">
             <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
             <UploadIcon />
             {isUploading ? "Uploading…" : "Add PDF"}

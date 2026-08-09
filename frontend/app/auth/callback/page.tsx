@@ -11,7 +11,7 @@
  * Flow:
  *   Backend OAuth callback → redirect to /auth/callback?code=<one-time-code>
  *   This page calls POST /auth/oauth/exchange with the code
- *   Receives tokens, stores them, redirects to /chat
+ *   Receives tokens, stores them, redirects to / (home — pick a product from there)
  */
 
 import { Suspense, useEffect, useState } from "react";
@@ -20,6 +20,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiRequest } from "@/services/api/client";
 import { setStoredTokens, getUserEmailFromToken } from "@/shared/lib/token-storage";
 import { useAuthStore } from "@/stores/auth-store";
+import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 
 interface ExchangeResponse {
   access_token?: string;
@@ -79,7 +80,7 @@ function AuthCallbackInner() {
           email: getUserEmailFromToken(accessToken),
         });
 
-        router.replace("/chat");
+        router.replace("/");
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : "Token exchange failed";
@@ -90,39 +91,55 @@ function AuthCallbackInner() {
 
   if (status === "error") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--app-bg)] px-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
-          <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+      <div className="relative flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+        <AtmosphereBackground variant="soft" />
+        <div className="glass-card relative z-10 flex flex-col items-center gap-4 rounded-2xl px-8 py-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
+            <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </div>
+          <div className="text-center">
+            <p className="font-headline text-[15px] font-bold text-[var(--text-primary)]">Sign-in failed</p>
+            <p className="mt-1 text-[13px] text-zinc-500">{errorMsg}</p>
+          </div>
+          <button
+            onClick={() => router.replace("/login")}
+            className="mt-2 rounded-xl px-6 py-2.5 text-[13px] font-semibold text-white transition hover:opacity-90"
+            style={{ backgroundColor: "var(--marketing-accent)" }}
+          >
+            Back to sign in
+          </button>
         </div>
-        <div className="text-center">
-          <p className="text-[15px] font-medium text-white">Sign-in failed</p>
-          <p className="mt-1 text-[13px] text-zinc-500">{errorMsg}</p>
-        </div>
-        <button
-          onClick={() => router.replace("/login")}
-          className="mt-2 rounded-xl bg-white px-6 py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100"
-        >
-          Back to sign in
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
-      <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-3">
+      <AtmosphereBackground variant="soft" />
+      <div className="relative z-10 flex flex-col items-center gap-3">
+        <div
+          className="h-6 w-6 animate-spin rounded-full border-2"
+          style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
+        />
+        <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
+      </div>
     </div>
   );
 }
 
 export default function AuthCallbackPage() {
   const loadingFallback = (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--app-bg)]">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/10 border-t-white/60" />
-      <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-3">
+      <AtmosphereBackground variant="soft" />
+      <div className="relative z-10 flex flex-col items-center gap-3">
+        <div
+          className="h-6 w-6 animate-spin rounded-full border-2"
+          style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
+        />
+        <p className="text-[13px] text-zinc-600">Completing sign-in…</p>
+      </div>
     </div>
   );
 
