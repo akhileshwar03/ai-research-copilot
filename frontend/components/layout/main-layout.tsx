@@ -6,20 +6,28 @@ import {
   PanelResizeHandle,
 } from "react-resizable-panels";
 
+import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+
 interface MainLayoutProps {
   sidebar: React.ReactNode;
   children: React.ReactNode;
   /** When true the sidebar panel is hidden and the main area fills the screen */
   sidebarCollapsed?: boolean;
+  /** Defaults to the "calm" mood atmosphere; pass a product's own background (e.g. CheckerBackground) to override. */
+  background?: React.ReactNode;
 }
 
 export default function MainLayout({
   sidebar,
   children,
   sidebarCollapsed = false,
+  background,
 }: MainLayoutProps) {
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-white">
+    <div className="relative h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-white">
+      {background ?? <AtmosphereBackground variant="calm" />}
+
+      <div className="relative z-10 h-full w-full">
       {sidebarCollapsed ? (
         /* Collapsed: full-width main area, no panel overhead */
         <main className="h-full overflow-hidden">{children}</main>
@@ -48,6 +56,7 @@ export default function MainLayout({
           </Panel>
         </PanelGroup>
       )}
+      </div>
     </div>
   );
 }

@@ -203,7 +203,6 @@ app.add_middleware(
 app.middleware("http")(request_context_middleware)
 
 os.makedirs(settings.uploads_dir, exist_ok=True)
-os.makedirs(settings.chroma_path, exist_ok=True)
 
 # NOTE: uploads are deliberately NOT mounted as public static files.
 # PDFs are served through GET /documents/{id}/file with an ownership check.

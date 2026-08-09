@@ -144,17 +144,17 @@ class AuthService:
         """Permanently delete a user account and ALL associated data.
 
         Order:
-        1. Remove uploaded PDF files from disk + vectors from ChromaDB
+        1. Remove uploaded PDF files from storage + vectors from the vector store
         2. Delete DB document rows
         3. Delete chat sessions (cascade → chat messages)
         4. Delete the user row (cascade → identities, refresh tokens)
         """
-        import os
+        from app.api.dependencies.services import get_vector_store_manager
         from app.core.config import get_settings
         from app.db.models.chat_models import ChatSession
         from app.db.models.document import Document
         from app.db.repositories.document_repository import DocumentRepository
-        from app.modules.rag.vector_store_manager import VectorStoreManager
+        from app.services.storage_service import get_storage_service
 
         user = self.user_repo.get_by_email(email)
         if not user:
@@ -166,14 +166,13 @@ class AuthService:
         # 1. Purge each document's file and vector embeddings before removing DB rows
         docs = DocumentRepository(db).list_by_user(email)
         if docs:
-            vector_store = VectorStoreManager()
+            storage = get_storage_service()
+            vector_store = get_vector_store_manager()
             for doc in docs:
-                filepath = os.path.join(settings.uploads_dir, doc.stored_filename)
-                if os.path.exists(filepath):
-                    try:
-                        os.remove(filepath)
-                    except Exception:
-                        logger.exception("delete_account: failed to remove file %s", filepath)
+                try:
+                    storage.delete(doc.stored_filename)
+                except Exception:
+                    logger.exception("delete_account: failed to remove file %s", doc.stored_filename)
                 try:
                     vector_store.delete_by_source(doc.stored_filename)
                 except Exception:

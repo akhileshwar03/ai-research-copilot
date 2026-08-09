@@ -1,7 +1,8 @@
 import Link from "next/link";
 
+import { NavProfileMenu } from "@/features/auth/components/nav-profile-menu";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
-import { Reveal, Tilt3D } from "@/features/landing/motion";
+import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { SiteBackground } from "@/features/landing/site-background";
 
 const GITHUB_REPO_URL = "https://github.com/akhileshwar03/ai-research-copilot";
@@ -18,59 +19,62 @@ function SparkIcon({ className }: { className?: string }) {
   );
 }
 
-const FEATURES = [
+const PRODUCTS = [
   {
-    title: "Cited by page, not by vibe",
-    description:
-      "Every answer is grounded in your documents and points to the exact page it came from — trace any claim back to its source in one click.",
-    span: "lg" as const,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-    ),
+    name: "Research Copilot",
+    tagline: "Upload documents, ask questions, get page-cited answers.",
+    href: "/chat",
+    status: "Available now",
+    icon: "M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25",
+    accent: "#c5691f",
+    accentSoft: "#c5691f1f",
+    accentText: "#9a4d14",
+    glow: "rgba(197,105,31,0.26)",
   },
   {
-    title: "Streams in real time",
-    description: "Token-by-token responses over server-sent events — no spinners, no waiting for the full reply.",
-    span: "sm" as const,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-      </svg>
-    ),
+    name: "Humanizer",
+    tagline: "Rewrite AI-sounding text to read naturally — meaning and facts preserved.",
+    href: "/humanizer",
+    status: "Available now",
+    icon: "M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42",
+    accent: "#b6446a",
+    accentSoft: "#b6446a1f",
+    accentText: "#8f3453",
+    glow: "rgba(182,68,106,0.24)",
   },
   {
-    title: "Compares across documents",
-    description: "Select multiple PDFs and ask one question across all of them — synthesis, not just retrieval.",
-    span: "sm" as const,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-      </svg>
-    ),
+    name: "AI Checker",
+    tagline: "Decisive AI-text detection plus free grammar and style feedback.",
+    href: "/checker",
+    status: "Available now",
+    icon: "M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+    accent: "#1f7d6f",
+    accentSoft: "#1f7d6f1f",
+    accentText: "#145c51",
+    glow: "rgba(31,125,111,0.22)",
   },
   {
-    title: "Remembers the thread",
-    description:
-      "Pinned documents and persistent sessions — pick up any research conversation exactly where you left it, days later.",
-    span: "lg" as const,
-    icon: (
-      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.906 2.224v6.75A2.25 2.25 0 004.098 21h15.804a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-1.906-2.224m-16.5 0V6a2.25 2.25 0 012.25-2.25h12a2.25 2.25 0 012.25 2.25v3.776"
-        />
-      </svg>
-    ),
+    name: "Real-time AI",
+    tagline: "General chat grounded in live web search, with cited sources.",
+    href: "/realtime",
+    status: "Available now",
+    icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9",
+    accent: "#4457c9",
+    accentSoft: "#4457c91f",
+    accentText: "#33409e",
+    glow: "rgba(68,87,201,0.22)",
   },
-];
-
-const WORKFLOW = [
-  { step: "01", title: "Upload", description: "Drop in a PDF — it's parsed page by page and embedded into a private vector index." },
-  { step: "02", title: "Ask", description: "Ask in plain language. Retrieval finds the passages that actually answer your question." },
-  { step: "03", title: "Verify", description: "Every answer streams in with a page citation, so you can check it against the source." },
+  {
+    name: "Paper Analyzer",
+    tagline: "Scores your document's margins, spacing, font, and alignment against a style guide.",
+    href: "/paper-analyzer",
+    status: "Available now",
+    icon: "M9 4.5v15m6-15v15M4.5 9h15M4.5 15h15",
+    accent: "#7c4fb0",
+    accentSoft: "#7c4fb01f",
+    accentText: "#5f3a8a",
+    glow: "rgba(124,79,176,0.22)",
+  },
 ];
 
 export default function LandingPage() {
@@ -81,13 +85,31 @@ export default function LandingPage() {
 
       <div className="relative z-10">
       {/* ── Navigation: sticky, frosted ────────────────────────────────────── */}
-      <nav className="sticky top-0 z-40 border-b border-black/[0.05] bg-[#faf9f7]/80 backdrop-blur-md">
+      <nav className="glass-bar sticky top-0 z-40 border-b">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-zinc-900 text-white shadow-md shadow-zinc-900/20">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg shadow-md"
+              style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+            >
               <SparkIcon className="h-4 w-4" />
             </div>
-            <span className="text-[15px] font-semibold tracking-tight">Querex</span>
+            <span className="font-headline text-[15px] font-bold tracking-tight">Querex</span>
+          </div>
+          <div className="hidden items-center gap-1 md:flex">
+            {PRODUCTS.map((product) => (
+              <Link
+                key={product.name}
+                href={product.href}
+                className="group flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900"
+              >
+                <span
+                  className="h-1.5 w-1.5 rounded-full opacity-70 transition group-hover:opacity-100"
+                  style={{ backgroundColor: product.accent }}
+                />
+                {product.name}
+              </Link>
+            ))}
           </div>
           <div className="flex items-center gap-2">
             <a
@@ -98,12 +120,7 @@ export default function LandingPage() {
             >
               GitHub
             </a>
-            <Link
-              href="/login"
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-[13px] font-semibold text-white shadow-md shadow-zinc-900/20 transition hover:bg-zinc-700"
-            >
-              Sign in
-            </Link>
+            <NavProfileMenu />
           </div>
         </div>
       </nav>
@@ -124,7 +141,7 @@ export default function LandingPage() {
                 style={{ borderColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
               >
                 <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "var(--marketing-accent)" }} />
-                AI research workspace for your documents
+                One account · 5 AI tools for research &amp; writing
               </div>
             </Reveal>
 
@@ -145,7 +162,9 @@ export default function LandingPage() {
               <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">
                 Upload research papers and reports, then have a conversation with them.
                 Querex retrieves the relevant passages and answers with page-level
-                citations — grounded, streamed, and traceable.
+                citations — grounded, streamed, and traceable. It&apos;s also home to a
+                Humanizer, an AI Checker, Real-time web search, and a Paper Analyzer, all
+                under one login.
               </p>
             </Reveal>
 
@@ -158,12 +177,10 @@ export default function LandingPage() {
                   Open workspace
                 </Link>
                 <a
-                  href={GITHUB_REPO_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="#products"
                   className="rounded-xl border border-zinc-300 bg-white px-7 py-3.5 text-[15px] font-medium text-zinc-800 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md"
                 >
-                  View source
+                  See all 5 tools
                 </a>
               </div>
               <p className="mt-5 text-[12px] text-zinc-400">
@@ -177,7 +194,7 @@ export default function LandingPage() {
             <div className="relative flex justify-center lg:justify-end" style={{ perspective: "1100px" }}>
               {/* Floating capability card, behind-left */}
               <div
-                className="animate-float-slower absolute -left-10 top-2 z-0 hidden rotate-[-6deg] rounded-xl border border-black/[0.05] bg-white px-3.5 py-2.5 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.18)] lg:block"
+                className="glass-card animate-float-slower absolute -left-10 top-2 z-0 hidden rotate-[-6deg] px-3.5 py-2.5 lg:block"
                 aria-hidden
               >
                 <div
@@ -195,7 +212,7 @@ export default function LandingPage() {
                   slack on the right (flush via justify-end), so this sits
                   below the card's bottom edge instead of beside it. */}
               <div
-                className="animate-float-slow absolute -bottom-12 right-6 z-20 hidden rotate-[5deg] rounded-xl border border-black/[0.05] bg-white px-3.5 py-2.5 shadow-[0_16px_40px_-12px_rgba(15,23,42,0.18)] lg:block"
+                className="glass-card animate-float-slow absolute -bottom-12 right-6 z-20 hidden rotate-[5deg] px-3.5 py-2.5 lg:block"
                 aria-hidden
               >
                 <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
@@ -210,6 +227,9 @@ export default function LandingPage() {
 
               {/* The demo itself, tilting toward the cursor */}
               <Tilt3D className="relative z-10">
+                <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-zinc-400 lg:text-right">
+                  Research Copilot, live preview
+                </p>
                 <LiveDemoWidget />
               </Tilt3D>
             </div>
@@ -217,272 +237,574 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Capability ribbon: the four pillars, stated with conviction ────── */}
-      <section className="border-y border-black/[0.06] bg-white">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 divide-x divide-black/[0.06] md:grid-cols-4">
-          {[
-            {
-              label: "Grounded in your sources",
-              sub: "Answers come from your files, not the model's memory.",
-              icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z",
-            },
-            {
-              label: "Page-level citations",
-              sub: "Every claim links to the exact page it came from.",
-              icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
-            },
-            {
-              label: "Real-time streaming",
-              sub: "Answers appear token by token — no waiting.",
-              icon: "M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z",
-            },
-            {
-              label: "Multi-document synthesis",
-              sub: "Ask one question across many files at once.",
-              icon: "M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2",
-            },
-          ].map((pillar, i) => (
-            <Reveal key={pillar.label} delay={i * 60}>
-              <div className="px-6 py-7">
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={pillar.icon} />
-                  </svg>
-                </div>
-                <p className="mt-3 text-[13.5px] font-semibold text-zinc-900">{pillar.label}</p>
-                <p className="mt-1 text-[12px] leading-5 text-zinc-500">{pillar.sub}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Features: bento grid with hover lift ───────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-6 pb-24 pt-24">
-        <div className="grid gap-4 md:grid-cols-2">
-          {FEATURES.map((feature, i) => (
-            <Reveal key={feature.title} delay={i * 70} className={feature.span === "lg" ? "md:col-span-2" : ""}>
-              <div className="group h-full rounded-2xl border border-black/[0.06] bg-white p-7 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_20px_45px_-14px_rgba(15,23,42,0.18)]">
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110"
-                  style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-                >
-                  {feature.icon}
-                </div>
-                <h3 className="mt-5 text-[17px] font-semibold tracking-tight text-zinc-900">{feature.title}</h3>
-                <p className="mt-2.5 text-[14px] leading-7 text-zinc-600">{feature.description}</p>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Comparison: where Querex actually differs ──────────────────────── */}
-      <section className="mx-auto max-w-7xl px-6 pb-28">
+      {/* ── Products: the whole suite, front and center ──────────────────────── */}
+      <section id="products" className="mx-auto max-w-7xl px-6 pb-20 pt-20">
         <Reveal>
           <div className="text-center">
-            <h2
-              className="text-3xl font-normal tracking-tight text-zinc-900"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Not another AI chatbot
+            <h2 className="font-headline text-3xl font-bold tracking-tight text-zinc-900">
+              Five tools. One account.
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-[14px] leading-7 text-zinc-500">
-              Most tools either chat without proof, or read PDFs without memory. Querex
-              is built to do both — grounded answers, kept in context.
+              Querex started as a document copilot. It&apos;s now a small suite of
+              research and writing tools, each free to use the moment you sign in.
             </p>
           </div>
         </Reveal>
 
-        <div className="mt-12 grid gap-5 md:grid-cols-3" style={{ perspective: "1400px" }}>
-          {[
-            {
-              name: "Generic AI chatbot",
-              tagline: "General-purpose conversation",
-              rows: [false, false, false, false, false],
-              elevated: false,
-            },
-            {
-              name: "Typical single-doc PDF tool",
-              tagline: "Chat with one file at a time",
-              rows: [true, false, false, false, false],
-              elevated: false,
-            },
-            {
-              name: "Querex",
-              tagline: "Grounded research workspace",
-              rows: [true, true, true, true, true],
-              elevated: true,
-            },
-          ].map((col, i) => (
-            <Reveal key={col.name} delay={i * 90}>
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {PRODUCTS.map((product, i) => {
+            const available = Boolean(product.href);
+            const card = (
               <div
                 className={[
-                  "relative h-full rounded-2xl border p-7 transition-all duration-500",
-                  col.elevated
-                    ? "border-transparent bg-zinc-900 text-white shadow-[0_35px_70px_-20px_rgba(15,23,42,0.5)] md:-translate-y-3 md:scale-[1.04]"
-                    : "border-black/[0.06] bg-white text-zinc-900 shadow-[0_2px_10px_rgba(15,23,42,0.04)]",
+                  "glass-card group relative h-full overflow-hidden p-6 transition-all duration-300",
+                  available ? "hover:-translate-y-1" : "opacity-60",
                 ].join(" ")}
-                style={
-                  col.elevated
-                    ? { transform: "translateZ(40px) rotateX(2deg)", transformStyle: "preserve-3d" }
-                    : { transform: "translateZ(0)" }
-                }
               >
-                {col.elevated && (
-                  <span
-                    className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-900 shadow-md"
-                    style={{ backgroundColor: "var(--marketing-accent)" }}
+                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
+                <div className="flex items-start justify-between">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110"
+                    style={{ backgroundColor: product.accentSoft, color: product.accentText }}
                   >
-                    This is Querex
+                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d={product.icon} />
+                    </svg>
+                  </div>
+                  <span
+                    className={[
+                      "rounded-full px-2 py-0.5 text-[10.5px] font-medium",
+                      available ? "bg-emerald-100 text-emerald-700" : "bg-zinc-100 text-zinc-500",
+                    ].join(" ")}
+                  >
+                    {product.status}
                   </span>
-                )}
-
-                <p className={`text-[15px] font-semibold ${col.elevated ? "text-white" : "text-zinc-900"}`}>
-                  {col.name}
-                </p>
-                <p className={`mt-1 text-[12.5px] ${col.elevated ? "text-zinc-400" : "text-zinc-500"}`}>
-                  {col.tagline}
-                </p>
-
-                <div className={`mt-6 space-y-3.5 border-t pt-6 ${col.elevated ? "border-white/10" : "border-black/[0.06]"}`}>
-                  {[
-                    "Page-level source citations",
-                    "Real-time token streaming",
-                    "Multi-document synthesis",
-                    "Admin dashboard & audit log",
-                    "Automatic retention controls",
-                  ].map((label, ri) => (
-                    <div key={label} className="flex items-center gap-2.5 text-[13px]">
-                      {col.rows[ri] ? (
-                        <span
-                          className="flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
-                          style={{
-                            backgroundColor: col.elevated ? "var(--marketing-accent)" : "var(--marketing-accent-soft)",
-                            color: col.elevated ? "#1c1917" : "var(--marketing-accent-text)",
-                          }}
-                        >
-                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        </span>
-                      ) : (
-                        <span className={`flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full ${col.elevated ? "bg-white/10" : "bg-black/[0.04]"}`}>
-                          <svg className={`h-2.5 w-2.5 ${col.elevated ? "text-zinc-500" : "text-zinc-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </span>
-                      )}
-                      <span className={col.elevated ? "text-zinc-200" : (col.rows[ri] ? "text-zinc-700" : "text-zinc-400")}>
-                        {label}
-                      </span>
-                    </div>
-                  ))}
                 </div>
+                <h3 className="mt-5 text-[15.5px] font-semibold tracking-tight text-zinc-900">{product.name}</h3>
+                <p className="mt-2 text-[13px] leading-6 text-zinc-600">{product.tagline}</p>
               </div>
-            </Reveal>
-          ))}
+            );
+
+            return (
+              <Reveal key={product.name} delay={i * 70}>
+                {product.href ? (
+                  <Link href={product.href} className="block h-full">
+                    {card}
+                  </Link>
+                ) : (
+                  card
+                )}
+              </Reveal>
+            );
+          })}
         </div>
       </section>
 
-      {/* ── How it works ───────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-6 pb-28">
+      {/* ── Research Copilot recap: compact, since the hero already proved it ── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 pb-4 pt-16">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-4 -z-10 rounded-[2.5rem] blur-3xl"
+          style={{ background: `radial-gradient(60% 100% at 15% 50%, ${PRODUCTS[0].glow}, transparent 70%)` }}
+          aria-hidden
+        />
         <Reveal>
-          <div className="rounded-3xl border border-black/[0.06] bg-white px-8 py-12 shadow-[0_2px_10px_rgba(15,23,42,0.04)] md:px-12">
-            <h2
-              className="text-center text-2xl font-normal tracking-tight text-zinc-900"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              How it works
-            </h2>
-            <div className="mt-10 grid gap-10 md:grid-cols-3">
-              {WORKFLOW.map((item) => (
-                <div key={item.step}>
-                  <span className="font-mono text-[13px]" style={{ color: "var(--marketing-accent-text)" }}>
-                    {item.step}
-                  </span>
-                  <h3 className="mt-2 text-[15px] font-semibold text-zinc-900">{item.title}</h3>
-                  <p className="mt-2 text-[13.5px] leading-6 text-zinc-600">{item.description}</p>
-                </div>
-              ))}
+          <div className="glass-card relative overflow-hidden px-8 py-10 md:px-12">
+            <div className="absolute inset-y-0 left-0 hidden w-1.5 md:block" style={{ backgroundColor: PRODUCTS[0].accent }} aria-hidden />
+            <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+              <div className="max-w-md">
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-widest"
+                  style={{ color: PRODUCTS[0].accentText }}
+                >
+                  The flagship tool
+                </p>
+                <h2 className="mt-2 font-headline text-2xl font-bold tracking-tight text-zinc-900">
+                  Research Copilot
+                </h2>
+                <p className="mt-3 text-[14px] leading-7 text-zinc-500">
+                  The original Querex product, and still the most capable — upload,
+                  ask, and every answer streams back with a page citation you can check.
+                </p>
+                <Link
+                  href="/chat"
+                  className="mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold"
+                  style={{ color: PRODUCTS[0].accentText }}
+                >
+                  Open Research Copilot
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </Link>
+              </div>
+
+              <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4 md:max-w-md">
+                {[
+                  { label: "Grounded in your sources", icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" },
+                  { label: "Page-level citations", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+                  { label: "Real-time streaming", icon: "M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" },
+                  { label: "Multi-document synthesis", icon: "M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" },
+                ].map((pillar) => (
+                  <div key={pillar.label} className="flex items-start gap-2.5">
+                    <div
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                      style={{ backgroundColor: PRODUCTS[0].accentSoft, color: PRODUCTS[0].accentText }}
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={pillar.icon} />
+                      </svg>
+                    </div>
+                    <p className="text-[12.5px] font-medium leading-5 text-zinc-700">{pillar.label}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </Reveal>
       </section>
 
-      {/* ── Built in the open: real, verifiable trust signals ──────────────── */}
-      <section className="mx-auto max-w-7xl px-6 pb-28">
-        <Reveal>
-          <div className="rounded-3xl border border-black/[0.06] bg-white px-8 py-12 shadow-[0_2px_10px_rgba(15,23,42,0.04)] md:px-12">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-xl"
-                style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+      {/* ── Humanizer: text left, mockup right ───────────────────────────────── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+          style={{ background: `radial-gradient(55% 90% at 85% 50%, ${PRODUCTS[1].glow}, transparent 70%)` }}
+          aria-hidden
+        />
+        <div className="grid items-center gap-12 md:grid-cols-2">
+          <Reveal>
+            <div>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: PRODUCTS[1].accentText }}
               >
-                <svg className="h-4.5 w-4.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-              </div>
-              <h2 className="text-2xl font-normal tracking-tight text-zinc-900" style={{ fontFamily: "var(--font-display)" }}>
-                Built in the open
-              </h2>
-              <p className="max-w-md text-[14px] leading-7 text-zinc-500">
-                No walled garden, no black box. The full source — retrieval pipeline,
-                auth, admin panel, and all — is on GitHub for anyone to read, audit, or run themselves.
+                Humanizer
               </p>
-            </div>
-
-            <div className="mt-10 grid gap-6 sm:grid-cols-3">
-              {[
-                {
-                  title: "Fully open source",
-                  desc: "The complete codebase is public. Read every line, or self-host your own instance.",
-                  icon: "M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5",
-                },
-                {
-                  title: "Covered by automated tests",
-                  desc: "Auth, retention, admin access, and RAG contracts run in CI on every change.",
-                  icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z",
-                },
-                {
-                  title: "Security-hardened by default",
-                  desc: "httpOnly sessions, rate limiting, and brute-force protection — not bolted on later.",
-                  icon: "M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z",
-                },
-              ].map((item) => (
-                <div key={item.title} className="text-center sm:text-left">
-                  <div
-                    className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg sm:mx-0"
-                    style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                    </svg>
-                  </div>
-                  <p className="mt-3 text-[14px] font-semibold text-zinc-900">{item.title}</p>
-                  <p className="mt-1.5 text-[13px] leading-6 text-zinc-500">{item.desc}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-9 flex justify-center">
-              <a
-                href={GITHUB_REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-5 py-2.5 text-[13px] font-medium text-zinc-800 transition hover:border-zinc-400 hover:bg-zinc-50"
+              <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                Sound human. Stay accurate.
+              </h2>
+              <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
+                Rewrite AI-sounding text so it reads naturally, with meaning and facts
+                preserved. Built to make writing genuinely better, not to trick a
+                detector — no invisible characters, no gimmicks, just better editing.
+              </p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  "Natural, direct rewrites — built for blog posts, social copy, and product writing",
+                  "Word-diff transparency — see exactly which words changed",
+                  "Streams live, token by token, no waiting for the full rewrite",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                    <span
+                      className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/humanizer"
+                className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                style={{ backgroundColor: PRODUCTS[1].accent, boxShadow: `0 10px 25px -8px ${PRODUCTS[1].glow}` }}
               >
-                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                </svg>
-                View the source on GitHub
-              </a>
+                Try Humanizer
+              </Link>
             </div>
-          </div>
-        </Reveal>
+          </Reveal>
+
+          <Reveal delay={120}>
+            <div className="relative mx-auto w-full max-w-[440px]">
+              <div
+                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
+                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[1].glow}, transparent 70%)` }}
+                aria-hidden
+              />
+              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
+                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
+                  <div className="flex gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                  </div>
+                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Humanizer</span>
+                  <span
+                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
+                    style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}
+                  >
+                    Natural
+                  </span>
+                </div>
+                <div className="px-4 py-5">
+                  <p className="text-[11.5px] font-medium uppercase tracking-wide text-zinc-400">Rewritten</p>
+                  <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-700">
+                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
+                      Artificial
+                    </mark>{" "}
+                    intelligence systems have revolutionized numerous industries.{" "}
+                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
+                      They
+                    </mark>{" "}
+                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
+                      also
+                    </mark>{" "}
+                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
+                      deliver
+                    </mark>{" "}
+                    significant efficiency gains.
+                  </p>
+                  <div className="mt-4 flex items-center justify-between border-t border-black/[0.05] pt-3">
+                    <span className="text-[11px] text-zinc-400">22 → 13 words</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-600 ring-1 ring-emerald-500/15">
+                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      Predicted AI score: 3%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── AI Checker: mockup left, text right ──────────────────────────────── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+          style={{ background: `radial-gradient(55% 90% at 15% 50%, ${PRODUCTS[2].glow}, transparent 70%)` }}
+          aria-hidden
+        />
+        <div className="grid items-center gap-12 md:grid-cols-2">
+          <Reveal className="order-2 md:order-1">
+            <div className="relative mx-auto w-full max-w-[440px]">
+              <div
+                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
+                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[2].glow}, transparent 70%)` }}
+                aria-hidden
+              />
+              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
+                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
+                  <div className="flex gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                  </div>
+                  <span className="ml-1 text-[11px] font-medium text-zinc-500">AI Checker</span>
+                  <span
+                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
+                    style={{ backgroundColor: PRODUCTS[2].accentSoft, color: PRODUCTS[2].accentText }}
+                  >
+                    Advanced Scan
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-3 px-4 py-6">
+                  <svg viewBox="0 0 100 100" className="h-24 w-24 -rotate-90">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="9" />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="none"
+                      stroke="#e0574f"
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 42 * 0.94} ${2 * Math.PI * 42}`}
+                    />
+                  </svg>
+                  <div className="-mt-16 text-center">
+                    <span className="font-mono text-2xl font-bold text-zinc-900">94%</span>
+                  </div>
+                  <span className="mt-8 rounded-full bg-red-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-red-600 ring-1 ring-red-500/15">
+                    AI-generated
+                  </span>
+                  <div className="mt-2 w-full rounded-xl border border-black/[0.06] bg-zinc-50 p-3 text-[12px] leading-relaxed text-zinc-500">
+                    In today&apos;s rapidly evolving landscape,{" "}
+                    <mark className="rounded bg-red-100 px-0.5 text-red-700">
+                      it is important to note that organizations must leverage cutting-edge solutions
+                    </mark>{" "}
+                    to stay competitive.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={120} className="order-1 md:order-2">
+            <div>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: PRODUCTS[2].accentText }}
+              >
+                AI Checker
+              </p>
+              <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                Decisive answers, not hedging.
+              </h2>
+              <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
+                Detect AI-generated text with sentence-level highlighting and a
+                paragraph-by-paragraph breakdown — plus a free grammar and style pass
+                bundled in. Every result carries an honest disclaimer, not false certainty.
+              </p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  "Sentence-level highlighting of the exact flagged text",
+                  "Advanced Scan — a paragraph-by-paragraph AI-probability breakdown",
+                  "Free Writing Feedback — grammar, spelling, and clarity issues",
+                  "States its own false-positive risk instead of overclaiming",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                    <span
+                      className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: PRODUCTS[2].accentSoft, color: PRODUCTS[2].accentText }}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/checker"
+                className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                style={{ backgroundColor: PRODUCTS[2].accent, boxShadow: `0 10px 25px -8px ${PRODUCTS[2].glow}` }}
+              >
+                Try AI Checker
+              </Link>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Real-time AI: text left, mockup right ────────────────────────────── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+          style={{ background: `radial-gradient(55% 90% at 85% 50%, ${PRODUCTS[3].glow}, transparent 70%)` }}
+          aria-hidden
+        />
+        <div className="grid items-center gap-12 md:grid-cols-2">
+          <Reveal>
+            <div>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: PRODUCTS[3].accentText }}
+              >
+                Real-time AI
+              </p>
+              <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                Current answers, always cited.
+              </h2>
+              <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
+                General chat grounded in live web search — every answer links back to a
+                real, clickable source. Search results are treated strictly as data to
+                cite, never as instructions to follow.
+              </p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  "Live web search on every question, not just training data",
+                  "Numbered, clickable citations for every claim",
+                  "Independent session history, separate from Research Copilot",
+                  "Search results can't hijack the model — they're data, not commands",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                    <span
+                      className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: PRODUCTS[3].accentSoft, color: PRODUCTS[3].accentText }}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/realtime"
+                className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                style={{ backgroundColor: PRODUCTS[3].accent, boxShadow: `0 10px 25px -8px ${PRODUCTS[3].glow}` }}
+              >
+                Try Real-time AI
+              </Link>
+            </div>
+          </Reveal>
+
+          <Reveal delay={120}>
+            <div className="relative mx-auto w-full max-w-[440px]">
+              <div
+                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
+                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[3].glow}, transparent 70%)` }}
+                aria-hidden
+              />
+              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
+                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
+                  <div className="flex gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                  </div>
+                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Real-time AI</span>
+                  <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600 ring-1 ring-emerald-500/15">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                    Live search
+                  </span>
+                </div>
+                <div className="flex flex-col gap-3 px-4 py-5">
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white">
+                      What&apos;s the latest stable Next.js release?
+                    </div>
+                  </div>
+                  <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700">
+                    Next.js 16.2, released this month, with faster Turbopack builds and
+                    improved caching.
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pl-1">
+                    {["[1] Next.js Blog", "[2] Vercel", "[3] GitHub Releases"].map((src) => (
+                      <span
+                        key={src}
+                        className="rounded-full px-2 py-1 text-[10.5px] font-medium"
+                        style={{ backgroundColor: PRODUCTS[3].accentSoft, color: PRODUCTS[3].accentText }}
+                      >
+                        {src}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </section>
+
+      {/* ── Paper Analyzer: mockup left, text right ──────────────────────────── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+          style={{ background: `radial-gradient(55% 90% at 15% 50%, ${PRODUCTS[4].glow}, transparent 70%)` }}
+          aria-hidden
+        />
+        <div className="grid items-center gap-12 md:grid-cols-2">
+          <Reveal className="order-2 md:order-1">
+            <div className="relative mx-auto w-full max-w-[440px]">
+              <div
+                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
+                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[4].glow}, transparent 70%)` }}
+                aria-hidden
+              />
+              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
+                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
+                  <div className="flex gap-1.5">
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
+                  </div>
+                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Paper Analyzer</span>
+                  <span
+                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
+                    style={{ backgroundColor: PRODUCTS[4].accentSoft, color: PRODUCTS[4].accentText }}
+                  >
+                    APA
+                  </span>
+                </div>
+                <div className="flex flex-col items-center gap-3 px-4 py-5">
+                  <svg viewBox="0 0 100 100" className="h-20 w-20 -rotate-90">
+                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="9" />
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="42"
+                      fill="none"
+                      stroke={PRODUCTS[4].accent}
+                      strokeWidth="9"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 42 * 0.91} ${2 * Math.PI * 42}`}
+                    />
+                  </svg>
+                  <div className="-mt-14 text-center">
+                    <span className="font-mono text-xl font-bold text-zinc-900">91</span>
+                  </div>
+                  <div className="mt-2 w-full space-y-1.5">
+                    {[
+                      { label: "Margins", ok: true },
+                      { label: "Line spacing", ok: true },
+                      { label: "Font", ok: true },
+                      { label: "Page numbering", ok: false },
+                    ].map((row) => (
+                      <div
+                        key={row.label}
+                        className="flex items-center justify-between rounded-lg border border-black/[0.05] bg-zinc-50 px-2.5 py-1.5 text-[11px]"
+                      >
+                        <span className="text-zinc-600">{row.label}</span>
+                        <span
+                          className={
+                            row.ok
+                              ? "rounded-full bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-600"
+                              : "rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-600"
+                          }
+                        >
+                          {row.ok ? "Pass" : "Warning"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={120} className="order-1 md:order-2">
+            <div>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: PRODUCTS[4].accentText }}
+              >
+                Paper Analyzer
+              </p>
+              <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                Formatting, actually measured.
+              </h2>
+              <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
+                Upload a research paper and pick a style guide — APA, MLA, or IEEE. Every
+                check is computed directly from the PDF&apos;s real margins, spacing, font,
+                and alignment, never guessed by a model looking at a description.
+              </p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  "Checks against APA, MLA, or IEEE — chosen before you upload",
+                  "Margins, line spacing, font, alignment, and page numbering",
+                  "Measured from real page geometry, not an LLM's best guess",
+                  "Every check shows the measured value next to what's expected",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                    <span
+                      className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: PRODUCTS[4].accentSoft, color: PRODUCTS[4].accentText }}
+                    >
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/paper-analyzer"
+                className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                style={{ backgroundColor: PRODUCTS[4].accent, boxShadow: `0 10px 25px -8px ${PRODUCTS[4].glow}` }}
+              >
+                Try Paper Analyzer
+              </Link>
+            </div>
+          </Reveal>
+        </div>
       </section>
 
       {/* ── Closing CTA ────────────────────────────────────────────────────── */}
@@ -493,18 +815,17 @@ export default function LandingPage() {
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(500px 260px at 50% 0%, rgba(224,138,62,0.18), transparent 70%)",
+                  "radial-gradient(500px 260px at 50% 0%, rgba(197,105,31,0.22), transparent 70%)",
               }}
               aria-hidden
             />
-            <h2
-              className="relative text-3xl font-normal tracking-tight text-white"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              Stop skimming. Start asking.
+            <h2 className="font-headline relative text-3xl font-bold tracking-tight text-white">
+              Stop guessing. Start verifying.
             </h2>
             <p className="relative mx-auto mt-3 max-w-md text-[14px] leading-7 text-zinc-400">
-              Upload your first PDF and get a cited answer in under a minute.
+              Ask your documents, rewrite AI-sounding text, detect AI content, search the
+              live web, or check a paper&apos;s formatting — pick a tool and get your first
+              result in under a minute.
             </p>
             <div className="relative mt-8">
               <Link
@@ -519,11 +840,11 @@ export default function LandingPage() {
       </section>
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="border-t border-black/[0.06] bg-white">
+      <footer className="glass-bar border-t">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-8 text-[13px] text-zinc-500 md:flex-row">
           <div className="flex items-center gap-2">
             <SparkIcon className="h-3.5 w-3.5" />
-            <span>Querex — AI research workspace</span>
+            <span>Querex — AI tools for research &amp; writing</span>
           </div>
           <div className="flex items-center gap-5">
             <a

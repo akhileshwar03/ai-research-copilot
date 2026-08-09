@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Geist, Geist_Mono, Bricolage_Grotesque, Public_Sans, Space_Mono } from "next/font/google";
 import Script from "next/script";
 
 import { AppProviders } from "@/providers/app-providers";
@@ -25,9 +25,31 @@ const fraunces = Fraunces({
   axes: ["opsz", "SOFT", "WONK"],
 });
 
+// Cinematic UI system (app-wide, everywhere except the marketing hero above):
+// Bricolage Grotesque for headline-scale text, Public Sans for body, Space
+// Mono for the handful of real numeral readouts (AI-probability gauge,
+// readability score).
+const bricolageGrotesque = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+});
+
+const publicSans = Public_Sans({
+  variable: "--font-public-sans",
+  subsets: ["latin"],
+});
+
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+});
+
 export const metadata: Metadata = {
-  title: "Querex — AI Research Workspace",
-  description: "AI-powered research workspace for PDFs and documents",
+  title: "Querex — AI Tools for Research & Writing",
+  description:
+    "Ask your documents with page-cited answers, rewrite AI-sounding text, detect AI-generated content, and search the live web — four AI tools, one account.",
 };
 
 // Inline script: applies the theme BEFORE first paint, preventing FOUC.
@@ -43,7 +65,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${bricolageGrotesque.variable} ${publicSans.variable} ${spaceMono.variable} h-full antialiased`}
       // The theme script adds `light-theme` to <html> before hydration —
       // an intentional, attribute-only mismatch (standard theming pattern).
       suppressHydrationWarning

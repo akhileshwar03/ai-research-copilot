@@ -1,0 +1,20 @@
+# Phase 2 (Humanizer LoRA fine-tune) tooling only — deliberately NOT part of the deployed
+# API's requirements.txt. Install with:
+#   pip install -r requirements-finetune.txt
+datasets>=2.19,<3
+kaggle>=1.6,<2
+# Was pinned <1 when this file was first written; the actually-installed venv has
+# 1.5.3 (a real major-version jump past that upper bound). Loosening the pin to
+# match what's proven to work rather than leaving a stale, already-violated one.
+modal>=1.0,<2
+datasketch>=1.6,<2
+langdetect>=1.0.9,<2
+
+# Step 5 (Modal LoRA training, train_modal.py) deps are installed INSIDE the Modal
+# container image itself (see the `image.pip_install(...)` call in that file), not
+# in this local venv -- peft/trl/bitsandbytes don't need to be listed here.
+
+# Step 7 (eval_detector.py) needs a local reference LM for perplexity/burstiness --
+# CPU-only torch + transformers, small (gpt2), fine to run locally.
+torch
+transformers

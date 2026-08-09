@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
   type AdminSetting,
   type AdminUser,
 } from "@/services/api/admin-api";
+import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -24,6 +25,15 @@ const SETTING_LABELS: Record<string, string> = {
   chat_rate_limit_per_minute: "Chat rate limit (requests/min per IP)",
   upload_rate_limit_per_minute: "Upload rate limit (requests/min per IP)",
   retention_days: "Data retention window (days, 0 = keep forever)",
+  humanize_max_chars: "Humaniser max characters per request",
+  humanize_min_words: "Humaniser minimum words per request (0 = no minimum)",
+  humanize_max_words: "Humaniser max words per request",
+  humanize_rate_limit_per_hour: "Humaniser rate limit (requests/hour per IP)",
+  checker_max_chars: "AI Checker max characters per request",
+  checker_rate_limit_per_hour: "AI Checker rate limit (requests/hour per IP)",
+  realtime_rate_limit_per_hour: "Real-time AI rate limit (requests/hour per IP)",
+  paper_analyzer_max_pages: "Paper Analyzer max PDF pages per request",
+  paper_analyzer_rate_limit_per_hour: "Paper Analyzer rate limit (requests/hour per IP)",
 };
 
 function formatBytes(bytes: number): string {
@@ -35,7 +45,7 @@ function formatBytes(bytes: number): string {
 
 function StatCard({ label, value, icon }: { label: string; value: string | number; icon: ReactNode }) {
   return (
-    <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+    <div className="glass-card rounded-xl p-4">
       <div className="flex items-center gap-1.5 text-zinc-500">
         <span style={{ color: "var(--marketing-accent-text)" }}>{icon}</span>
         <p className="text-[11px] uppercase tracking-wide">{label}</p>
@@ -61,7 +71,7 @@ function UserDetailDrawer({ user, onClose }: { user: AdminUser; onClose: () => v
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-lg flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--modal-bg)] p-6"
+        className="glass-panel flex h-full w-full max-w-lg flex-col overflow-y-auto border-l p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
@@ -230,7 +240,7 @@ function UsersSection({ currentEmail }: { currentEmail: string | undefined }) {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-[var(--border-subtle)]">
+      <div className="glass-card overflow-x-auto rounded-xl">
         <table className="w-full text-left text-[13px]">
           <thead className="border-b border-[var(--border-subtle)] bg-[var(--surface-1)] text-[11px] uppercase tracking-wide text-zinc-500">
             <tr>
@@ -406,8 +416,8 @@ function SettingsSection() {
 
   return (
     <section>
-      <h2 className="mb-3 text-[15px] font-semibold text-zinc-200">Runtime limits</h2>
-      <div className="rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] p-4">
+      <h2 className="font-headline mb-3 text-[15px] font-bold text-zinc-200">Runtime limits</h2>
+      <div className="glass-card rounded-xl p-4">
         {isLoading ? (
           <p className="py-4 text-center text-[13px] text-zinc-500">Loading settings…</p>
         ) : (
@@ -452,7 +462,8 @@ function SettingsSection() {
               <button
                 onClick={handleSave}
                 disabled={saveMutation.isPending}
-                className="rounded-lg bg-white px-4 py-1.5 text-[13px] font-medium text-black hover:bg-zinc-200 disabled:opacity-50"
+                className="rounded-lg px-4 py-1.5 text-[13px] font-medium text-white transition hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--marketing-accent)" }}
               >
                 {saveMutation.isPending ? "Saving…" : "Save changes"}
               </button>
@@ -481,26 +492,35 @@ export default function AdminPage() {
     refetchInterval: 60_000,
   });
 
+  const isForbidden = Boolean(me && !me.is_admin);
+
+  useEffect(() => {
+    if (isForbidden) {
+      router.replace("/chat");
+    }
+  }, [isForbidden, router]);
+
   if (!isReady || !isAuthenticated || isMeLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
+      <div className="relative flex h-screen items-center justify-center">
+        <AtmosphereBackground variant="calm" />
         <div
-          className="h-6 w-6 animate-spin rounded-full border-2"
+          className="relative z-10 h-6 w-6 animate-spin rounded-full border-2"
           style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
         />
       </div>
     );
   }
 
-  if (me && !me.is_admin) {
-    router.replace("/chat");
+  if (isForbidden) {
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] px-6 py-8">
-      <div className="mx-auto max-w-5xl space-y-8">
-        <header className="flex items-center justify-between">
+    <div className="relative min-h-screen px-6 py-8">
+      <AtmosphereBackground variant="calm" />
+      <div className="relative z-10 mx-auto max-w-5xl space-y-8">
+        <header className="glass-card flex items-center justify-between rounded-2xl px-5 py-4">
           <div className="flex items-center gap-3">
             <div
               className="flex h-9 w-9 items-center justify-center rounded-xl"
@@ -516,7 +536,7 @@ export default function AdminPage() {
               </svg>
             </div>
             <div>
-              <h1 className="text-xl font-semibold text-[var(--text-primary)]">Admin panel</h1>
+              <h1 className="font-headline text-xl font-bold text-[var(--text-primary)]">Admin panel</h1>
               <p className="mt-0.5 text-[13px] text-zinc-500">
                 Signed in as {me?.email} · changes are logged
               </p>

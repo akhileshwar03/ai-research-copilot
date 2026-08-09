@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CheckIcon, PlusIcon } from "@/features/shared/components/icons";
 
 interface SessionsPanelProps {
   sessions: ChatSession[];
@@ -64,22 +65,6 @@ function DotsIcon() {
   );
 }
 
-function CheckIcon() {
-  return (
-    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-    </svg>
-  );
-}
-
 function ChatBubbleIcon() {
   return (
     <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -120,7 +105,7 @@ function InlineRename({ value, onSave, onCancel }: { value: string; onSave: (v: 
         if (e.key === "Escape") onCancel();
       }}
       onBlur={() => { if (text.trim() && text.trim() !== value) onSave(text.trim()); else onCancel(); }}
-      className="w-full truncate rounded bg-white/[0.06] px-1 py-0.5 text-[12px] font-medium text-white outline-none ring-1 ring-white/20 focus:ring-white/40"
+      className="w-full truncate rounded bg-[var(--surface-2)] px-1 py-0.5 text-[12px] font-medium text-[var(--text-primary)] outline-none ring-1 ring-[var(--border-medium)] focus:ring-[var(--border-strong)]"
       onClick={(e) => e.stopPropagation()}
     />
   );
@@ -193,8 +178,8 @@ export function SessionsPanel({
         className={[
           "group relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
           isActive
-            ? "border-white/20 bg-white/[0.07]"
-            : "border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)] hover:bg-white/[0.04]",
+            ? "border-[var(--border-medium)] bg-[var(--surface-2)]"
+            : "hover-surface border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)]",
           isDeleting ? "opacity-40 pointer-events-none" : "",
         ].join(" ")}
       >
@@ -253,7 +238,7 @@ export function SessionsPanel({
             <DropdownMenuTrigger asChild>
               <button
                 onClick={(e) => e.stopPropagation()}
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-700 opacity-0 transition group-hover:opacity-100 hover:bg-white/[0.08] hover:text-zinc-300 focus:opacity-100"
+                className="hover-surface flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-zinc-700 opacity-0 transition group-hover:opacity-100 hover:text-zinc-300 focus:opacity-100"
               >
                 <DotsIcon />
               </button>
@@ -299,7 +284,7 @@ export function SessionsPanel({
           <DropdownMenuRoot>
             <DropdownMenuTrigger asChild>
               <button
-                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300"
+                className="hover-surface flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:text-zinc-300"
                 title="Sort sessions"
               >
                 <SortIcon />
@@ -324,7 +309,7 @@ export function SessionsPanel({
             onClick={onNewSession}
             disabled={isCreating}
             title="New chat"
-            className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-300 disabled:opacity-40"
+            className="hover-surface flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:text-zinc-300 disabled:opacity-40"
           >
             <PlusIcon />
           </button>
@@ -342,7 +327,7 @@ export function SessionsPanel({
             placeholder="Search sessions…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border-subtle)] bg-white/[0.02] py-1.5 pl-7 pr-3 text-[11px] text-zinc-400 placeholder-zinc-700 outline-none transition focus:border-[var(--border-strong)] focus:text-zinc-300"
+            className="w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] py-1.5 pl-7 pr-3 text-[11px] text-zinc-400 placeholder-zinc-700 outline-none transition focus:border-[var(--border-strong)] focus:text-zinc-300"
           />
           {search && (
             <button onClick={() => setSearch("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-700 hover:text-zinc-400">
@@ -366,13 +351,13 @@ export function SessionsPanel({
         <button
           onClick={onNewSession}
           disabled={isCreating}
-          className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-white/[0.07] bg-[var(--surface-0)] px-4 py-6 text-center transition hover:border-white/[0.14] hover:bg-white/[0.02] disabled:opacity-50"
+          className="hover-surface flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-6 text-center transition hover:border-[var(--border-medium)] disabled:opacity-50"
         >
           <ChatBubbleIcon />
           <span className="text-[12px] text-zinc-600">{isCreating ? "Creating…" : "Start a new chat"}</span>
         </button>
       ) : sorted.length === 0 && search ? (
-        <p className="py-4 text-center text-[12px] text-zinc-700">No sessions match "{search}"</p>
+        <p className="py-4 text-center text-[12px] text-zinc-700">No sessions match &quot;{search}&quot;</p>
       ) : (
         <div className="flex flex-col gap-1">
           {/* Pinned section */}

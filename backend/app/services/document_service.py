@@ -10,8 +10,8 @@ from app.core.constants import ALLOWED_UPLOAD_EXTENSIONS
 from app.core.exceptions import AppError
 from app.db.repositories.document_repository import DocumentRepository
 from app.modules.rag.ingestion_service import IngestionService
-from app.modules.rag.vector_store_manager import VectorStoreManager
 from app.services.runtime_settings import runtime_settings
+from app.services.storage_service import StorageService, get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -21,11 +21,13 @@ class DocumentService:
         self,
         document_repo: DocumentRepository,
         ingestion_service: IngestionService,
-        vector_store: VectorStoreManager,
+        vector_store,
+        storage: StorageService | None = None,
     ):
         self.document_repo = document_repo
         self.ingestion_service = ingestion_service
         self.vector_store = vector_store
+        self.storage = storage or get_storage_service()
         self.settings = get_settings()
 
     async def initiate_upload(self, file: UploadFile, user_email: str | None = None) -> dict:
@@ -66,10 +68,7 @@ class DocumentService:
             }
 
         stored_filename = f"{uuid.uuid4()}{ext}"
-        filepath = os.path.join(self.settings.uploads_dir, stored_filename)
-
-        with open(filepath, "wb") as output:
-            output.write(content)
+        self.storage.save(stored_filename, content)
 
         document = self.document_repo.create(
             original_filename=file.filename or stored_filename,
@@ -106,14 +105,14 @@ class DocumentService:
                 logger.warning("background_ingestion_doc_missing stored=%s", stored_filename)
                 return
 
-            filepath = os.path.join(self.settings.uploads_dir, stored_filename)
-            if not os.path.exists(filepath):
+            if not self.storage.exists(stored_filename):
                 repo.update_status(doc, upload_status="failed", error_message="File missing after upload")
                 db.commit()
                 return
 
+            content = self.storage.read(stored_filename)
             self.ingestion_service.process_pdf(
-                filepath=filepath,
+                content=content,
                 source_id=stored_filename,
                 user_email=doc.user_email or "",
             )
@@ -169,21 +168,27 @@ class DocumentService:
             "limit": limit,
         }
 
-    def get_document_filepath(self, stored_filename: str, user_email: str) -> tuple[str, str]:
-        """Return (filepath, original_filename) for an owned document, or 404.
+    def get_document_download(self, stored_filename: str, user_email: str) -> dict:
+        """Return download info for an owned document, or 404.
 
         Serving files through this ownership check replaces the old public
         /uploads static mount, which exposed every user's PDF to anyone who
-        knew its UUID.
+        knew its UUID. When the storage backend can mint presigned URLs (R2),
+        the caller should redirect to it instead of proxying bytes through
+        the backend — the bucket itself is private, so the signed URL is the
+        only way in, and it expires quickly.
         """
         doc = self.document_repo.get_by_stored_filename(stored_filename)
         if not doc or doc.user_email != user_email:
             raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
 
-        filepath = os.path.join(self.settings.uploads_dir, os.path.basename(doc.stored_filename))
-        if not os.path.exists(filepath):
+        if not self.storage.exists(doc.stored_filename):
             raise AppError(code="FILE_MISSING", message="Document file is missing", status_code=404)
-        return filepath, doc.original_filename
+
+        url = self.storage.presigned_url(doc.stored_filename, filename=doc.original_filename)
+        if url:
+            return {"mode": "redirect", "url": url}
+        return {"mode": "bytes", "content": self.storage.read(doc.stored_filename), "filename": doc.original_filename}
 
     def delete_document(self, filename: str, user_email: str) -> dict:
         """Delete a document only when it belongs to *user_email*."""
@@ -191,9 +196,7 @@ class DocumentService:
         if not document or document.user_email != user_email:
             raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
 
-        filepath = os.path.join(self.settings.uploads_dir, filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
+        self.storage.delete(filename)
 
         try:
             self.vector_store.delete_by_source(filename)

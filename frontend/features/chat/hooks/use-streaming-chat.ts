@@ -18,15 +18,17 @@ interface StreamArgs {
  *   data: <json-encoded-token>\n\n
  *   event: done\ndata: \n\n
  *   event: error\ndata: {"message":"..."}\n\n
+ *   event: revised\ndata: <json-encoded-full-text>\n\n
  *
  * A buffer accumulates incomplete SSE frames across chunk boundaries so
  * we never try to JSON-parse a partially-received line.
  */
-async function* parseSseStream(
+export async function* parseSseStream<TSources = string[]>(
   body: ReadableStream<Uint8Array>,
 ): AsyncGenerator<
   | { type: "token"; value: string }
-  | { type: "sources"; value: string[] }
+  | { type: "sources"; value: TSources }
+  | { type: "revised"; value: string }
   | { type: "done" }
   | { type: "error"; message: string }
 > {
@@ -79,12 +81,20 @@ async function* parseSseStream(
 
         if (currentEvent === "sources") {
           try {
-            const parsed = JSON.parse(data) as string[];
-            if (Array.isArray(parsed)) {
-              yield { type: "sources", value: parsed };
-            }
+            const parsed = JSON.parse(data) as TSources;
+            yield { type: "sources", value: parsed };
           } catch {
             // Malformed sources frame — citations are cosmetic, keep streaming.
+          }
+          continue;
+        }
+
+        if (currentEvent === "revised") {
+          try {
+            const parsed = JSON.parse(data) as string;
+            yield { type: "revised", value: parsed };
+          } catch {
+            // Malformed revised frame — keep the streamed text as-is.
           }
           continue;
         }

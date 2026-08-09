@@ -21,7 +21,7 @@ function deriveTitle(message: string): string {
   return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated) + "…";
 }
 
-export function useChat(email: string | null) {
+export function useChat() {
   const [input, setInput] = useState("");
   const [chatError, setChatError] = useState<string>("");
   const lastSentMessageRef = useRef<string>("");

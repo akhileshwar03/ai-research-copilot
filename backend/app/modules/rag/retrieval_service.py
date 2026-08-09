@@ -2,14 +2,13 @@ import logging
 
 from app.core.config import get_settings
 from app.modules.rag.embedding_service import EmbeddingService
-from app.modules.rag.vector_store_manager import VectorStoreManager
 from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
 
 
 class RetrievalService:
-    def __init__(self, embedding_service: EmbeddingService, vector_store: VectorStoreManager):
+    def __init__(self, embedding_service: EmbeddingService, vector_store):
         self.embedding_service = embedding_service
         self.vector_store = vector_store
         self.settings = get_settings()

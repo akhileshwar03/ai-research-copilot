@@ -25,14 +25,14 @@ def upgrade() -> None:
         sa.Column("code", sa.String(), nullable=False),
         sa.Column("purpose", sa.String(), nullable=False, server_default="auth"),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("used", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("used", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_otp_tokens_id", "otp_tokens", ["id"], unique=False)
     op.create_index("ix_otp_tokens_email", "otp_tokens", ["email"], unique=False)
 
     # Add pinned column to chat_sessions
-    op.add_column("chat_sessions", sa.Column("pinned", sa.Boolean(), nullable=False, server_default=sa.text("0")))
+    op.add_column("chat_sessions", sa.Column("pinned", sa.Boolean(), nullable=False, server_default=sa.false()))
 
 
 def downgrade() -> None:

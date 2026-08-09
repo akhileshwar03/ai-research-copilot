@@ -13,6 +13,8 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { OtpInput } from "@/components/ui/otp-input";
+import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { CursorSpotlight, Glare, Reveal } from "@/features/shared/motion/motion";
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -68,7 +70,7 @@ export default function LoginPage() {
   const { remaining, start: startCountdown } = useCountdown(60);
 
   useEffect(() => {
-    if (isReady && isAuthenticated) router.replace("/chat");
+    if (isReady && isAuthenticated) router.replace("/");
   }, [isReady, isAuthenticated, router]);
 
   // Show OAuth error toasts from redirect params
@@ -114,7 +116,7 @@ export default function LoginPage() {
     if (code.replace(/\s/g, "").length < 6) return;
     try {
       await verifyOtp({ email: email.trim(), code });
-      router.replace("/chat");
+      router.replace("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired code");
       setOtp("");
@@ -130,26 +132,31 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-4">
-      {/* Ambient glow */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-60 left-1/2 h-96 w-[600px] -translate-x-1/2 rounded-full bg-white/[0.015] blur-3xl" />
-      </div>
+    <div className="relative flex min-h-screen items-center justify-center px-4">
+      <AtmosphereBackground variant="soft" />
+      <CursorSpotlight color="197,105,31" />
 
-      <div className="relative w-full max-w-sm">
+      <div className="relative z-10 w-full max-w-sm">
         {/* Brand */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/[0.06] ring-1 ring-[var(--border-medium)]">
-            <svg className="h-5 w-5 text-white/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
+        <Reveal>
+          <div className="mb-8 text-center">
+            <div
+              className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-[var(--border-medium)]"
+              style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <h1 className="font-headline text-[17px] font-bold text-[var(--text-primary)]">Querex</h1>
+            <p className="mt-1 text-[12px] text-zinc-500">Your intelligent research workspace</p>
           </div>
-          <h1 className="text-[17px] font-semibold text-[var(--text-primary)]">Querex</h1>
-          <p className="mt-1 text-[12px] text-zinc-500">Your intelligent research workspace</p>
-        </div>
+        </Reveal>
 
         {/* Card */}
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-[var(--login-card)] shadow-2xl">
+        <Reveal delay={80}>
+        <div className="glass-card rounded-2xl">
+          <Glare className="block">
           <div className="p-6">
 
             {/* ── Email step ──────────────────────────────────────────────── */}
@@ -164,18 +171,16 @@ export default function LoginPage() {
                         key={key}
                         onClick={() => handleOAuth(key)}
                         className={[
-                          "flex w-full items-center gap-3 rounded-xl border px-4 py-2.5 text-[13px] font-medium transition",
+                          "hover-surface flex w-full items-center gap-3 rounded-xl border px-4 py-2.5 text-[13px] font-medium transition",
                           configured
-                            ? "border-white/[0.08] bg-white/[0.03] text-zinc-200 hover:border-white/[0.14] hover:bg-white/[0.06]"
-                            : "border-white/[0.04] bg-transparent text-zinc-600 hover:border-white/[0.08] hover:text-zinc-500",
+                            ? "border-[var(--border-medium)] text-zinc-200 hover:border-[var(--border-strong)]"
+                            : "border-[var(--border-subtle)] bg-transparent text-zinc-600 hover:border-[var(--border-medium)] hover:text-zinc-500",
                         ].join(" ")}
                       >
                         <span className={configured ? "opacity-100" : "opacity-30"}>{icon}</span>
                         <span>Continue with {label}</span>
                         {!configured && (
-                          <span className="ml-auto rounded-full border border-white/[0.06] px-2 py-0.5 text-[10px] text-zinc-700">
-                            not configured
-                          </span>
+                          <span className="ml-auto text-[10px] font-medium text-zinc-600">not configured</span>
                         )}
                       </button>
                     );
@@ -183,9 +188,9 @@ export default function LoginPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="h-px flex-1 bg-white/[0.06]" />
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
                   <span className="text-[11px] text-zinc-600">or continue with email</span>
-                  <div className="h-px flex-1 bg-white/[0.06]" />
+                  <div className="h-px flex-1 bg-[var(--border-subtle)]" />
                 </div>
 
                 <form onSubmit={handleSendOtp} className="space-y-3">
@@ -195,13 +200,15 @@ export default function LoginPage() {
                     value={email}
                     onChange={(e) => { setEmail(e.target.value); setError(""); }}
                     autoComplete="email"
-                    className="w-full rounded-xl border border-[var(--border-medium)] bg-white/[0.03] px-4 py-2.5 text-[13px] text-[var(--text-primary)] placeholder-zinc-600 outline-none transition focus:border-[var(--border-strong)] focus:bg-white/[0.05]"
+                    style={{ backgroundColor: "var(--border-subtle)" }}
+                    className="w-full rounded-xl border border-[var(--border-medium)] px-4 py-2.5 text-[13px] text-[var(--text-primary)] placeholder-zinc-600 outline-none transition focus:border-[var(--border-strong)]"
                   />
                   {error && <p className="text-[12px] text-red-400">{error}</p>}
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50"
+                    className="w-full rounded-xl py-2.5 text-[13px] font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-50"
+                    style={{ backgroundColor: "var(--marketing-accent)", boxShadow: "0 8px 24px -8px var(--marketing-accent-soft)" }}
                   >
                     {isSendingOtp ? "Sending…" : "Continue with Email"}
                   </button>
@@ -254,7 +261,8 @@ export default function LoginPage() {
                 <button
                   onClick={() => handleVerifyOtp()}
                   disabled={isVerifyingOtp || otp.replace(/\s/g, "").length < 6}
-                  className="w-full rounded-xl bg-white py-2.5 text-[13px] font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-50"
+                  className="w-full rounded-xl py-2.5 text-[13px] font-semibold text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:pointer-events-none disabled:translate-y-0 disabled:opacity-50"
+                  style={{ backgroundColor: "var(--marketing-accent)", boxShadow: "0 8px 24px -8px var(--marketing-accent-soft)" }}
                 >
                   {isVerifyingOtp ? "Verifying…" : "Sign In"}
                 </button>
@@ -283,7 +291,9 @@ export default function LoginPage() {
               Secured with one-time codes — no passwords stored for email sign-in.
             </p>
           </div>
+          </Glare>
         </div>
+        </Reveal>
       </div>
     </div>
   );

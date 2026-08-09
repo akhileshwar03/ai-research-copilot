@@ -24,7 +24,6 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
@@ -88,19 +87,17 @@ def run_cleanup() -> dict:
     decoupled from any request-scoped session. Returns a summary for logging
     and tests.
     """
-    import os
-
     from app.db.models.chat_models import ChatMessage, ChatSession
     from app.db.models.document import Document
     from app.db.models.otp import OtpToken
     from app.db.models.one_time_code import OneTimeCode
+    from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
     from app.db.session import SessionLocal
-    from app.modules.rag.vector_store_manager import VectorStoreManager
+    from app.services.storage_service import get_storage_service
 
-    settings = get_settings()
     retention_days = int(runtime_settings.get("retention_days"))
     now = _utcnow_naive()
-    summary = {"documents": 0, "sessions": 0, "otp_tokens": 0, "one_time_codes": 0}
+    summary = {"documents": 0, "sessions": 0, "realtime_sessions": 0, "otp_tokens": 0, "one_time_codes": 0}
 
     db = SessionLocal()
     try:
@@ -125,14 +122,15 @@ def run_cleanup() -> dict:
         # Documents: file, vectors, and row must go together.
         expired_docs = db.query(Document).filter(Document.created_at < cutoff).all()
         if expired_docs:
-            vector_store = VectorStoreManager()
+            from app.api.dependencies.services import get_vector_store_manager
+
+            storage = get_storage_service()
+            vector_store = get_vector_store_manager()
             for doc in expired_docs:
-                filepath = os.path.join(settings.uploads_dir, doc.stored_filename)
-                if os.path.exists(filepath):
-                    try:
-                        os.remove(filepath)
-                    except OSError:
-                        logger.exception("retention_file_removal_failed path=%s", filepath)
+                try:
+                    storage.delete(doc.stored_filename)
+                except Exception:
+                    logger.exception("retention_file_removal_failed stored=%s", doc.stored_filename)
                 try:
                     vector_store.delete_by_source(doc.stored_filename)
                 except Exception:
@@ -154,6 +152,21 @@ def run_cleanup() -> dict:
                 synchronize_session=False
             )
             summary["sessions"] = len(expired_session_ids)
+            db.commit()
+
+        # Real-time AI sessions: independent table, same retention window.
+        expired_realtime_ids = [
+            row[0]
+            for row in db.query(RealtimeSession.id).filter(RealtimeSession.created_at < cutoff).all()
+        ]
+        if expired_realtime_ids:
+            db.query(RealtimeMessage).filter(RealtimeMessage.session_id.in_(expired_realtime_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(RealtimeSession).filter(RealtimeSession.id.in_(expired_realtime_ids)).delete(
+                synchronize_session=False
+            )
+            summary["realtime_sessions"] = len(expired_realtime_ids)
             db.commit()
 
         logger.info(
