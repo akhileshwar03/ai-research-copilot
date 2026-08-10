@@ -1,0 +1,19 @@
+I have been through this scenario as well: where you go through months to build a side project only for it quietly fizzle out.
+
+For me, initially everything went downhill when the project did not hit its expected performance levels. I blamed myself and others for my failure - it's hard to take a step back in times of disappointment...
+
+But then with time I have started seeing that there was more value in having this experience than just learning you failed at what you thought would be successful.
+
+I built an app idea on the side, a niche productivity tool. Excited as usual about coming up with something so good; of course people will want to use it!
+
+It seems like we always forget the first step before building is testing if there's even any demand for your product and who are these potential users - how do they work around this problem now? And more importantly, what would a great tool/ app for them look like?
+
+And when I finally did launch my "amazing" app idea (I say amazing with quotes to illustrate that was the first step where things went wrong), it turned out nobody really wanted such an app - there wasn't even enough pain!
+
+What you build isn't just a side project, so investing time and effort should be preceded by doing homework on your audience. This experience taught me about *early validation* and more importantly in my case this also highlighted for myself the importance of customer discovery.
+
+It's hard to listen sometimes when we have an idea - "I don't care what other people say" etc, so it feels good to have passion, but if that gets ahead of actually listening, then you can spend months or years building something nobody really wanted!
+
+So now I know my next project will be based on real customer needs.
+
+Failure is not the opposite of success. It's a necessary component!

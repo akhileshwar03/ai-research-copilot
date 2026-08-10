@@ -1,0 +1,35 @@
+=== INPUT (raw AI-generated, business_email) ===
+Subject: Update on Project Delivery Timeline
+
+Dear [Client’s Name],
+
+I hope this message finds you well. I am writing to inform you of an unexpected delay in the delivery of your project. Due to an issue with one of our key vendors, we have encountered a setback that will extend the project timeline by approximately two weeks.
+
+Please be assured that we are actively working with the vendor to resolve the matter as quickly as possible and are taking all necessary steps to mitigate any further delays. We understand the importance of this project to your business and remain committed to maintaining the highest standards of quality.
+
+We apologize for any inconvenience this may cause and appreciate your understanding and patience. I will keep you updated with any significant developments and provide a revised delivery schedule shortly.
+
+Thank you for your continued trust and partnership.
+
+Best regards,  
+[Your Name]  
+[Your Position]  
+[Your Company]  
+[Contact Information]
+
+=== OUTPUT (humaniser-lora, style=normal) ===
+Subject: Delay in Project Delivery
+
+Hi there,
+
+I'm writing to inform of an unfortunate delay that we have run into regarding the delivery on project. We've come across a problem with one if our key vendors and because of this, has resulted us having to re-negotiate their terms.
+
+Please be assured we are working with them behind closed doors as well as trying everything possible in order to get back on track.
+
+We know how important it is that the website is completed soon enough so any further delay isn't necessary. We understand and I will update you very shortly if there's anything significant happening regarding our delivery.
+
+Many thanks for your support,
+
+[Your Name]
+
+[Your Position Title]

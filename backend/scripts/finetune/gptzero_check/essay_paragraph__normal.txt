@@ -1,0 +1,17 @@
+=== INPUT (raw AI-generated, essay_paragraph) ===
+The adoption of renewable energy is accelerating at a pace that surpasses earlier projections, driven by technological advancements, policy support, and market dynamics. Recent data from the International Energy Agency (IEA) highlights that renewable capacity additions in 2023 exceeded forecasts by nearly 20%, primarily due to the rapid deployment of solar and wind technologies. The declining costs of photovoltaic panels and wind turbines have made renewables more economically competitive than traditional fossil fuels, encouraging both private and public sector investments. Additionally, government incentives and international climate commitments, such as the Paris Agreement, have catalyzed large-scale renewable projects worldwide. Innovations in energy storage and grid management have further mitigated intermittency challenges, making renewables more reliable and attractive. This convergence of factors has accelerated the energy transition beyond initial expectations, signaling a transformative shift in global energy systems that could achieve net-zero targets sooner than previously anticipated.
+
+=== OUTPUT (humaniser-lora, style=normal) ===
+So renewable capacity additions grew about 20% faster last year over projections from just few years ago (in orange below). That pace was driven mainly by growth of solar and wind.
+
+source:
+
+That acceleration is because technologies used to generate electricity are becoming cheaper, while policy support for renewables has increased in markets around the world. But as costs continue their downward trajectory — most notably those associated with photovoltaic panels that convert sunlight into power — private investment has poured into renewable energy generation (not counting the $10 trillion or so of private money invested globally each year). Governments have joined in as well, pushing renewable projects forward to meet climate commitments like this Paris Agreement.
+
+Other innovations that help overcome one of renewables' most significant drawbacks – intermittency—help drive solar panels and wind turbines into new markets. Batteries are making rooftop solar viable for homes without trees or enough sun on their roofs year-round; while smart grids equipped with software can balance variable renewable inputs against fixed ones like fossil fuels (or nuclear). That means that we're not only increasing the capacity of clean energy systems, but also improving how reliable they are.
+
+Overall this rapid growth in renewables isn't slowing down. IEA's outlook projects continued strong additions through 2040 and beyond.
+
+And this is happening faster than many expected. IEA expects to meet its own targets for 760 gigawatts of renewable power capacity installed by the end of next year – five years early, or up from just below half their projection before a few years ago. The agency projects that new solar will account for almost half all new global electricity-generating capacity in 2019.
+
+So expect renewables to become even more competitive with fossil fuels and you'll understand why IEA's outlook is looking different already than the one presented two years or so ago – and may need updating again soon.
