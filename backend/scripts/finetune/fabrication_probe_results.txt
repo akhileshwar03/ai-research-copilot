@@ -1,0 +1,70 @@
+=== company_earnings ===
+INPUT (40 words):
+Acme Corp reported third-quarter revenue of $4.2 million, a 12% increase from the same period last year. The company attributed the growth to strong sales in its Northeast region and the launch of two new product lines in July 2026.
+
+OUTPUT (33 words, 0.8x source length):
+Acme Corp. posted Q3 revenues of $4.2M, up 12% YOY
+
+The boost came from sales in our NE region and launching two new product lines (July '26)
+
+— Acme (@AcmeCorporation) October 9, 2027
+
+=== sports_recap ===
+INPUT (35 words):
+The Riverside Hawks defeated the Millbrook Wolves 78-65 on Tuesday night, led by point guard Jamie Chen, who scored 24 points and added 9 assists. The win moves the Hawks to 14-3 on the season.
+
+OUTPUT (235 words, 6.7x source length):
+Riverside Hawks vs Millbrook Wolves
+
+RIVERSIDE – Point guard Jamie Chen scored a game-high 24 points to lead the Riverside Hawks to an easy 78-65 victory over the Millbrook Wolves Tuesday night.
+
+The win sends the Hawks (14-3) into the Regional Tournament with plenty of momentum.
+
+"I think he's just one of our leaders," coach Mike Ragan said. "He does so much for us. He's a great point guard, but he also plays defense."
+
+Defensively, the Hawks did a great job against Millbrook as they held the Wolves to 31 percent shooting from the field and only 24 percent from three-point range.
+
+"We came out strong on both ends of the floor," Chen said. "We played very well tonight…Our goal is just to keep getting better, and we'll see what happens."
+
+The Hawks got off to a slow start as they shot just eight of their first 17 attempts (47 percent). However, their shooting went up dramatically in the second quarter where they hit eight of their next nine shots.
+
+"We played great offense after that," Ragan said. "The second half was much better than the first."
+
+Sophomore guard Anthony Johnson and senior guard Austin Gehringer added 13 points apiece to join Chen on double figure scoring Tuesday night for the Hawks.
+
+In all, seven players scored in double digits with four of them (Chen, Johnson, Gehringer and sophomore forward Sam Lauter) finishing over 20.
+
+=== science_brief ===
+INPUT (35 words):
+A study published in the Journal of Marine Biology found that coral reefs near the Maldives recovered 23% faster than expected following the 2022 bleaching event, researchers tracked 40 reef sites over an 18-month period.
+
+OUTPUT (543 words, 15.5x source length):
+A new study finds that corals off the coast of the Maldives are recovering twice as fast as scientists thought they would.
+
+The paper from the University of Exeter's Global Systems Institute was published Monday in the Journal of Marine Biology, and comes with good news for those concerned about ocean health — especially given a recent report detailing how rising temperatures have left corals around the world at risk for extinction by 2050.
+
+Researchers studied coral reefs near the Maldives over an 18-month period following a particularly strong warming event in 2022. They found that the coral was recovering about 23% faster than expected, according to an Exeter press release.
+
+"We found that corals off the coast of the Maldives were actually more resilient than previously thought," lead author Matt Dunbabin said in the statement. "This is particularly important given the ongoing threat from climate change."
+
+The Maldives has been a leader in sustainable tourism for decades, with some of its resorts being powered by solar power since 1983.
+
+The Maldives are located in the Indian Ocean and have become well-known as an idyllic tourist destination known for luxury resorts. However, the country is one of many that could be hard hit by climate change. The islands sit just a few feet above sea level on average.
+
+As temperatures rise around the world, coral reefs will face increasing danger from bleaching events. When water gets too warm — usually as a result of increased greenhouse gases in the atmosphere, or natural processes like volcanic activity — corals lose their color and can die off over time. The 2022 event was particularly severe.
+
+Dunbabin said that the Maldives' reefs are especially vulnerable to bleaching because water is shallow in areas where coral grow, meaning there's less of a buffer from temperature swings.
+
+"The fact that they're seeing such resilience is very promising," Dunbabin told The Independent. "If we can make corals more resilient, it can help them fight off the effects of climate change."
+
+One particularly promising finding was that reefs with higher diversity were able to recover much faster than reefs made up mainly of a single type of coral.
+
+"You don't have to worry about one species being knocked out and then there's nothing left," co-author Simon Davy said in the press release. "Diversity is your friend."
+
+The next step for Dunbabin and his team will be looking at how other types of reefs around the world are doing, especially those in places like Australia where coral has been hit hard by recent bleaching events.
+
+This year's bleaching event was likely caused primarily by climate change, according to a study published last month. And it wasn't just the Maldives that saw widespread damage; reefs across much of Southeast Asia were also affected by high temperatures this summer.
+
+The paper notes that there are still many unknowns about how corals will respond over time to rising temperatures — and that these findings don't mean climate change isn't a threat anymore. But it does suggest that the future is slightly less bleak than some had feared.
+
+"Even with increasing global warming, we're likely to see some of our coral reefs surviving if we make efforts to reduce emissions," Davy said in the release.

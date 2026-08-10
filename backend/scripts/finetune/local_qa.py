@@ -39,15 +39,21 @@ OUT_DIR = HERE / "gptzero_check"
 OLLAMA_URL = "http://localhost:11434/api/chat"
 MODEL_NAME = "humaniser-lora"
 
-# Style assigned per input type -- matched to what each register is meant for
-# (STYLE_GUIDANCE's own descriptions), not just defaulted to "normal" across
-# the board, so this is a fair test of all 3 trained registers.
+# All "normal" -- NOT the original per-input-type assignment. Corrected 2026-08-09
+# (Round 16 finding, confirmed in STATE.md): production only ships `normal`
+# (frontend/app/humanizer/page.tsx's STYLES array has one entry), so AI-ify only
+# ever processed `normal`-tagged rows and this LoRA never saw simple_formal or
+# clear_structured STYLE_GUIDANCE text during training. Testing it against those
+# system prompts now would be an out-of-distribution test -- any weakness there
+# wouldn't say anything about whether training worked, only that we tested it on
+# a register it was never shown. Every input uses `normal` so this is a fair,
+# in-distribution test of what was actually trained.
 INPUT_STYLES = {
     "blog_intro": "normal",
-    "business_email": "simple_formal",
+    "business_email": "normal",
     "product_description": "normal",
-    "essay_paragraph": "clear_structured",
-    "report_summary": "clear_structured",
+    "essay_paragraph": "normal",
+    "report_summary": "normal",
 }
 
 

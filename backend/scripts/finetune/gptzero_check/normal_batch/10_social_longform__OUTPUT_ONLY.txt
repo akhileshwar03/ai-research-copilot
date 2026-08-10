@@ -1,0 +1,7 @@
+I recently looked at side project I poured months into only to have it quietly fizzle out. It's not so much of a failure per se but there are some great lessons here.
+
+I had this crazy idea for an app and jumped in head first. I spent month after month coding up the most amazing productivity app ever, convinced that if you build something good enough people will use it. I forgot to validate with real potential users whether or not they even needed such a product at all. When launch day came around there were only a few people who were interested in my app because no one really needed another tool like mine.
+
+What I learned is the importance of early validation and customer discovery. Before you go building anything, don't assume that your problem exists for other users until you've validated with real people whether they experience this pain point too or not. It's so easy to fall in love with an idea and believe everyone will as well but without that feedback loop even the best execution can miss.
+
+Failure isn't necessarily the opposite of success. I learned a lot from this project, and now am committed to grounding my ideas more closely to real user needs before building anything because passion has to be matched by purpose.

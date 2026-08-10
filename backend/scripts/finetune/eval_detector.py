@@ -47,12 +47,17 @@ OUT_PATH = HERE / "eval_detector_results.json"
 
 # Same style assignment as local_qa.py, kept in sync deliberately -- this is a
 # fair 3-way comparison only if all variants get the same style treatment.
+# All "normal": corrected 2026-08-10 to match local_qa.py's Round-16 fix -- the LoRA
+# was only ever trained on `normal` style (production only ships `normal`), so
+# simple_formal/clear_structured here would be a stale, out-of-distribution test AND
+# would look for .txt files local_qa.py no longer writes (real crash, not just a
+# mismatch -- confirmed via FileNotFoundError on business_email__simple_formal.txt).
 INPUT_STYLES = {
     "blog_intro": "normal",
-    "business_email": "simple_formal",
+    "business_email": "normal",
     "product_description": "normal",
-    "essay_paragraph": "clear_structured",
-    "report_summary": "clear_structured",
+    "essay_paragraph": "normal",
+    "report_summary": "normal",
 }
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")

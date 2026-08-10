@@ -1,14 +1,30 @@
 """Step 4 — export the LoRA training set (Phase 2, Humaniser fine-tune).
 
-Reads every `ai_ready` row from `finetune_samples` and formats it as a chat-style
+Reads every ai-ified row from `finetune_samples` and formats it as a chat-style
 training example matching exactly what Pass 2 sees in production today (same
-system prompt, built from the real `app.services.humanizer.prompts` module —
-not a re-typed copy, so the LoRA is trained on the identical instruction it
-will be invoked with at inference time):
+system prompt, built from the real `app.services.humanizer.prompts` /
+`app.services.humanizer.examples` modules — not a re-typed copy, so the LoRA is
+trained on the identical instruction it will be invoked with at inference time):
 
-    system:    BASE_PROMPT + "\n\n" + STYLE_GUIDANCE[style]
+    system:    BASE_PROMPT + "\n\n" + STRICT_HARD_RULES + "\n\n" + STYLE_GUIDANCE[style]
+               + "\n\n" + format_examples(style)
     user:      ai_text        (the AI-flavored source to rewrite)
     assistant: human_text     (the genuine human-written target)
+
+FIXED 2026-08-09: the original version of this file built system prompts from
+BASE_PROMPT + STYLE_GUIDANCE only, despite its docstring's claim above -- it
+omitted STRICT_HARD_RULES (the block that explicitly says "preserve facts,
+numbers, names exactly," "never invent," "keep roughly the same length") and
+the few-shot examples module, both of which production's real pipeline.py
+always includes (see `_build_rewrite_prompt`). Root-caused via Step 6 local QA:
+the resulting first checkpoint fabricated named people, quotes, and statistics
+not present in the source whenever it chose to elaborate beyond the source's
+length (confirmed reproducible on 2/3 fresh probe inputs, 6.7x-15.5x length
+expansion each time). STRICT_HARD_RULES (not EXPANDED_HARD_RULES) is correct
+here specifically because our human_text/ai_text pairs are themselves
+same-length pairs, and STRICT is also pipeline.py's default (expand=False) --
+this export was never meant to teach the elaboration behavior at all.
+`format_examples()` mirrors production with its own default `limit=6`.
 
 Exported as-is, no rebalancing (user decision, 2026-08-04) — the corpus is
 skewed 29.7% normal / 35.0% clear_structured / 35.3% simple_formal vs. the
@@ -31,7 +47,8 @@ from pathlib import Path
 
 from app.db.models.finetune_sample import FinetuneSample
 from app.db.session import SessionLocal
-from app.services.humanizer.prompts import BASE_PROMPT, STYLE_GUIDANCE
+from app.services.humanizer.examples import format_examples
+from app.services.humanizer.prompts import BASE_PROMPT, STRICT_HARD_RULES, STYLE_GUIDANCE
 from scripts.finetune.collect import SOURCE_CAP
 
 logger = logging.getLogger(__name__)
@@ -70,7 +87,11 @@ def cap_by_source(rows: list[FinetuneSample], cap: int, seed: int) -> list[Finet
 
 
 def build_example(row: FinetuneSample) -> dict:
-    system = BASE_PROMPT + "\n\n" + STYLE_GUIDANCE[row.style]
+    # Mirrors pipeline.py's _build_rewrite_prompt exactly (STRICT_HARD_RULES, not
+    # EXPANDED -- see module docstring) so training sees the identical system
+    # prompt production actually sends.
+    parts = [BASE_PROMPT, STRICT_HARD_RULES, STYLE_GUIDANCE[row.style], format_examples(row.style)]
+    system = "\n\n".join(p for p in parts if p)
     return {
         "id": row.id,
         "style": row.style,
@@ -120,9 +141,18 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     db = SessionLocal()
 
-    rows = db.query(FinetuneSample).filter(FinetuneSample.status == "ai_ready").all()
+    # Includes "exported" as well as "ai_ready": this export already ran once (with
+    # the pre-fix, incomplete system prompt) and flipped every row to "exported".
+    # Re-running now must re-export those same rows with the corrected prompt, not
+    # just wait for new ones that don't exist -- the AI-ify step already consumed
+    # essentially all normal-style rows.
+    rows = (
+        db.query(FinetuneSample)
+        .filter(FinetuneSample.status.in_(["ai_ready", "exported"]), FinetuneSample.ai_text.isnot(None))
+        .all()
+    )
     if not rows:
-        logger.info("No ai_ready rows to export.")
+        logger.info("No ai-ified rows to export.")
         db.close()
         return
 
