@@ -8,8 +8,8 @@ import { useHumanizeStream } from "@/features/humanizer/hooks/use-humanize-strea
 import { useHumanizerHistory } from "@/features/humanizer/hooks/use-humanizer-history";
 import { DiffOutput } from "@/features/humanizer/components/diff-output";
 import { HistoryPanel } from "@/features/humanizer/components/history-panel";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { HumanizeRun, HumanizeStyle } from "@/services/api/humanizer-api";
+import { ULTRA_WAIT_STAGES, WaitingExperience } from "@/features/humanizer/components/waiting-experience";
+import { humanizerApi, type HumanizeRun, type HumanizeStyle } from "@/services/api/humanizer-api";
 import { ImportControls } from "@/features/shared/components/import-controls";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 import { CursorSpotlight, Glare } from "@/features/shared/motion/motion";
@@ -22,6 +22,8 @@ const MIN_WORDS = 30;
 const MAX_WORDS = 3000;
 
 type Phase = "idle" | "reading" | "writing" | "done";
+type OutputTab = "basic" | "diff" | "ultra";
+type UltraStatus = "idle" | "loading" | "error" | "done";
 
 // `clear_structured` and `simple_formal` are parked, not deleted: the backend, DB schema, and
 // HumanizeStyle type still fully support them (see backend/scripts/finetune/STATE.md for why —
@@ -33,6 +35,21 @@ const STYLES: { value: HumanizeStyle; label: string; desc: string }[] = [
     desc: "Blog posts, social copy, product writing — natural and direct.",
   },
 ];
+
+const OUTPUT_TABS: { value: OutputTab; label: string }[] = [
+  { value: "basic", label: "Basic" },
+  { value: "diff", label: "Diff Highlight" },
+  { value: "ultra", label: "Ultra Human ✨" },
+];
+
+// Basic/Diff are both the same GPT-4.1-mini rewrite, just displayed differently — "AI
+// Powered" alone wouldn't distinguish them from Ultra Human (which is also AI). "Fine-Tuned
+// Model" names the actual differentiator: a real, custom-trained model, not GPT.
+const TAB_MODEL_TAG: Record<OutputTab, string> = {
+  basic: "GPT-Powered",
+  diff: "GPT-Powered",
+  ultra: "Fine-Tuned Model",
+};
 
 const SAMPLE_TEXT =
   "Moreover, it is important to note that artificial intelligence plays a crucial role in " +
@@ -59,6 +76,17 @@ export default function HumanizerPage() {
   const [submittedText, setSubmittedText] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [submittedWordCount, setSubmittedWordCount] = useState(0);
+  const [readingElapsedSeconds, setReadingElapsedSeconds] = useState(0);
+  const [outputTab, setOutputTab] = useState<OutputTab>("diff");
+
+  // "Ultra Human" — the real fine-tuned model. Fetched lazily (only when the tab is
+  // opened), independently of the main GPT-based stream above, since it's a separate
+  // backend call that may not even be reachable (local-Ollama-only right now).
+  const [ultraOutput, setUltraOutput] = useState("");
+  const [ultraStatus, setUltraStatus] = useState<UltraStatus>("idle");
+  const [ultraError, setUltraError] = useState("");
+  const [ultraElapsedSeconds, setUltraElapsedSeconds] = useState(0);
+
   const { runs: history, isLoading: historyLoading, saveRun, deleteRun, deleteAllRuns } = useHumanizerHistory(
     isReady && isAuthenticated,
   );
@@ -71,6 +99,28 @@ export default function HumanizerPage() {
       toast.success("Loaded flagged text from AI Checker");
     }
   }, []);
+
+  // Drives the staged waiting messages below — only ticks during "reading" so a fast
+  // response never shows a timer at all, and resets cleanly the moment tokens start
+  // arriving or the run ends.
+  useEffect(() => {
+    if (phase !== "reading") {
+      setReadingElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setReadingElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  // Same pattern, independent timer for the Ultra Human fetch.
+  useEffect(() => {
+    if (ultraStatus !== "loading") {
+      setUltraElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => setUltraElapsedSeconds((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [ultraStatus]);
 
   if (!isReady || !isAuthenticated) {
     return (
@@ -87,6 +137,13 @@ export default function HumanizerPage() {
   const currentWordCount = wordCount(input);
   const underMinWords = input.trim().length > 0 && currentWordCount < MIN_WORDS;
   const activeStyle = STYLES.find((s) => s.value === style) ?? STYLES[0];
+  const hasRun = phase !== "idle";
+
+  const resetUltra = () => {
+    setUltraOutput("");
+    setUltraStatus("idle");
+    setUltraError("");
+  };
 
   const handleSubmit = async () => {
     if (!input.trim() || overLimit || underMinWords || isStreaming) return;
@@ -96,6 +153,7 @@ export default function HumanizerPage() {
     setSubmittedText(inputText);
     setSubmittedWordCount(wordCount(inputText));
     setPhase("reading");
+    resetUltra();
 
     try {
       let firstToken = true;
@@ -122,9 +180,31 @@ export default function HumanizerPage() {
     }
   };
 
+  const handleUltraFetch = async () => {
+    if (!submittedText || ultraStatus === "loading") return;
+    setUltraStatus("loading");
+    setUltraError("");
+    try {
+      const result = await humanizerApi.ultra(submittedText, style, expand);
+      setUltraOutput(result.text);
+      setUltraStatus("done");
+    } catch (err) {
+      setUltraError(err instanceof Error ? err.message : "Ultra Human mode failed");
+      setUltraStatus("error");
+    }
+  };
+
+  const handleTabChange = (tab: OutputTab) => {
+    setOutputTab(tab);
+    if (tab === "ultra" && ultraStatus === "idle" && submittedText) {
+      handleUltraFetch();
+    }
+  };
+
   const handleCopy = async () => {
-    if (!output) return;
-    await navigator.clipboard.writeText(output);
+    const text = outputTab === "ultra" ? ultraOutput : output;
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
   };
 
@@ -141,6 +221,8 @@ export default function HumanizerPage() {
     setSubmittedWordCount(wordCount(run.input_text));
     setOutput(run.output_text);
     setPhase("done");
+    setOutputTab("diff");
+    resetUltra();
   };
 
   const handleDeleteRun = (runId: number) => {
@@ -151,13 +233,15 @@ export default function HumanizerPage() {
     deleteAllRuns().catch(() => toast.error("Couldn't clear history"));
   };
 
+  const canCopy = outputTab === "ultra" ? ultraStatus === "done" : phase === "done";
+
   return (
     <MainLayout
       sidebar={<ProductShellSidebar />}
       background={
         <>
           <AtmosphereBackground variant="soft" />
-          <CursorSpotlight color="197,105,31" />
+          <CursorSpotlight color="138,90,110" />
         </>
       }
     >
@@ -270,9 +354,23 @@ export default function HumanizerPage() {
             style={{ boxShadow: "0 0 0 1px var(--accent-glow), 0 20px 40px -24px rgba(120,74,30,0.18)" }}
           >
           <div className="flex h-full flex-col p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[13px] font-medium text-[var(--text-primary)]">Rewritten text</p>
-              {phase === "done" && (
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] font-medium text-[var(--text-primary)]">Rewritten text</p>
+                {hasRun && (
+                  <span
+                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
+                    style={
+                      outputTab === "ultra"
+                        ? { backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }
+                        : { backgroundColor: "var(--surface-2)", color: "#a1a1aa" }
+                    }
+                  >
+                    {TAB_MODEL_TAG[outputTab]}
+                  </span>
+                )}
+              </div>
+              {canCopy && (
                 <button
                   onClick={handleCopy}
                   className="flex items-center gap-1 rounded-md border border-[var(--border-subtle)] px-2 py-0.5 text-[11px] text-zinc-400 hover-surface"
@@ -285,19 +383,68 @@ export default function HumanizerPage() {
               )}
             </div>
 
-            {phase === "reading" ? (
-              <div className="min-h-[340px] flex-1 space-y-2.5 rounded-lg border border-[var(--border-subtle)] p-3">
-                <Skeleton className="h-3 w-[92%]" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-3 w-[85%]" />
-                <Skeleton className="h-3 w-[70%]" />
-                <p className="pt-3 text-[12px] text-zinc-500">Reading your text…</p>
+            {hasRun && (
+              <div className="mb-2 flex gap-1 rounded-lg border border-[var(--border-subtle)] p-0.5">
+                {OUTPUT_TABS.map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => handleTabChange(tab.value)}
+                    className={`flex-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors ${
+                      outputTab === tab.value
+                        ? "text-white"
+                        : "text-zinc-500 hover:text-[var(--text-primary)]"
+                    }`}
+                    style={outputTab === tab.value ? { backgroundColor: "var(--marketing-accent)" } : undefined}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
+            )}
+
+            {outputTab === "ultra" ? (
+              ultraStatus === "loading" ? (
+                <WaitingExperience elapsedSeconds={ultraElapsedSeconds} stages={ULTRA_WAIT_STAGES} progressThreshold={5} />
+              ) : ultraStatus === "error" ? (
+                <div className="min-h-[340px] flex-1 rounded-lg border border-[var(--border-subtle)] p-3">
+                  <p className="text-[13px] font-medium text-amber-400">Ultra Human mode isn&apos;t available</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-zinc-500">{ultraError}</p>
+                  <button
+                    onClick={handleUltraFetch}
+                    className="mt-3 text-[12px] font-medium text-[var(--marketing-accent-text)] underline underline-offset-2"
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : ultraStatus === "done" ? (
+                <div className="min-h-[340px] flex-1 whitespace-pre-wrap rounded-lg border border-[var(--border-subtle)] p-3 text-[14px] leading-relaxed text-[var(--text-primary)]">
+                  {ultraOutput}
+                </div>
+              ) : (
+                <div className="flex min-h-[340px] flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-[var(--border-subtle)] p-3 text-center">
+                  <p className="text-[12px] text-zinc-500">
+                    See what our real fine-tuned model produces — trained from scratch on real human writing.
+                  </p>
+                  <button
+                    onClick={handleUltraFetch}
+                    className="mt-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold text-white"
+                    style={{ backgroundColor: "var(--marketing-accent)" }}
+                  >
+                    Generate Ultra Human text
+                  </button>
+                </div>
+              )
+            ) : phase === "reading" ? (
+              <WaitingExperience elapsedSeconds={readingElapsedSeconds} />
             ) : (
               <div className="min-h-[340px] flex-1 whitespace-pre-wrap rounded-lg border border-[var(--border-subtle)] p-3 text-[14px] leading-relaxed text-[var(--text-primary)]">
                 {output ? (
                   phase === "done" ? (
-                    <DiffOutput original={submittedText} humanized={output} />
+                    outputTab === "diff" ? (
+                      <DiffOutput original={submittedText} humanized={output} />
+                    ) : (
+                      output
+                    )
                   ) : (
                     <>
                       {output}
@@ -310,20 +457,35 @@ export default function HumanizerPage() {
               </div>
             )}
 
-            {phase === "done" && (
+            {outputTab === "ultra" && ultraStatus === "done" ? (
               <div className="mt-3 flex items-center justify-between">
                 <p className="text-[11px] text-zinc-500">
-                  {submittedWordCount.toLocaleString()} → {wordCount(output).toLocaleString()} words
+                  {submittedWordCount.toLocaleString()} → {wordCount(ultraOutput).toLocaleString()} words
                 </p>
                 <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
                   <span
                     className="inline-block h-2.5 w-2.5 rounded-sm"
                     style={{ backgroundColor: "var(--marketing-accent-soft)" }}
                   />
-                  Highlighted = changed
+                  Real fine-tuned model output
                 </p>
               </div>
-            )}
+            ) : outputTab !== "ultra" && phase === "done" ? (
+              <div className="mt-3 flex items-center justify-between">
+                <p className="text-[11px] text-zinc-500">
+                  {submittedWordCount.toLocaleString()} → {wordCount(output).toLocaleString()} words
+                </p>
+                {outputTab === "diff" && (
+                  <p className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-sm"
+                      style={{ backgroundColor: "var(--marketing-accent-soft)" }}
+                    />
+                    Highlighted = changed
+                  </p>
+                )}
+              </div>
+            ) : null}
           </div>
           </Glare>
         </div>

@@ -7,6 +7,15 @@ class DocumentSummary(BaseModel):
     size_bytes: int
     upload_status: str
     created_at: str | None = None
+    pinned: bool = False
+    # Real total PDF page count from pypdf, captured during ingestion.
+    # None until ingestion completes, or for legacy rows ingested before
+    # this field existed.
+    page_count: int | None = None
+    # True when this document had more vision-candidate (diagram/chart)
+    # pages than the per-upload cap allowed captioning — some visuals in it
+    # were never indexed, purely because of the cap.
+    vision_truncated: bool = False
 
 
 class DocumentListResponse(BaseModel):
@@ -29,3 +38,12 @@ class UploadAcceptedResponse(BaseModel):
     name: str
     upload_status: str
     size_bytes: int
+
+
+class DocumentPinRequest(BaseModel):
+    pinned: bool
+
+
+class DocumentPinResponse(BaseModel):
+    id: str
+    pinned: bool

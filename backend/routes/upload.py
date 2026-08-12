@@ -27,6 +27,13 @@ async def upload_pdf(
     processing → ready (or failed).
     """
     result = await service.initiate_upload(file, user_email=email)
-    if result.get("upload_status") == "processing":
+    # Gated on is_new, not upload_status == "processing" — a duplicate
+    # upload (same file, same user) landing while the original's background
+    # ingestion is still running would also read upload_status ==
+    # "processing" on the existing row, and scheduling a second ingestion
+    # pass for the same document would duplicate every chunk it produces
+    # (including vision-captioned ones, doubling that cost). is_new is only
+    # ever True for the call that actually created the row.
+    if result.get("is_new"):
         background_tasks.add_task(service.process_upload_background, result["document_id"])
     return result

@@ -36,7 +36,7 @@ function StreamingDot() {
           key={i}
           className="inline-block h-1.5 w-1.5 rounded-full"
           style={{
-            backgroundColor: "var(--marketing-accent)",
+            backgroundColor: "var(--atmosphere-accent)",
             animation: `pulse-dot 1.2s ease-in-out ${i * 0.2}s infinite`,
           }}
         />
@@ -274,16 +274,16 @@ export function ChatMessageList({
             <div className="relative">
               <div
                 className="demo-glow pointer-events-none absolute -inset-4 -z-10 rounded-full blur-xl"
-                style={{ background: "radial-gradient(circle, rgba(224,138,62,0.35), transparent 70%)" }}
+                style={{ background: "radial-gradient(circle, var(--atmosphere-glow), transparent 70%)" }}
                 aria-hidden
               />
               <div
                 className="flex h-14 w-14 items-center justify-center rounded-2xl ring-1"
-                style={{ backgroundColor: "var(--marketing-accent-soft)", borderColor: "var(--marketing-accent-soft)" }}
+                style={{ backgroundColor: "var(--atmosphere-accent-soft)", borderColor: "var(--atmosphere-accent-soft)" }}
               >
                 <svg
                   className="h-7 w-7"
-                  style={{ color: "var(--marketing-accent-text)" }}
+                  style={{ color: "var(--atmosphere-accent-text)" }}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -307,7 +307,7 @@ export function ChatMessageList({
                   onClick={() => onSuggestionClick?.(hint)}
                   className="hover-surface cursor-pointer rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] px-4 py-2.5 text-[12px] text-zinc-600 text-left transition hover:text-zinc-400"
                   style={{ borderColor: "var(--border-subtle)" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
+                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--atmosphere-accent-soft)")}
                   onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-subtle)")}
                 >
                   {hint}

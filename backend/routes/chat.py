@@ -31,8 +31,13 @@ async def chat(
     # Resolve each selected document's display name up front — the model
     # only ever sees stored_filename (a UUID) via retrieval metadata, and
     # without this it cites and reasons about that raw UUID instead of a
-    # human-readable name.
+    # human-readable name. Also carries each document's real page count
+    # (from pypdf at ingestion time) when known, so the chat prompt can
+    # state it with confidence instead of falling back to a retrieval-based
+    # lower-bound guess.
     document_names: dict[str, str] = {}
+    document_page_counts: dict[str, int] = {}
+    vision_truncated_documents: set[str] = set()
     if body.document_ids:
         doc_repo = DocumentRepository(db)
         for document_id in body.document_ids:
@@ -40,6 +45,15 @@ async def chat(
             if not doc or doc.user_email != email:
                 raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
             document_names[document_id] = doc.original_filename
+            if doc.page_count is not None:
+                document_page_counts[document_id] = doc.page_count
+            if doc.vision_truncated:
+                vision_truncated_documents.add(document_id)
+
+    # Runs before the StreamingResponse is constructed, so an over-limit
+    # message returns a normal 413 JSON error rather than an SSE frame after
+    # the response has already committed to 200.
+    service.validate_latest_message([message.model_dump() for message in body.messages])
 
     async def event_stream():
         try:
@@ -47,6 +61,8 @@ async def chat(
                 messages=[message.model_dump() for message in body.messages],
                 document_ids=body.document_ids,
                 document_names=document_names,
+                document_page_counts=document_page_counts,
+                vision_truncated_documents=vision_truncated_documents,
                 user_email=email,
             ):
                 if event["type"] == "sources":

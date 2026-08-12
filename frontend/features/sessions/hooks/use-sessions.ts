@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { sessionsApi } from "@/services/api/sessions-api";
 import type { ChatSession } from "@/shared/types/chat";
+import type { SessionsResponse } from "@/shared/types/api";
 import { useSessionStore } from "@/stores/session-store";
 
 const initialAssistantMessage = {
@@ -91,12 +92,60 @@ export function useSessions(email: string | null) {
     },
   });
 
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
+
+  // The single, canonical "start a new chat" flow. Previously this logic was
+  // hand-rolled twice — once (buggy, stale-closure, no race guards) in
+  // chat/page.tsx for ⌘N/⌘K, and once (correct, race-safe) in the sidebar's
+  // "+" button — so which bugs you hit depended on which button you clicked.
+  // Now every caller shares this one implementation via useSessions(email).
+  const createNewSession = useCallback(async () => {
+    setIsCreatingSession(true);
+    try {
+      // Stamp created_at immediately so the sessions panel's "expires in Nd"
+      // caption renders right away instead of staying blank until the next
+      // full sessions list reload.
+      const draft = { ...makeDefaultSession(), created_at: new Date().toISOString() };
+      // Read current sessions from the store directly (not the closed-over
+      // `sessions` value) so a rapid double-invocation can't stomp on itself.
+      const currentSessions = useSessionStore.getState().sessions;
+      setSessions([draft, ...currentSessions]);
+      setActiveSessionId(draft.id);
+
+      if (!email) return draft;
+
+      const created = await createMutation.mutateAsync(draft);
+      const persisted = { ...draft, id: created.id };
+
+      // Cancel any in-flight ["sessions"] fetch before writing — otherwise a
+      // slower, older response already queued when this call started could
+      // resolve afterward and silently overwrite this session with a
+      // pre-message snapshot, making it appear blank.
+      await queryClient.cancelQueries({ queryKey: ["sessions"] });
+
+      const latestSessions = useSessionStore.getState().sessions;
+      setSessions([persisted, ...latestSessions.filter((s) => s.id !== draft.id)]);
+      setActiveSessionId(persisted.id);
+
+      queryClient.setQueryData<SessionsResponse>(["sessions"], (old) => {
+        if (!old) return old;
+        return { ...old, sessions: [persisted, ...old.sessions.filter((s) => s.id !== draft.id && s.id !== persisted.id)] };
+      });
+
+      return persisted;
+    } finally {
+      setIsCreatingSession(false);
+    }
+  }, [email, queryClient, setSessions, setActiveSessionId, createMutation]);
+
   return {
     sessions,
     activeSessionId,
     setActiveSessionId,
     setSessions,
     createSession: createMutation.mutateAsync,
+    createNewSession,
+    isCreatingSession,
     updateSession: updateMutation.mutateAsync,
     deleteSession: deleteMutation.mutateAsync,
     isLoadingSessions: query.isLoading,

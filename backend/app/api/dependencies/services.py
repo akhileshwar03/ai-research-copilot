@@ -23,6 +23,7 @@ from app.services.document_service import DocumentService
 from app.services.email_service import EmailService
 from app.services.health_service import HealthService
 from app.services.humanizer_service import HumanizerService
+from app.services.humanizer_ultra_service import HumanizerUltraService
 from app.services.otp_service import OtpService
 from app.services.paper_analyzer_service import PaperAnalyzerService
 from app.services.realtime_service import RealtimeService
@@ -77,6 +78,7 @@ def get_document_service(db: Session = Depends(get_db)) -> DocumentService:
     ingestion_service = IngestionService(
         embedding_service=get_embedding_service(),
         vector_store=vector_store,
+        ai_service=get_ai_service(),
     )
     return DocumentService(
         document_repo=DocumentRepository(db),
@@ -99,6 +101,10 @@ def get_humanizer_service(db: Session = Depends(get_db)) -> HumanizerService:
         run_repo=HumanizerRunRepository(db),
         user_repo=UserRepository(db),
     )
+
+
+def get_humanizer_ultra_service() -> HumanizerUltraService:
+    return HumanizerUltraService()
 
 
 def get_checker_service() -> CheckerService:

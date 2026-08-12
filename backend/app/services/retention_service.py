@@ -140,9 +140,14 @@ def run_cleanup() -> dict:
             db.commit()
 
         # Chats: delete messages first (no DB-level cascade on bulk deletes).
+        # Pinned sessions are exempt — pinning is the user's explicit signal to
+        # keep a chat regardless of age, so retention must never silently
+        # delete something the user pinned specifically to preserve it.
         expired_session_ids = [
             row[0]
-            for row in db.query(ChatSession.id).filter(ChatSession.created_at < cutoff).all()
+            for row in db.query(ChatSession.id)
+            .filter(ChatSession.created_at < cutoff, ChatSession.pinned.is_(False))
+            .all()
         ]
         if expired_session_ids:
             db.query(ChatMessage).filter(ChatMessage.session_id.in_(expired_session_ids)).delete(

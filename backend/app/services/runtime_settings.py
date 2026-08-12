@@ -36,7 +36,28 @@ def _defs() -> dict[str, SettingDef]:
             float, 0.0, 2.0, "Cosine-distance cutoff for retrieved chunks (lower = stricter)"
         ),
         "chat_rate_limit_per_minute": SettingDef(int, 1, 1000, "Chat requests allowed per IP per minute"),
+        "chat_max_chars": SettingDef(
+            int, 500, 50000, "Maximum characters accepted per chat message (matches the frontend counter)"
+        ),
+        "rag_full_document_max_chars": SettingDef(
+            int,
+            10000,
+            400000,
+            "Character budget for whole-document context on counting/aggregate questions "
+            "(e.g. \"how many\"). Above this, the answer is presented as a lower bound, not exact.",
+        ),
+        "vision_ingestion_max_pages": SettingDef(
+            int,
+            0,
+            300,
+            "Max pages per document sent for vision captioning at upload (diagrams/charts become "
+            "searchable). 0 disables vision ingestion entirely. Only pages that look visual (an "
+            "embedded image, or unusually little extractable text) are ever sent, not every page.",
+        ),
         "upload_rate_limit_per_minute": SettingDef(int, 1, 1000, "Uploads allowed per IP per minute"),
+        "documents_rate_limit_per_minute": SettingDef(
+            int, 1, 1000, "Document list/status/delete/pin/download requests allowed per IP per minute"
+        ),
         "retention_days": SettingDef(
             int, 0, 365, "Days documents and chats are kept before automatic cleanup (0 = keep forever)"
         ),
@@ -75,7 +96,11 @@ def _env_defaults() -> dict[str, int | float]:
         "rag_top_k": s.rag_top_k,
         "rag_similarity_threshold": s.rag_similarity_threshold,
         "chat_rate_limit_per_minute": 20,
+        "chat_max_chars": 4000,
+        "rag_full_document_max_chars": 150000,
+        "vision_ingestion_max_pages": 40,
         "upload_rate_limit_per_minute": 10,
+        "documents_rate_limit_per_minute": 60,
         "retention_days": s.retention_days,
         "humanize_max_chars": 20000,
         "humanize_min_words": 30,
@@ -204,6 +229,10 @@ def chat_rate_limit() -> str:
 
 def upload_rate_limit() -> str:
     return f"{int(runtime_settings.get('upload_rate_limit_per_minute'))}/minute"
+
+
+def documents_rate_limit() -> str:
+    return f"{int(runtime_settings.get('documents_rate_limit_per_minute'))}/minute"
 
 
 def humanize_rate_limit() -> str:

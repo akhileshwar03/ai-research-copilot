@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { documentsApi } from "@/services/api/documents-api";
-import type { DocumentItem } from "@/shared/types/api";
+import type { DocumentItem, DocumentsResponse } from "@/shared/types/api";
 import { useDocumentStore } from "@/stores/document-store";
 
 const PROCESSING_POLL_INTERVAL_MS = 3000;
@@ -41,6 +41,26 @@ export function useDocuments(email: string | null) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["documents"] }),
   });
 
+  // Optimistic: flips the pin instantly in the cache (so the list re-sorts
+  // right away) and rolls back if the request fails, rather than waiting a
+  // full round trip for a checkbox-level toggle to visibly react.
+  const pinMutation = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => documentsApi.setPinned(id, pinned),
+    onMutate: async ({ id, pinned }) => {
+      await queryClient.cancelQueries({ queryKey: ["documents"] });
+      const previous = queryClient.getQueryData<DocumentsResponse>(["documents"]);
+      queryClient.setQueryData<DocumentsResponse>(["documents"], (old) => {
+        if (!old) return old;
+        return { ...old, documents: old.documents.map((d) => (d.id === id ? { ...d, pinned } : d)) };
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["documents"], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["documents"] }),
+  });
+
   const documents: DocumentItem[] = query.data?.documents ?? [];
 
   return {
@@ -52,6 +72,7 @@ export function useDocuments(email: string | null) {
     uploadDocument: uploadMutation.mutateAsync,
     isUploadingDocument: uploadMutation.isPending,
     deleteDocument: deleteMutation.mutateAsync,
+    setDocumentPinned: (id: string, pinned: boolean) => pinMutation.mutateAsync({ id, pinned }),
     refetchDocuments: query.refetch,
   };
 }

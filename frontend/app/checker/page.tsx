@@ -266,7 +266,7 @@ export default function CheckerPage() {
       background={
         <>
           <CheckerBackground />
-          <CursorSpotlight color="224,138,62" />
+          <CursorSpotlight color="138,90,110" />
         </>
       }
     >

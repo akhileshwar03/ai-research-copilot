@@ -33,7 +33,17 @@ class Settings(BaseSettings):
     # meant rewriting with the least controllable output for the one pass where
     # control over lexical unpredictability matters most.
     humanizer_rewrite_model: str = "gpt-4.1-mini"
-    humanizer_classify_model: str = "gpt-5-nano"
+    # Was "gpt-5-nano" (a reasoning model) until 2026-08-10 -- real measured latency
+    # on the exact same classify prompt/input: gpt-5-nano 30.9s vs gpt-4.1-mini 3.9s,
+    # ~8x. Classify runs twice per humanize request (Pass 1 analyze + Pass 3 verify),
+    # so this alone cut real end-to-end pipeline latency roughly in half. Reasoning
+    # models spend hidden "thinking" tokens before answering, which is wasted latency
+    # for what's really pattern-matching (banned phrases, uniform sentence lengths),
+    # not a task needing deep reasoning. Both models return valid, parseable JSON;
+    # a full detection-accuracy comparison (false-positive/negative rate on flagged
+    # AI-tells) hasn't been done, only real speed + basic output-validity, per user's
+    # explicit go-ahead on the speed/quality trade-off.
+    humanizer_classify_model: str = "gpt-4.1-mini"
     # Sampling params for the rewrite pass only (Pass 1/3 classify calls stay
     # deterministic — these don't apply there). Tuned toward the human range of
     # burstiness (sentence-to-sentence perplexity swings of 0.6-1.2) rather than
@@ -42,6 +52,18 @@ class Settings(BaseSettings):
     humanizer_rewrite_top_p: float = 0.97
     humanizer_rewrite_frequency_penalty: float = 0.55
     humanizer_rewrite_presence_penalty: float = 0.35
+
+    # "Ultra Human" tab -- the real Phase 2 fine-tuned LoRA (Qwen2.5-7B + adapter,
+    # 80% real GPTZero pass rate, see backend/scripts/finetune/STATE.md), served
+    # locally via Ollama. NOT production-hosted yet (that's the still-unstarted
+    # Modal integration) -- only reachable when running against a local Ollama
+    # instance with `humaniser-lora` loaded. In any other environment this stays
+    # unreachable and the endpoint returns a clear "unavailable" error rather than
+    # hanging or crashing; the tab surfaces that gracefully rather than pretending
+    # to work. Long timeout on purpose -- real measured cold starts ran up to ~120s.
+    humanizer_ultra_ollama_url: str = "http://localhost:11434"
+    humanizer_ultra_model: str = "humaniser-lora"
+    humanizer_ultra_timeout_seconds: float = 180.0
 
     jwt_secret_key: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"

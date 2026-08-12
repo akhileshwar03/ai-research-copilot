@@ -153,6 +153,60 @@ def _run_startup_migrations() -> None:
                 conn.commit()
                 logger.info("startup_migration: checksum_sha256 now per-user unique")
 
+            # ── documents.pinned (migration 0015) ───────────────────────────────
+            doc_cols = {c["name"] for c in inspector.get_columns("documents")}
+            if "pinned" not in doc_cols:
+                logger.info("startup_migration: adding documents.pinned")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+                logger.info("startup_migration: documents.pinned added")
+
+            # ── documents.page_count (migration 0016) ───────────────────────────
+            doc_cols = {c["name"] for c in inspector.get_columns("documents")}
+            if "page_count" not in doc_cols:
+                logger.info("startup_migration: adding documents.page_count")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN page_count INTEGER"))
+                conn.commit()
+                logger.info("startup_migration: documents.page_count added")
+
+            # ── documents.vision_truncated + per-user unique name (migration 0017) ──
+            doc_cols = {c["name"] for c in inspector.get_columns("documents")}
+            if "vision_truncated" not in doc_cols:
+                logger.info("startup_migration: adding documents.vision_truncated")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN vision_truncated BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+                logger.info("startup_migration: documents.vision_truncated added")
+
+            existing_index_names = {idx["name"] for idx in inspector.get_indexes("documents")}
+            if "uq_documents_user_name" not in existing_index_names:
+                logger.info("startup_migration: adding uq_documents_user_name")
+                # Defensively resolve any pre-existing duplicate names first —
+                # same reasoning as the Alembic migration (20260812_0017):
+                # a document uploaded before this constraint existed could
+                # otherwise make the index creation itself fail. Nothing is
+                # deleted; later duplicates get a disambiguating suffix.
+                rows = conn.execute(text(
+                    "SELECT id, user_email, original_filename FROM documents "
+                    "WHERE user_email IS NOT NULL "
+                    "ORDER BY user_email, lower(original_filename), id"
+                )).fetchall()
+                seen: dict[tuple, int] = {}
+                for row in rows:
+                    key = (row.user_email, row.original_filename.lower())
+                    if key in seen:
+                        seen[key] += 1
+                        conn.execute(
+                            text("UPDATE documents SET original_filename = :name WHERE id = :id"),
+                            {"name": f"{row.original_filename} (duplicate {seen[key]})", "id": row.id},
+                        )
+                    else:
+                        seen[key] = 1
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX uq_documents_user_name ON documents (user_email, lower(original_filename))"
+                ))
+                conn.commit()
+                logger.info("startup_migration: uq_documents_user_name added")
+
     except Exception:
         logger.exception(
             "startup_migration failed — server will continue but document endpoints may be broken"

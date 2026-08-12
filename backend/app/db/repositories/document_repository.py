@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models.document import Document
@@ -36,7 +37,7 @@ class DocumentRepository:
         return (
             self.db.query(Document)
             .filter(Document.user_email == user_email)
-            .order_by(Document.created_at.desc())
+            .order_by(Document.pinned.desc(), Document.created_at.desc())
             .offset(skip)
             .limit(limit)
             .all()
@@ -59,13 +60,44 @@ class DocumentRepository:
             .first()
         )
 
-    # Kept for test compatibility
-    def get_by_checksum(self, checksum_sha256: str) -> Document | None:
-        return self.db.query(Document).filter(Document.checksum_sha256 == checksum_sha256).first()
+    def get_by_filename_and_user(self, original_filename: str, user_email: str) -> Document | None:
+        """Case-insensitive lookup by display name, scoped to one user.
 
-    def update_status(self, document: Document, upload_status: str, error_message: str | None = None) -> None:
+        Used to reject a second, differently-content upload under a name
+        already in use — without this, "notes.pdf" (content A) and a later,
+        unrelated "notes.pdf" / "Notes.pdf" (content B) both land in the
+        sidebar with the exact same label and no way to tell them apart.
+        Identical-content re-uploads never reach this check at all — they're
+        already caught earlier by the checksum dedup, which is friendlier
+        (silently reuses the existing document instead of erroring).
+        """
+        return (
+            self.db.query(Document)
+            .filter(
+                func.lower(Document.original_filename) == original_filename.lower(),
+                Document.user_email == user_email,
+            )
+            .first()
+        )
+
+    def update_status(
+        self,
+        document: Document,
+        upload_status: str,
+        error_message: str | None = None,
+        page_count: int | None = None,
+        vision_truncated: bool | None = None,
+    ) -> None:
         document.upload_status = upload_status
         document.error_message = error_message
+        if page_count is not None:
+            document.page_count = page_count
+        if vision_truncated is not None:
+            document.vision_truncated = vision_truncated
+        self.db.flush()
+
+    def set_pinned(self, document: Document, pinned: bool) -> None:
+        document.pinned = pinned
         self.db.flush()
 
     def delete(self, document: Document) -> None:

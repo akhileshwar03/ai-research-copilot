@@ -85,3 +85,86 @@ class RetrievalService:
             logger.info("retrieval_no_relevant_chunks query_len=%d user=%s", len(query), user_email)
 
         return {"context": "\n\n".join(formatted_chunks), "sources": unique_sources}
+
+    def get_max_indexed_pages(self, source_ids: list[str], user_email: str = "") -> dict[str, int]:
+        """Highest page number actually ingested per document — a real,
+        queryable fact (see PgVectorStore.max_pages), not a retrieval-based
+        guess. Lets the chat prompt answer "how many pages" honestly instead
+        of extrapolating from whatever chunks a similarity search surfaced."""
+        return self.vector_store.max_pages(source_ids, user_email=user_email)
+
+    def get_full_document_context(
+        self,
+        source_ids: list[str],
+        user_email: str = "",
+        source_names: dict[str, str] | None = None,
+        max_chars: int | None = None,
+    ) -> dict:
+        """Every ingested chunk for the given documents, concatenated in
+        original document order — not a top-k similarity search.
+
+        For "how many / list all / total" questions, top-k retrieval
+        structurally cannot answer correctly: it returns a handful of chunks
+        ranked by similarity to the *query wording*, not the chunks needed
+        to actually count or enumerate something across the whole document.
+        This trades that off against context size — capped at *max_chars*
+        (default rag_full_document_max_chars) so a very large document
+        doesn't blow the model's context window or the request's latency/
+        cost; when the cap is hit, ``truncated=True`` tells the caller (and
+        should tell the model) that a count from this context is a reliable
+        lower bound, not a guaranteed exact total.
+        """
+        source_names = source_names or {}
+        cap = max_chars if max_chars is not None else int(runtime_settings.get("rag_full_document_max_chars"))
+
+        chunks = self.vector_store.get_all_chunks(source_ids, user_email=user_email)
+
+        parts: list[str] = []
+        total_chars = 0
+        truncated = False
+        for c in chunks:
+            display_name = source_names.get(c["source"], c["source"])
+            page_label = f" | PAGE: {c['page']}" if c.get("page") else ""
+            piece = f"[SOURCE: {display_name}{page_label}]\n{c['content']}"
+            if total_chars + len(piece) > cap:
+                truncated = True
+                break
+            parts.append(piece)
+            total_chars += len(piece)
+
+        return {"context": "\n\n".join(parts), "truncated": truncated, "chunk_count": len(parts)}
+
+    def get_page_context(
+        self,
+        source_ids: list[str],
+        pages: list[int],
+        user_email: str = "",
+        source_names: dict[str, str] | None = None,
+    ) -> dict:
+        """Every chunk whose stored page metadata is exactly one of *pages*
+        — an exact structural filter (see PgVectorStore.get_chunks_by_pages),
+        not a similarity search. For "what's on page N" questions (including
+        multi-page ones, e.g. "compare page 3 and page 8"), this is the only
+        retrieval mode that can actually guarantee the returned content is
+        really from those pages.
+
+        Reports which of the requested pages actually had content
+        (``found_pages``) and which didn't (``missing_pages``) — a
+        multi-page question must never silently answer from only the pages
+        that happened to have content while staying quiet about the rest.
+        """
+        source_names = source_names or {}
+        chunks = self.vector_store.get_chunks_by_pages(source_ids, pages, user_email=user_email)
+
+        parts = [
+            f"[SOURCE: {source_names.get(c['source'], c['source'])} | PAGE: {c['page']}]\n{c['content']}"
+            for c in chunks
+        ]
+        found_pages = sorted({c["page"] for c in chunks})
+        missing_pages = [p for p in pages if p not in found_pages]
+        return {
+            "context": "\n\n".join(parts),
+            "chunk_count": len(parts),
+            "found_pages": found_pages,
+            "missing_pages": missing_pages,
+        }

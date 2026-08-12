@@ -71,6 +71,11 @@ export interface DocumentItem {
   size_bytes?: number;
   upload_status?: string;
   created_at?: string;
+  pinned?: boolean;
+  /** Real total PDF page count from ingestion; null until ingestion completes. */
+  page_count?: number | null;
+  /** True when some diagram/chart pages exceeded the per-upload vision cap and were never captioned. */
+  vision_truncated?: boolean;
 }
 export interface DocumentsResponse {
   documents: DocumentItem[];

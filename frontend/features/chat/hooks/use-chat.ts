@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -23,12 +23,34 @@ function deriveTitle(message: string): string {
 
 export function useChat() {
   const [input, setInput] = useState("");
-  const [chatError, setChatError] = useState<string>("");
-  const lastSentMessageRef = useRef<string>("");
+  // Both keyed by session id rather than being one bare/shared value. An
+  // error banner (and the retry state behind it) belongs to the session it
+  // happened in — with a single shared value, switching sessions after a
+  // failed send left the previous session's error banner (and a retry that
+  // would pop messages off / refill the input of) showing on top of the
+  // newly active, completely unrelated session. Keying by id means there's
+  // nothing to reset on session switch: reading the current session's entry
+  // (defaulting to "none") is automatically correct, no effect required.
+  const [chatErrorsBySession, setChatErrorsBySession] = useState<Record<number, string>>({});
+  const [pendingBySession, setPendingBySession] = useState<Record<number, string>>({});
   const updateMessages = useSessionStore((s) => s.updateMessages);
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const queryClient = useQueryClient();
+
+  const chatError = activeSessionId != null ? chatErrorsBySession[activeSessionId] ?? "" : "";
+
+  const setChatError = (sessionId: number, message: string) => {
+    setChatErrorsBySession((prev) => {
+      if (!message) {
+        if (!(sessionId in prev)) return prev;
+        const rest = { ...prev };
+        delete rest[sessionId];
+        return rest;
+      }
+      return { ...prev, [sessionId]: message };
+    });
+  };
 
   /** Map stored document IDs (UUIDs) from the stream to display names. */
   const formatSources = (sourceIds?: string[]): string | undefined => {
@@ -90,10 +112,11 @@ export function useChat() {
     if (!activeSession || !input.trim()) {
       return;
     }
-    setChatError("");
+    const sessionId = activeSession.id;
+    setChatError(sessionId, "");
 
     const userMessage: Message = { role: "user", content: input.trim() };
-    lastSentMessageRef.current = input.trim();
+    setPendingBySession((prev) => ({ ...prev, [sessionId]: input.trim() }));
     const baselineMessages = [...activeSession.messages, userMessage];
     updateMessages(activeSession.id, baselineMessages);
     setInput("");
@@ -131,7 +154,7 @@ export function useChat() {
         ...baselineMessages,
         { role: "assistant", content: "Request failed. Please retry." },
       ]);
-      setChatError(error instanceof Error ? error.message : "Request failed. Please retry.");
+      setChatError(sessionId, error instanceof Error ? error.message : "Request failed. Please retry.");
       return; // don't try to save a failed session
     }
 
@@ -156,17 +179,22 @@ export function useChat() {
     }
   };
 
-  /** Undo the last failed message: restore user input and strip the error turn. */
+  /** Undo the last failed message: restore user input and strip the error turn.
+   *  Scoped to the active session's own pending entry — retrying can only
+   *  ever act on the session it actually belongs to, since a different
+   *  session simply has no entry (or its own) to read here. */
   const retryLastMessage = () => {
-    if (!activeSession || !lastSentMessageRef.current) return;
+    if (!activeSession) return;
+    const pendingText = pendingBySession[activeSession.id];
+    if (!pendingText) return;
     const msgs = [...activeSession.messages];
     // Remove the error assistant reply
     if (msgs.length && msgs[msgs.length - 1].role === "assistant") msgs.pop();
     // Remove the user message that failed
     if (msgs.length && msgs[msgs.length - 1].role === "user") msgs.pop();
     updateMessages(activeSession.id, msgs);
-    setInput(lastSentMessageRef.current);
-    setChatError("");
+    setInput(pendingText);
+    setChatError(activeSession.id, "");
   };
 
   return {
