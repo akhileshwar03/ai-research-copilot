@@ -1895,3 +1895,120 @@ Summary for anyone picking this up cold:
 - **Known, real, still-open limitation**: short/punchy/low-elaboration content (business
   email, report summary, casual conversational register) is the model's consistent relative
   weak spot across both Step 6 and Step 7 data. Worth targeting first in any future round.
+
+## Round 25 (2026-08-10) — production integration planning + real cold-start measurement
+
+Not yet integrated into production (`ai_service.py` still calls GPT-4.1-mini). User wants
+production serving eventually, at low-to-negligible cost. Planned: host on Modal (already
+set up, checkpoint already lives there), serve via an OpenAI-compatible endpoint (minimal
+`ai_service.py` change), with a mandatory GPT fallback on any failure/timeout, gated behind an
+env flag for safe rollout.
+
+**Real cost math (verified Modal pricing, not guessed)**: 24/7 warm GPU would cost
+$430-800+/month depending on GPU tier -- wildly disproportionate to the $34 + $16.42 already
+spent on this whole project. Scale-to-zero (`min_containers=0`) is the only sane default --
+only pay for actual request-processing seconds, not idle time. User specifically worried
+"1 request/hour = billed for the full 24h" -- verified via real Modal docs this is FALSE by
+default: billing is per-second of actual GPU-active time, and a short `scaledown_window`
+releases the GPU between infrequent requests rather than holding it (that's a config choice,
+not an inherent behavior).
+
+**Real cold-start measurement** (built and deployed an actual minimal Modal GPU function
+loading the real `run_1786334362/merged` checkpoint, measured real client-observed wall-clock
+latency, not estimated):
+- **No snapshot, cold start: 118.0s** (92.0s model load + 4.8s generate + 21.1s spin-up).
+  Confirmed too slow for interactive UX as-is.
+- Tried Modal's experimental GPU memory snapshotting (`enable_memory_snapshot=True` +
+  `experimental_options={"enable_gpu_snapshot": True}`, `@modal.enter(snap=True)`) --
+  real, verified Modal feature (not guessed), can cut cold starts up to ~10x per Modal's own
+  docs for some models.
+  - Model *loading* specifically: reliably faster every time, 92s -> 12-19s (~6-7x, consistent
+    across all 4 trials).
+  - **Total end-to-end latency was NOT reliably fast**: 5 real trials (1 baseline + 4
+    snapshot-restore) came back 118.0s / 85.8s / 55.2s / **225.5s** / 38.1s -- a genuine outlier
+    worse than the no-snapshot baseline, not cherry-picked away. Average across the 4 snapshot
+    trials (~101s) barely beats the single no-snapshot trial. Root cause: unpredictable
+    "container spin-up overhead" component, consistent with Modal's own "experimental, test
+    carefully" framing of this feature.
+- **Conclusion, not acted on further this round**: snapshotting is free and never hurts (kept
+  as a good default), but can't be relied on alone to guarantee fast cold starts given the
+  observed variance. Given the user's stated priority is low/negligible cost (not guaranteed
+  speed), the honest recommendation is scale-to-zero + snapshotting on + a "waking up" loading
+  UX state for the (variable-length, sometimes slow) first request after idle -- not paying for
+  warm-kept hours, which would cost real recurring money ($192+/month for 8hrs/day warm on L4)
+  to buy consistency this project doesn't need.
+
+**Test artifacts**: `scripts/finetune/coldstart_test.py` (kept, real reusable measurement
+tool, not deleted -- unlike the sampling-variant Modelfiles, this has ongoing value if cold
+start needs re-measuring after infra changes). Modal app `humaniser-coldstart-test` deployed
+during testing, stopped (`modal app stop --yes`) after measurements were done -- no lingering
+resources, scale-to-zero meant ~$0 idle cost throughout regardless.
+
+**Decision, revised same round**: user pushed back on snapshotting after seeing the real data
+-- reasonable call. It added real complexity (an experimental Modal feature) and real cost
+(the snapshot itself needs storage, and creating it still burns a full slow cold-start's worth
+of billed GPU seconds) without a reliably-proven latency win (~101s average vs 118s baseline,
+one trial worse at 225s). **Reversed: dropping GPU snapshotting from the plan entirely.**
+Simpler final posture: plain scale-to-zero (`min_containers=0`, short `scaledown_window`), no
+snapshot config, accept the real ~118s cold start on first request after idle, handled with a
+"waking up the model" loading state in the UI rather than an unreliable infra workaround.
+Fewer moving parts, no experimental-feature risk, same near-negligible cost.
+
+**Status**: production integration NOT started (deliberately -- this round was cost/latency
+research only, per user's explicit "we should not lose progress, only improvement" framing
+carried over from earlier rounds). Next real step if resumed: implement Phase A/B from the
+plan (Modal-hosted vLLM endpoint, OpenAI-compatible, `ai_service.py` integration with fallback,
+env-flag-gated rollout), plain scale-to-zero only, no memory snapshotting.
+
+## Round 26 (2026-08-10) — Humanizer UI: 3-tab output + real local-Ollama "Ultra Human" path
+
+Not the production integration (still not started, still needs Modal). Instead: wired the
+existing local Ollama `humaniser-lora` model into a real, working (if local-dev-only) path,
+plus rebuilt the loading UX per researched best practices, while the production Modal decision
+stays pending.
+
+**New backend** (`backend/app/services/humanizer_ultra_service.py`, new):
+`POST /api/v1/humanize/ultra` calls local Ollama directly, system prompt built identically to
+training/`export.py` (`BASE_PROMPT + hard_rules + STYLE_GUIDANCE + format_examples`, verified
+byte-length match again this round). Not streamed (real cold starts run long enough that a
+dedicated waiting UI beats token streaming here). Config added:
+`humanizer_ultra_ollama_url` (default `http://localhost:11434`), `humanizer_ultra_model`
+(`humaniser-lora`), `humanizer_ultra_timeout_seconds` (180s, covers the real measured ~120s
+cold start with margin). Unreachable/timeout raises a clean `AppError` (503/504), not a crash
+or hang -- **verified for real**, not assumed: called the service directly against a real
+working Ollama (got real, coherent output) and against a deliberately-broken URL (got a clean
+`ULTRA_UNAVAILABLE` 503, correct code/message, no crash).
+
+**Known, explicit limitation**: this only works when the backend can reach `localhost:11434`
+-- i.e., local development on a machine running Ollama. In real production (Render backend)
+this endpoint will always return 503 until the actual Modal integration (still not built)
+replaces the URL. Not a bug -- by design, and the frontend handles it as a real, expected
+state, not an error case.
+
+**Frontend**: `frontend/app/humanizer/page.tsx` restructured with 3 output tabs -- **Basic**
+(plain GPT rewrite, no highlighting), **Diff Highlight** (existing `DiffOutput`, unchanged
+behavior), **Ultra Human ✨** (new, lazy-fetched only when the tab is opened, independent of
+the main GPT stream). Tab bar only appears after the first submission.
+
+**New shared component** (`frontend/features/humanizer/components/waiting-experience.tsx`):
+replaces the earlier plain-text staged-message design (Round 25's first pass) with a
+researched, richer waiting experience -- reused for both the main "reading" phase and the
+Ultra Human fetch (different message sets, `DEFAULT_WAIT_STAGES` vs `ULTRA_WAIT_STAGES`).
+Design basis (real search, not improvised, see conversation): skeleton+shimmer reduces
+perceived wait ~40% vs a blank/spinner state; waits past ~10s need a visible progress
+indicator, not just text; contextual staged messaging beats one static line for long waits.
+Reused the app's existing `demo-sheen` shimmer technique (already used elsewhere in the
+codebase) for visual consistency rather than inventing a new effect. Added one new keyframe,
+`progress-sweep` (indeterminate sweeping bar -- signals "still active" without claiming a
+percentage we don't have).
+
+**Verification performed**: `tsc --noEmit` clean (zero errors) both after the initial staged-
+message pass and after this full restructure; dev server compiled the route with no errors;
+backend service tested directly against the real running Ollama model (real coherent output
+returned) and against a deliberately unreachable URL (clean, correct 503 `AppError`, not a
+crash). Full interactive click-through of the live authenticated page was NOT done -- requires
+a real login, which is the user's action, not something done on their behalf.
+
+**Status**: Humanizer UI update complete and verified at the code/service level. Production
+Modal integration (the actual "make this reachable for real users" step) remains the
+next real step, not started, budget-gated per Round 25's discussion.

@@ -2,6 +2,11 @@
 
 import { useRef, useEffect, useState } from "react";
 
+// Mirrors the backend's chat_max_chars default (see runtime_settings.py).
+// Previously this number was only ever *displayed* — nothing actually
+// stopped a longer message from being sent, frontend or backend.
+const MAX_CHARS = 4000;
+
 interface ChatInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -13,6 +18,8 @@ interface ChatInputProps {
 export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isFocused, setIsFocused] = useState(false);
+  const overLimit = value.length > MAX_CHARS;
+  const canSubmit = Boolean(value.trim()) && !overLimit;
 
   // Auto-grow textarea
   useEffect(() => {
@@ -31,7 +38,7 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
     // ⌘/Ctrl+Enter always sends, regardless of the preference.
     if (e.metaKey || e.ctrlKey) {
       e.preventDefault();
-      if (!isStreaming && value.trim()) onSubmit();
+      if (!isStreaming && canSubmit) onSubmit();
       return;
     }
 
@@ -40,7 +47,7 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
     const enterToSend = localStorage.getItem("pf_enter_send") !== "off";
     if (!e.shiftKey && enterToSend) {
       e.preventDefault();
-      if (!isStreaming && value.trim()) onSubmit();
+      if (!isStreaming && canSubmit) onSubmit();
     }
   };
 
@@ -50,10 +57,10 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
         <div
           className="relative rounded-2xl border bg-[var(--surface-1)] transition-all focus-within:bg-[var(--surface-2)]"
           style={{
-            borderColor: isFocused ? "var(--marketing-accent-soft)" : "var(--border-medium)",
+            borderColor: isFocused ? "var(--atmosphere-accent-soft)" : "var(--border-medium)",
             boxShadow: isFocused
-              ? "0 0 0 3px var(--marketing-accent-soft), 0 8px 24px -12px var(--accent-glow)"
-              : "0 8px 24px -16px var(--accent-glow)",
+              ? "0 0 0 3px var(--atmosphere-accent-soft), 0 8px 24px -12px var(--atmosphere-glow)"
+              : "0 8px 24px -16px var(--atmosphere-glow)",
           }}
         >
           <textarea
@@ -72,13 +79,15 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
             aria-label="Chat prompt"
           />
 
-          {/* Character counter — visible only when text is long */}
+          {/* Character counter — visible only when text is long. Once actually
+              over the limit, this is a real block (send is disabled below),
+              not just a color change with no enforcement behind it. */}
           {value.length > 500 && (
             <div className={[
               "absolute bottom-3 left-4 text-[11px] tabular-nums transition-colors",
-              value.length > 3800 ? "text-red-400" : value.length > 2000 ? "text-amber-600" : "text-zinc-600",
+              overLimit ? "text-red-400" : value.length > 2000 ? "text-amber-600" : "text-zinc-600",
             ].join(" ")}>
-              {value.length.toLocaleString()}{value.length > 4000 ? " (limit exceeded)" : " / 4 000"}
+              {value.length.toLocaleString()}{overLimit ? " (limit exceeded — trim your message to send)" : ` / ${MAX_CHARS.toLocaleString()}`}
             </div>
           )}
 
@@ -97,9 +106,10 @@ export function ChatInput({ value, onChange, onSubmit, onCancel, isStreaming }: 
             ) : (
               <button
                 onClick={onSubmit}
-                disabled={!value.trim()}
+                disabled={!canSubmit}
+                title={overLimit ? `Message exceeds the ${MAX_CHARS.toLocaleString()}-character limit` : undefined}
                 className="flex h-8 w-8 items-center justify-center rounded-xl text-white transition hover:opacity-90 disabled:opacity-30"
-                style={{ backgroundColor: value.trim() ? "var(--marketing-accent)" : "var(--text-primary)" }}
+                style={{ backgroundColor: canSubmit ? "var(--marketing-accent)" : "var(--text-primary)" }}
                 aria-label="Send message"
               >
                 <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>

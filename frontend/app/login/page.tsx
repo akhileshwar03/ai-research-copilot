@@ -132,9 +132,9 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
+    <div className="dawn-theme relative flex min-h-screen items-center justify-center px-4">
       <AtmosphereBackground variant="soft" />
-      <CursorSpotlight color="197,105,31" />
+      <CursorSpotlight color="138,90,110" />
 
       <div className="relative z-10 w-full max-w-sm">
         {/* Brand */}

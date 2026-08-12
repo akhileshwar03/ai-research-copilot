@@ -91,7 +91,7 @@ function AuthCallbackInner() {
 
   if (status === "error") {
     return (
-      <div className="relative flex min-h-screen flex-col items-center justify-center gap-4 px-4">
+      <div className="dawn-theme relative flex min-h-screen flex-col items-center justify-center gap-4 px-4">
         <AtmosphereBackground variant="soft" />
         <div className="glass-card relative z-10 flex flex-col items-center gap-4 rounded-2xl px-8 py-8">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 ring-1 ring-red-500/20">
@@ -116,7 +116,7 @@ function AuthCallbackInner() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col items-center justify-center gap-3">
+    <div className="dawn-theme relative flex min-h-screen flex-col items-center justify-center gap-3">
       <AtmosphereBackground variant="soft" />
       <div className="relative z-10 flex flex-col items-center gap-3">
         <div
@@ -131,7 +131,7 @@ function AuthCallbackInner() {
 
 export default function AuthCallbackPage() {
   const loadingFallback = (
-    <div className="relative flex min-h-screen flex-col items-center justify-center gap-3">
+    <div className="dawn-theme relative flex min-h-screen flex-col items-center justify-center gap-3">
       <AtmosphereBackground variant="soft" />
       <div className="relative z-10 flex flex-col items-center gap-3">
         <div

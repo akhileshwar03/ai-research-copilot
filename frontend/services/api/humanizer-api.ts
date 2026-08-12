@@ -21,6 +21,16 @@ export const humanizerApi = {
   stream: (text: string, style: HumanizeStyle, expand: boolean, signal?: AbortSignal) =>
     apiStream("/humanize", { text, style, expand }, signal),
 
+  // "Ultra Human" — the real fine-tuned model, not GPT. Local-Ollama-only right
+  // now (no production hosting yet); a real 503/504 from the backend means
+  // it's genuinely unreachable in this environment, not a bug — thrown as a
+  // normal Error via apiRequest's existing error handling, caught by the caller.
+  ultra: (text: string, style: HumanizeStyle, expand: boolean) =>
+    apiRequest<{ text: string }>("/humanize/ultra", {
+      method: "POST",
+      body: JSON.stringify({ text, style, expand }),
+    }),
+
   listRuns: (skip = 0, limit = 50) =>
     apiRequest<HumanizeRunListResponse>(`/humanizer/runs?skip=${skip}&limit=${limit}`),
 

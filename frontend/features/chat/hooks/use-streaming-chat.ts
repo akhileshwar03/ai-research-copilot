@@ -138,7 +138,17 @@ export function useStreamingChat() {
         );
 
         if (!response.ok || !response.body) {
-          throw new Error("Unable to connect to stream");
+          // Validation failures (e.g. the 413 over-length check) return a
+          // normal JSON error body before any stream ever starts — surface
+          // that specific message instead of masking it with a generic one.
+          let message = "Unable to connect to stream";
+          try {
+            const payload = (await response.json()) as { error?: { message?: string }; detail?: string };
+            message = payload?.error?.message || payload?.detail || message;
+          } catch {
+            // Non-JSON or empty body — keep the generic message.
+          }
+          throw new Error(message);
         }
 
         let sources: string[] = [];

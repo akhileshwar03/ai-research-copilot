@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.dependencies.auth import get_current_user_email
-from app.api.dependencies.services import get_humanizer_service
+from app.api.dependencies.services import get_humanizer_service, get_humanizer_ultra_service
 from app.core.rate_limit import limiter
 from app.schemas.humanize import HumanizeRequest
 from app.services.humanizer_service import HumanizerService
+from app.services.humanizer_ultra_service import HumanizerUltraService
 from app.services.runtime_settings import humanize_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -50,3 +51,25 @@ async def humanize_text(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/humanize/ultra")
+@limiter.limit(humanize_rate_limit)
+async def humanize_text_ultra(
+    request: Request,
+    body: HumanizeRequest,
+    email: str = Depends(get_current_user_email),
+    service: HumanizerService = Depends(get_humanizer_service),
+    ultra_service: HumanizerUltraService = Depends(get_humanizer_ultra_service),
+):
+    """'Ultra Human' — the real Phase 2 fine-tuned LoRA, not GPT. Local-Ollama-only
+    right now (no production hosting yet, see humanizer_ultra_service.py); returns
+    a clear 503/504 AppError rather than hanging or crashing when unreachable, so
+    the frontend can show an honest "unavailable" state instead of a broken one.
+    Not streamed — cold starts run long enough (measured up to ~120s) that a
+    dedicated waiting UI on the frontend, not token-by-token streaming, is the
+    right way to cover the wait.
+    """
+    stripped = service.validate(body.text)
+    text = await ultra_service.generate(stripped, style=body.style, expand=body.expand)
+    return {"text": text}

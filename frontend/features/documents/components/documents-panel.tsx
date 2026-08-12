@@ -20,6 +20,8 @@ interface DocumentsPanelProps {
   documents: DocumentItem[];
   onUpload: (file: File) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  /** Persists to the backend (Document.pinned) — real, not client-only. */
+  onTogglePin: (id: string, pinned: boolean) => Promise<void>;
   isUploading: boolean;
   isLoading?: boolean;
   /** Free-tier retention window in days; 0 hides all retention UI. */
@@ -90,28 +92,47 @@ function daysUntilExpiry(createdAt: string | undefined, retentionDays: number): 
   return Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)));
 }
 
-export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isLoading = false, retentionDays = 0 }: DocumentsPanelProps) {
+export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isUploading, isLoading = false, retentionDays = 0 }: DocumentsPanelProps) {
   const {
     selectedDocument, setSelectedDocument,
     checkedDocuments, toggleChecked, setAllChecked, clearChecked,
-    pinnedDocuments, togglePinned,
     sortOrder, setSortOrder,
   } = useDocumentStore();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [pinningId, setPinningId] = useState<string | null>(null);
 
+  // Pin state now comes straight from the server (Document.pinned) — the
+  // backend already returns pinned-first, but re-sort client-side too so an
+  // optimistic toggle re-orders instantly instead of waiting on a refetch.
   const sorted = [...documents].sort((a, b) => {
-    const aPinned = pinnedDocuments.includes(a.id);
-    const bPinned = pinnedDocuments.includes(b.id);
+    const aPinned = Boolean(a.pinned);
+    const bPinned = Boolean(b.pinned);
     if (aPinned !== bPinned) return aPinned ? -1 : 1;
     if (sortOrder === "alpha") return a.name.localeCompare(b.name);
     return 0; // preserve server order (already latest-first)
   });
 
+  const handleTogglePin = async (id: string, pinned: boolean) => {
+    setPinningId(id);
+    try {
+      await onTogglePin(id, pinned);
+    } catch {
+      toast.error("Failed to update pin");
+    } finally {
+      setPinningId(null);
+    }
+  };
+
   const allChecked = documents.length > 0 && checkedDocuments.length === documents.length;
   const someChecked = checkedDocuments.length > 0;
 
   const handleDelete = async (id: string, name: string) => {
+    // Deletion is irreversible (removes the file, its DB row, and every
+    // indexed chunk) and was previously one click away from the dropdown
+    // with zero confirmation — a fat-finger on a real document had no
+    // recovery path.
+    if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
     setDeletingId(id);
     try {
       await onDelete(id);
@@ -127,6 +148,12 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
 
   const handleBatchDelete = async () => {
     const toDelete = documents.filter((d) => checkedDocuments.includes(d.id));
+    if (
+      !window.confirm(
+        `Delete ${toDelete.length} document${toDelete.length > 1 ? "s" : ""}? This can't be undone.`,
+      )
+    )
+      return;
     const results = await Promise.allSettled(toDelete.map((d) => onDelete(d.id)));
     const failed = results.filter((r) => r.status === "rejected").length;
     const succeeded = results.length - failed;
@@ -144,8 +171,12 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
     try {
       await onUpload(file);
       toast.success(`"${file.name}" uploaded`);
-    } catch {
-      toast.error("Upload failed");
+    } catch (err) {
+      // Surface the real reason — a generic "Upload failed" was
+      // indistinguishable from e.g. the new duplicate-name rejection
+      // ("A document named X already exists"), leaving the user with no
+      // idea what to actually do about it.
+      toast.error(err instanceof Error ? err.message : "Upload failed");
     }
     e.target.value = "";
   };
@@ -232,13 +263,13 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
         <label
           className="hover-surface group flex cursor-pointer flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed px-4 py-8 text-center transition"
           style={{ borderColor: "var(--border-medium)" }}
-          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--marketing-accent-soft)")}
+          onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--atmosphere-accent-soft)")}
           onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border-medium)")}
         >
           <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
           <div
             className="flex h-9 w-9 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105"
-            style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+            style={{ backgroundColor: "var(--atmosphere-accent-soft)", color: "var(--atmosphere-accent-text)" }}
           >
             <UploadIcon />
           </div>
@@ -257,7 +288,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                 className={[
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
                   allChecked
-                    ? "border-transparent bg-[var(--marketing-accent)] text-black"
+                    ? "border-transparent bg-[var(--atmosphere-accent)] text-black"
                     : "border-[var(--border-medium)] bg-transparent hover:border-[var(--border-strong)]",
                 ].join(" ")}
               >
@@ -270,8 +301,9 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
           {sorted.map((doc) => {
             const isActive = selectedDocument === doc.id;
             const isChecked = checkedDocuments.includes(doc.id);
-            const isPinned = pinnedDocuments.includes(doc.id);
+            const isPinned = Boolean(doc.pinned);
             const isDeleting = deletingId === doc.id;
+            const isPinning = pinningId === doc.id;
             const daysLeft = daysUntilExpiry(doc.created_at, retentionDays);
             const expiresSoon = daysLeft !== null && daysLeft <= 2;
 
@@ -290,7 +322,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                 {isActive && (
                   <div
                     className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full"
-                    style={{ backgroundColor: "var(--marketing-accent)" }}
+                    style={{ backgroundColor: "var(--atmosphere-accent)" }}
                   />
                 )}
 
@@ -300,7 +332,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   className={[
                     "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
                     isChecked
-                      ? "border-transparent bg-[var(--marketing-accent)] text-black"
+                      ? "border-transparent bg-[var(--atmosphere-accent)] text-black"
                       : "border-[var(--border-medium)] bg-transparent hover:border-[var(--border-strong)]",
                   ].join(" ")}
                 >
@@ -312,7 +344,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                   onClick={() => setSelectedDocument(isActive ? "" : doc.id)}
                   className="flex min-w-0 flex-1 items-center gap-2"
                 >
-                  <span style={isActive ? { color: "var(--marketing-accent-text)" } : undefined} className={!isActive ? "text-zinc-600" : ""}>
+                  <span style={isActive ? { color: "var(--atmosphere-accent-text)" } : undefined} className={!isActive ? "text-zinc-600" : ""}>
                     <FileIcon />
                   </span>
                   <div className="min-w-0 text-left">
@@ -321,6 +353,10 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                     </p>
                     <p className="text-[10px] text-zinc-700">
                       PDF{doc.size_bytes ? ` · ${formatBytes(doc.size_bytes)}` : ""}
+                      {doc.page_count ? ` · ${doc.page_count} page${doc.page_count === 1 ? "" : "s"}` : ""}
+                      {doc.upload_status === "empty" && (
+                        <span className="text-amber-500/90"> · no readable content found</span>
+                      )}
                       {daysLeft !== null && (
                         <span className={expiresSoon ? "text-amber-500/90" : ""}>
                           {" · "}
@@ -332,6 +368,20 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                     </p>
                   </div>
                 </button>
+
+                {/* Vision-cap indicator — some diagrams/charts in this document
+                    exceeded the per-upload captioning cap and were never
+                    indexed, so answers about visuals may be incomplete. */}
+                {doc.vision_truncated && (
+                  <span
+                    className="text-amber-500/70"
+                    title="Some diagrams/charts in this document weren't indexed (per-upload cap reached)"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                    </svg>
+                  </span>
+                )}
 
                 {/* Pin indicator */}
                 {isPinned && (
@@ -356,7 +406,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, isUploading, isL
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                       View in panel
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => togglePinned(doc.id)}>
+                    <DropdownMenuItem disabled={isPinning} onClick={() => handleTogglePin(doc.id, !isPinned)}>
                       <PinIcon filled={isPinned} />
                       {isPinned ? "Unpin" : "Pin to top"}
                     </DropdownMenuItem>

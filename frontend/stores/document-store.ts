@@ -12,10 +12,6 @@ interface DocumentState {
   setAllChecked: (ids: string[]) => void;
   clearChecked: () => void;
 
-  // pinned
-  pinnedDocuments: string[];
-  togglePinned: (id: string) => void;
-
   // sort
   sortOrder: DocumentSortOrder;
   setSortOrder: (order: DocumentSortOrder) => void;
@@ -34,14 +30,6 @@ export const useDocumentStore = create<DocumentState>((set) => ({
     })),
   setAllChecked: (ids) => set({ checkedDocuments: ids }),
   clearChecked: () => set({ checkedDocuments: [] }),
-
-  pinnedDocuments: [],
-  togglePinned: (id) =>
-    set((s) => ({
-      pinnedDocuments: s.pinnedDocuments.includes(id)
-        ? s.pinnedDocuments.filter((d) => d !== id)
-        : [...s.pinnedDocuments, id],
-    })),
 
   sortOrder: "latest",
   setSortOrder: (sortOrder) => set({ sortOrder }),

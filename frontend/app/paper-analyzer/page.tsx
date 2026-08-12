@@ -102,7 +102,7 @@ export default function PaperAnalyzerPage() {
       background={
         <>
           <AtmosphereBackground variant="calm" />
-          <CursorSpotlight color="124,79,176" />
+          <CursorSpotlight color="138,90,110" />
         </>
       }
     >

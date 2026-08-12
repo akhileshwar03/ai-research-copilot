@@ -54,7 +54,18 @@ def _override_get_db():
 # ── Fakes ──────────────────────────────────────────────────────────────────────
 
 class FakeChatService:
-    async def stream_response(self, messages, document_ids=None, document_names=None, user_email=""):
+    def validate_latest_message(self, messages):
+        pass
+
+    async def stream_response(
+        self,
+        messages,
+        document_ids=None,
+        document_names=None,
+        document_page_counts=None,
+        vision_truncated_documents=None,
+        user_email="",
+    ):
         # Mirrors the real ChatService contract: a sources event first,
         # then token events.
         yield {"type": "sources", "sources": ["seed.pdf"]}
@@ -73,12 +84,12 @@ class FakeDocumentService:
     def __init__(self):
         self.docs = [
             {"id": "seed.pdf", "name": "seed.pdf", "size_bytes": 1024,
-             "upload_status": "ready", "created_at": None}
+             "upload_status": "ready", "created_at": None, "pinned": False, "page_count": 12}
         ]
 
     async def initiate_upload(self, file, user_email=None):
         entry = {"document_id": "test.pdf", "name": getattr(file, "filename", "test.pdf"),
-                 "upload_status": "processing", "size_bytes": 100}
+                 "upload_status": "processing", "size_bytes": 100, "is_new": True}
         return entry
 
     def process_upload_background(self, stored_filename: str) -> None:
@@ -93,6 +104,25 @@ class FakeDocumentService:
     def delete_document(self, filename, user_email=""):
         self.docs = [d for d in self.docs if d["id"] != filename]
         return {"message": "Document deleted"}
+
+    def set_pinned(self, filename, user_email, pinned):
+        from app.core.exceptions import AppError
+
+        for doc in self.docs:
+            if doc["id"] == filename:
+                doc["pinned"] = pinned
+                return {"id": filename, "pinned": pinned}
+        raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
+
+    def get_document_download(self, stored_filename, user_email):
+        from app.core.exceptions import AppError
+
+        if not any(d["id"] == stored_filename for d in self.docs):
+            raise AppError(code="DOCUMENT_NOT_FOUND", message="Document not found", status_code=404)
+        # Always bytes mode — mirrors the real service, which no longer ever
+        # redirects to a presigned URL (that path broke PDF viewing entirely
+        # once the R2 bucket's missing CORS policy was discovered live).
+        return {"mode": "bytes", "content": b"%PDF-1.4\n%%EOF", "filename": stored_filename}
 
 
 class FakeHumanizerService:

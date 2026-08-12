@@ -35,6 +35,7 @@ const PRODUCTS = [
   { href: "/checker", label: "AI Checker", sublabel: "Detect AI-generated text", path: "M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
   { href: "/humanizer", label: "Humanizer", sublabel: "Rewrite AI-sounding text", path: "M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" },
   { href: "/realtime", label: "Real-time AI", sublabel: "Web-grounded live search", path: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" },
+  { href: "/paper-analyzer", label: "Paper Analyzer", sublabel: "Check formatting against a style guide", path: "M9 4.5v15m6-15v15M4.5 9h15M4.5 15h15" },
 ] as const;
 
 function NavIcon({ d }: { d: string }) {

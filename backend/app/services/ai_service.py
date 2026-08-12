@@ -90,15 +90,23 @@ class AIService:
         response = await self.classifier_llm.ainvoke(messages)
         return response.content
 
-    async def describe_image(self, prompt: str, data_url: str) -> str:
+    async def describe_image(self, prompt: str, data_url: str, detail: str = "auto") -> str:
         """Single non-streaming vision completion — used for image text
         extraction (OCR via the model's own vision capability, no system
-        binary or extra service dependency). Deterministic client: a
-        transcription should read the same image the same way every time."""
+        binary or extra service dependency) and for describing diagrams/
+        graphs found during PDF ingestion. Deterministic client: reading the
+        same image should give the same answer every time.
+
+        *detail* controls OpenAI's vision token budget: "low" is a small,
+        fixed cost regardless of image size (good for a cost-bounded bulk
+        operation like captioning every visual-candidate page in a PDF);
+        "high"/"auto" cost more but preserve fine detail (kept as the OCR
+        caller's default, since transcribing small print needs it).
+        """
         message = HumanMessage(
             content=[
                 {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": data_url}},
+                {"type": "image_url", "image_url": {"url": data_url, "detail": detail}},
             ]
         )
         response = await self.classifier_llm.ainvoke([message])

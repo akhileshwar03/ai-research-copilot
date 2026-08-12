@@ -26,6 +26,12 @@ export const documentsApi = {
       method: "DELETE",
     }),
 
+  setPinned: (filename: string, pinned: boolean) =>
+    apiRequest<{ id: string; pinned: boolean }>(`/documents/${encodeURIComponent(filename)}/pin`, {
+      method: "PATCH",
+      body: JSON.stringify({ pinned }),
+    }),
+
   upload: async (file: File): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append("file", file);

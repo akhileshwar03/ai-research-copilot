@@ -60,13 +60,13 @@ def _seed_document(db, stored_filename: str, days_ago: int) -> Document:
     return doc
 
 
-def _seed_session(db, title: str, days_ago: int) -> ChatSession:
+def _seed_session(db, title: str, days_ago: int, pinned: bool = False) -> ChatSession:
     user = db.query(User).filter(User.email == "retention@example.com").first()
     if user is None:
         user = User(email="retention@example.com", hashed_password=None, email_verified=True)
         db.add(user)
         db.flush()
-    session = ChatSession(title=title, user_id=user.id, created_at=_naive_utc(days_ago))
+    session = ChatSession(title=title, user_id=user.id, pinned=pinned, created_at=_naive_utc(days_ago))
     db.add(session)
     db.flush()
     db.add(ChatMessage(role="user", content="hello", session_id=session.id))
@@ -138,6 +138,30 @@ def test_claim_is_single_winner_per_interval():
         assert retention_service._try_claim(db) is True
         assert retention_service._try_claim(db) is False  # within the interval
     finally:
+        db.close()
+
+
+def test_cleanup_exempts_pinned_sessions(retention_env):
+    """A pinned session must survive retention cleanup no matter how old it
+    is — pinning is the user's explicit "keep this" signal, and retention
+    silently deleting it anyway would break that promise."""
+    db = TestingSessionLocal()
+    try:
+        runtime_settings.set(db, "retention_days", 7)
+
+        old_pinned = _seed_session(db, "old pinned chat", days_ago=400, pinned=True)
+        old_unpinned = _seed_session(db, "old unpinned chat", days_ago=400, pinned=False)
+        db.commit()
+        pinned_id, unpinned_id = old_pinned.id, old_unpinned.id
+
+        summary = retention_service.run_cleanup()
+        db.expire_all()
+
+        assert summary["sessions"] >= 1
+        assert db.get(ChatSession, pinned_id) is not None, "pinned session must not be deleted"
+        assert db.get(ChatSession, unpinned_id) is None, "unpinned expired session must be deleted"
+    finally:
+        runtime_settings.set(db, "retention_days", 7)
         db.close()
 
 

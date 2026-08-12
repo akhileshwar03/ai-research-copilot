@@ -24,7 +24,7 @@ export default function MainLayout({
   background,
 }: MainLayoutProps) {
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-white">
+    <div className="dawn-theme relative h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-white">
       {background ?? <AtmosphereBackground variant="calm" />}
 
       <div className="relative z-10 h-full w-full">

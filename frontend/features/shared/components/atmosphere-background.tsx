@@ -29,17 +29,26 @@ import { PhotoBackdrop } from "@/features/shared/components/photo-backdrop";
  * drive directly.
  */
 
+// "Dawn" — 2026-08-10, applied to every tool screen (Humanizer, Chat, Login,
+// Admin, Paper Analyzer, Checker, Realtime). The marketing/landing page is
+// untouched — it uses its own separate SiteBackground component, not this
+// one, so nothing here affects it. Deliberately keeps two distinct hues
+// (misty blue + dusty mauve), not a single flat blue — a real earlier
+// version of this exact palette that leaned single-hue cool blended toward
+// gray in the mesh's middle; two hues with real separation avoids that.
 const PALETTE: Record<"light" | "dark", string[]> = {
-  dark: ["#1a0f05", "#e08a3e", "#ff9d4d", "#3d1f6e", "#0a0a0a"],
-  // Warm parchment base, the brand copper as the recognizable note, and a
-  // warm terracotta-mauve (not a cool violet) standing in for the dark
-  // theme's deep violet — a fully saturated cool violet desaturates the
-  // mesh's mid-blend zone toward gray, which is part of why the middle of
-  // real pages read "flat" last round. Last stop is a warm cream, not pure
-  // white — #ffffff here bloomed into a stark, over-bright patch wherever
-  // the mesh blended toward it.
-  light: ["#fbf3e7", "#f3d9b0", "#e0a058", "#c99b7a", "#fdf6ec"],
+  dark: ["#12141c", "#4a5570", "#7d8caa", "#8a5a6e", "#0a0b10"],
+  light: ["#f4f5f8", "#d3d8e3", "#9fabc2", "#d9a8b8", "#f9fafc"],
 };
+
+// Particle/glow accent lives in globals.css as --atmosphere-accent /
+// --atmosphere-glow, intentionally NOT --marketing-accent (still copper,
+// still used for buttons/CTAs everywhere) -- a real CSS custom property, not
+// computed here from the `theme` JS state: an earlier version of this file
+// computed rgb() from `theme` directly and caused a genuine server/client
+// hydration mismatch (SSR's theme guess vs. the client's detected theme).
+// CSS variables resolve identically both sides, which is exactly why the
+// original var(--marketing-accent) usage never had this problem.
 
 // grainMixer/grainOverlay stay low — this shader-level grain stacks with the
 // .bg-grain CSS overlay painted on top, so both need to stay subtle or the
@@ -123,11 +132,14 @@ export function AtmosphereBackground({ variant = "vivid" }: { variant?: Variant 
       <div className="atmosphere-contrast-scrim absolute inset-0" />
 
       {/* Vivid's dramatic glow radiates from one corner, not the center — the
-          specific "asymmetric" quality the cinematic direction calls for. */}
+          specific "asymmetric" quality the cinematic direction calls for.
+          Uses the atmosphere's own mauve accent, not the brand's copper
+          --accent-glow — this is still a "tool inside" screen (Checker), not
+          the marketing page, so it follows Dawn like every other variant. */}
       {variant === "vivid" && (
         <div
           className="absolute inset-0"
-          style={{ background: "radial-gradient(60% 50% at 88% 8%, var(--accent-glow), transparent 70%)" }}
+          style={{ background: "radial-gradient(60% 50% at 88% 8%, var(--atmosphere-glow), transparent 70%)" }}
         />
       )}
 
@@ -143,7 +155,7 @@ export function AtmosphereBackground({ variant = "vivid" }: { variant?: Variant 
             left: p.left,
             width: p.size,
             height: p.size,
-            backgroundColor: "var(--marketing-accent)",
+            backgroundColor: "var(--atmosphere-accent)",
             opacity: 0.35,
             transform: `translate3d(calc(var(--px, 0) * ${20 + i * 6}px), calc(var(--py, 0) * ${20 + i * 6}px), 0)`,
           }}

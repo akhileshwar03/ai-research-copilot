@@ -40,12 +40,44 @@ def test_document_repository_dedup_lookup(db_session):
         size_bytes=123,
         checksum_sha256=checksum,
         upload_status="ready",
+        user_email="dedup-owner@example.com",
     )
     db_session.commit()
 
-    doc = repo.get_by_checksum(checksum)
+    doc = repo.get_by_checksum_and_user(checksum, "dedup-owner@example.com")
     assert doc is not None
     assert doc.stored_filename == f"{checksum}.pdf"
+
+    # Scoped by user — a different user's identical checksum must not match.
+    assert repo.get_by_checksum_and_user(checksum, "someone-else@example.com") is None
+
+
+def test_update_status_sets_page_count_when_provided(db_session):
+    """page_count must be written when the caller (ingestion completing)
+    supplies it, and left untouched — not reset to None — on status updates
+    that don't know it (e.g. a later, unrelated status change)."""
+    repo = DocumentRepository(db_session)
+    checksum = f"pc-{int(datetime.now().timestamp())}"
+    doc = repo.create(
+        original_filename="paged.pdf",
+        stored_filename=f"{checksum}.pdf",
+        content_type="application/pdf",
+        size_bytes=123,
+        checksum_sha256=checksum,
+        upload_status="processing",
+        user_email="pages@example.com",
+    )
+    db_session.commit()
+
+    repo.update_status(doc, upload_status="ready", page_count=37)
+    db_session.commit()
+    assert doc.page_count == 37
+    assert doc.upload_status == "ready"
+
+    # A later status update with no page_count argument must not clobber it.
+    repo.update_status(doc, upload_status="failed", error_message="re-ingest failed")
+    db_session.commit()
+    assert doc.page_count == 37
 
 
 def test_document_repository_pagination(db_session):

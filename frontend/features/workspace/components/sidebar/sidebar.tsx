@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { toast } from "sonner";
 
 import { DocumentsPanel } from "@/features/documents/components/documents-panel";
 import { SessionsPanel } from "@/features/sessions/components/sessions-panel";
 import { useDocuments } from "@/features/documents/hooks/use-documents";
-import { useSessions, makeDefaultSession } from "@/features/sessions/hooks/use-sessions";
-import { useSessionStore } from "@/stores/session-store";
-import type { SessionsResponse } from "@/shared/types/api";
+import { useSessions } from "@/features/sessions/hooks/use-sessions";
 import { Glare } from "@/features/shared/motion/motion";
 import { WorkspaceNav } from "@/components/layout/workspace-nav";
 import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
@@ -19,60 +17,31 @@ interface WorkspaceSidebarProps {
 }
 
 export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSidebarProps) {
-  const queryClient = useQueryClient();
-  const { sessions, activeSessionId, setActiveSessionId, setSessions, createSession, updateSession, deleteSession, isLoadingSessions, retentionDays: sessionRetentionDays } = useSessions(email);
-  const { documents, retentionDays, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument } = useDocuments(email);
-  const [isCreating, setIsCreating] = useState(false);
+  const {
+    sessions, activeSessionId, setActiveSessionId, setSessions, updateSession, deleteSession,
+    createNewSession, isCreatingSession, isLoadingSessions, retentionDays: sessionRetentionDays,
+  } = useSessions(email);
+  const { documents, retentionDays, uploadDocument, isUploadingDocument, isLoadingDocuments, deleteDocument, setDocumentPinned } = useDocuments(email);
 
   // Handle drag-drop uploads dispatched by ChatWindow and command-palette palette uploads
   useEffect(() => {
     const handler = (e: Event) => {
       const file = (e as CustomEvent<{ file: File }>).detail?.file;
-      if (file) uploadDocument(file).catch(() => {});
+      if (!file) return;
+      // A failure here (e.g. the duplicate-name rejection) used to vanish
+      // silently — drag-drop/palette upload was the only entry point in
+      // the app that gave zero feedback on error, so a user hitting the
+      // new name-collision check this way would see literally nothing
+      // happen with no idea why.
+      uploadDocument(file).catch((err) => {
+        toast.error(err instanceof Error ? err.message : "Upload failed");
+      });
     };
     window.addEventListener("upload-pdf", handler);
     return () => window.removeEventListener("upload-pdf", handler);
   // uploadDocument identity is stable (useMutation), safe to exclude
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleNewSession = async () => {
-    setIsCreating(true);
-    try {
-      // Stamp created_at immediately (rather than waiting for a refetch to
-      // pick up the server's value) so the sessions panel's "expires in Nd"
-      // caption renders right away instead of staying blank until the next
-      // full sessions list reload.
-      const draft = { ...makeDefaultSession(), created_at: new Date().toISOString() };
-      // Read current sessions from store to avoid stale closure
-      const currentSessions = useSessionStore.getState().sessions;
-      setSessions([draft, ...currentSessions]);
-      setActiveSessionId(draft.id);
-
-      if (email) {
-        const created = await createSession(draft);
-        const persisted = { ...draft, id: created.id };
-
-        // Cancel any in-flight ["sessions"] fetch before writing — otherwise
-        // a slower, older response (e.g. one already queued when this call
-        // started) could resolve afterward and silently overwrite this
-        // session with a pre-message snapshot, making it appear blank.
-        await queryClient.cancelQueries({ queryKey: ["sessions"] });
-
-        // Read again — state may have changed during the async call
-        const latestSessions = useSessionStore.getState().sessions;
-        setSessions([persisted, ...latestSessions.filter((s) => s.id !== draft.id)]);
-        setActiveSessionId(persisted.id);
-
-        queryClient.setQueryData<SessionsResponse>(["sessions"], (old) => {
-          if (!old) return old;
-          return { ...old, sessions: [persisted, ...old.sessions.filter((s) => s.id !== draft.id && s.id !== persisted.id)] };
-        });
-      }
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   const handleDeleteSession = async (id: number) => {
     await deleteSession(id);
@@ -110,6 +79,7 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
           documents={documents}
           onUpload={async (file) => { await uploadDocument(file); }}
           onDelete={async (id) => { await deleteDocument(id); }}
+          onTogglePin={async (id, pinned) => { await setDocumentPinned(id, pinned); }}
           isUploading={isUploadingDocument}
           isLoading={isLoadingDocuments}
           retentionDays={retentionDays}
@@ -126,8 +96,8 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
           onDelete={handleDeleteSession}
           onRename={handleRenameSession}
           onPin={handlePinSession}
-          onNewSession={handleNewSession}
-          isCreating={isCreating}
+          onNewSession={async () => { await createNewSession(); }}
+          isCreating={isCreatingSession}
           isLoading={isLoadingSessions}
           retentionDays={sessionRetentionDays}
         />

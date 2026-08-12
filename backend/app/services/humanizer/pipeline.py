@@ -9,6 +9,7 @@ route turns into a `revised` SSE frame the client swaps in before marking
 the run complete. Everything else about the token stream is unchanged.
 """
 
+import asyncio
 import logging
 
 from app.services.humanizer import chunking, detector, examples as examples_module, prompts
@@ -45,6 +46,24 @@ def _build_retry_prompt(style: str, expand: bool, issues_text: str) -> str:
     return "\n\n".join(parts)
 
 
+async def _retry_paragraph(
+    ai_service, style: str, expand: bool, findings: list[dict], idx: int, paragraph_text: str
+) -> tuple[int, str | None]:
+    """One Pass-3 retry call for a single flagged paragraph. Isolated per-paragraph
+    error handling preserved exactly as before (a failed retry just leaves that
+    paragraph unpatched) — only the caller now runs these concurrently instead of
+    one at a time."""
+    issues = [f for f in findings if f.get("paragraph") == idx]
+    retry_prompt = _build_retry_prompt(style, expand, detector.findings_summary(issues))
+    try:
+        revised = await ai_service.rewrite_humanize_once([("system", retry_prompt), ("human", paragraph_text)])
+    except Exception:
+        logger.exception("humanizer_retry_failed paragraph=%d", idx)
+        return idx, None
+    revised = (revised or "").strip()
+    return idx, (revised or None)
+
+
 async def _verify_and_patch(ai_service, full_text: str, style: str, expand: bool) -> str | None:
     """Pass 3. Returns the corrected full text if at least one paragraph was
     patched, or None if verification found nothing worth a retry (or the
@@ -55,20 +74,25 @@ async def _verify_and_patch(ai_service, full_text: str, style: str, expand: bool
         return None
 
     paragraphs = chunking.split_into_paragraphs(full_text)
+    valid_flagged = [idx for idx in flagged if 0 <= idx < len(paragraphs)]
+    if not valid_flagged:
+        return None
+
+    # Retries are independent (different paragraph, own prompt, own text) -- run
+    # them concurrently rather than one at a time. Confirmed the hard way: on any
+    # input with multiple flagged paragraphs, this sequential loop was the single
+    # largest contributor to real end-to-end latency, since each retry is a full
+    # separate API round-trip. Same calls, same prompts, same per-paragraph error
+    # handling -- only the wall-clock ordering changed.
+    results = await asyncio.gather(
+        *[
+            _retry_paragraph(ai_service, style, expand, findings, idx, paragraphs[idx])
+            for idx in valid_flagged
+        ]
+    )
+
     changed = False
-    for idx in flagged:
-        if idx < 0 or idx >= len(paragraphs):
-            continue
-        issues = [f for f in findings if f.get("paragraph") == idx]
-        retry_prompt = _build_retry_prompt(style, expand, detector.findings_summary(issues))
-        try:
-            revised = await ai_service.rewrite_humanize_once(
-                [("system", retry_prompt), ("human", paragraphs[idx])]
-            )
-        except Exception:
-            logger.exception("humanizer_retry_failed paragraph=%d", idx)
-            continue
-        revised = (revised or "").strip()
+    for idx, revised in results:
         if revised:
             paragraphs[idx] = revised
             changed = True

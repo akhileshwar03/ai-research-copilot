@@ -186,6 +186,22 @@
   --marketing-accent-soft:  #d9793a24;
   --marketing-accent-text:  #f0ac6e;
   --accent-glow:            rgba(217, 121, 58, 0.45);
+
+  /* AtmosphereBackground's own accent (particles + vivid glow) — deliberately
+     separate from --marketing-accent (buttons/CTAs stay copper everywhere).
+     2026-08-10: "Dawn" mauve, applied to every tool screen; the marketing
+     page doesn't use AtmosphereBackground at all, so this never reaches it.
+     A CSS custom property, not a JS-computed value, on purpose: the
+     component previously read var(--marketing-accent) directly and had no
+     hydration issue; switching to a JS `theme`-keyed rgb() string caused a
+     real server/client mismatch (SSR's theme guess differs from the client's
+     detected theme) — found via a real hydration-mismatch console error,
+     fixed by moving the color back into CSS, which resolves identically both
+     sides. */
+  --atmosphere-accent:      rgb(138, 90, 110);
+  --atmosphere-accent-soft: rgba(138, 90, 110, 0.16);
+  --atmosphere-accent-text: rgb(224, 190, 202);
+  --atmosphere-glow:        rgba(138, 90, 110, 0.45);
 }
 
 /* On light surfaces the pale copper fails contrast — deepen it, and shift the
@@ -197,6 +213,10 @@ html.light-theme,
   --marketing-accent-soft:  #c5691f1f;
   --marketing-accent-text:  #9a4d14;
   --accent-glow:            rgba(197, 105, 31, 0.35);
+  --atmosphere-accent:      rgb(217, 168, 184);
+  --atmosphere-accent-soft: rgba(217, 168, 184, 0.22);
+  --atmosphere-accent-text: rgb(138, 90, 110);
+  --atmosphere-glow:        rgba(217, 168, 184, 0.45);
 }
 
 /* Fade + rise entrance for newly rendered chat bubbles. */
@@ -206,6 +226,16 @@ html.light-theme,
 }
 .animate-message-in {
   animation: message-in 0.25s ease-out both;
+}
+
+/* Indeterminate progress sweep — for waits with no known duration (model cold
+   starts). Signals "still active" without claiming a percentage we don't have. */
+@keyframes progress-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+.animate-progress-sweep {
+  animation: progress-sweep 1.4s ease-in-out infinite;
 }
 
 /* ── Live demo widget effects ──────────────────────────────────────────────── */
@@ -442,8 +472,11 @@ html.light-theme .glare-sheen {
 }
 
 /* Vignette closing the edges of AtmosphereBackground. Dark keeps the original
-   black falloff; light swaps to a warm low-alpha gradient — a black vignette
-   on a pale ground reads as dirty smudging, not depth. */
+   black falloff; light swaps to a low-alpha tinted gradient — a black
+   vignette on a pale ground reads as dirty smudging, not depth. Tint updated
+   2026-08-10 from warm brown to Dawn's slate-blue (74, 85, 112, the mesh's
+   own mid-tone stop) so the edge falloff matches the new cooler palette
+   instead of muddying against it. */
 .atmosphere-vignette-strong {
   background: radial-gradient(140% 100% at 50% 25%, transparent 55%, rgba(0, 0, 0, 0.4) 100%);
 }
@@ -451,10 +484,10 @@ html.light-theme .glare-sheen {
   background: radial-gradient(140% 100% at 50% 20%, transparent 65%, rgba(0, 0, 0, 0.25) 100%);
 }
 html.light-theme .atmosphere-vignette-strong {
-  background: radial-gradient(140% 100% at 50% 25%, transparent 55%, rgba(120, 90, 60, 0.16) 100%);
+  background: radial-gradient(140% 100% at 50% 25%, transparent 55%, rgba(74, 85, 112, 0.16) 100%);
 }
 html.light-theme .atmosphere-vignette {
-  background: radial-gradient(140% 100% at 50% 20%, transparent 65%, rgba(120, 90, 60, 0.1) 100%);
+  background: radial-gradient(140% 100% at 50% 20%, transparent 65%, rgba(74, 85, 112, 0.1) 100%);
 }
 
 /* Flat contrast scrim so dark-mode text stays legible no matter where the
@@ -534,6 +567,71 @@ html.light-theme {
 
   --resize-handle:       rgba(90, 62, 34, 0.10);
   --resize-handle-hover: rgba(90, 62, 34, 0.22);
+}
+
+/* ── "Dawn" tool theme (2026-08-10) ──────────────────────────────────────────
+   Applied via .dawn-theme on every tool screen's root (MainLayout, Login,
+   Auth callback) — the landing page never gets this class, so it keeps its
+   warm palette completely untouched.
+
+   Real bug this fixes: the first pass only recolored AtmosphereBackground's
+   shader layer. Every flat surface token below it (cards, sidebar, chat
+   bubbles, modals) was still the old warm parchment scale, so almost the
+   entire visible UI looked unchanged — confirmed via real screenshots from
+   the user's own browser (the shader is a thin background layer; opaque
+   cards and the sidebar cover most of the screen). This block is the same
+   "flat tokens match the shader" principle the original warm scale's own
+   comment above already establishes, just re-applied to the new palette.
+
+   Dark theme's surfaces (#080808/#0a0a0a/#111111/#141414 etc.) are already
+   pure neutral grey (R=G=B, no warm cast) — nothing to override there. */
+html.light-theme .dawn-theme {
+  --app-bg:        #f4f5f8;
+  --sidebar-bg:    #eef0f5;
+  --surface-0:     #dde2ea;
+  --surface-1:     #f9fafc;
+  --surface-2:     #eef1f6;
+  --surface-3:     #e2e7ee;
+  --modal-bg:      #f9fafc;
+  --login-card:    #f9fafc;
+
+  --bubble-user-bg:   #2a3550;
+  --bubble-user-text: #f9fafc;
+  --bubble-ai-bg:     #f9fafc;
+  --bubble-ai-text:   rgb(30 34 44);
+
+  --border-subtle:  rgba(74, 85, 112, 0.08);
+  --border-medium:  rgba(74, 85, 112, 0.14);
+  --border-strong:  rgba(74, 85, 112, 0.24);
+
+  --text-primary:   rgba(30, 34, 44, 0.92);
+
+  --resize-handle:       rgba(74, 85, 112, 0.10);
+  --resize-handle-hover: rgba(74, 85, 112, 0.22);
+}
+
+/* .glass-card is a descendant, not the .dawn-theme element itself, so this
+   needs real specificity to beat the existing html.light-theme .glass-card
+   rule (0,2,1) -- html.light-theme .dawn-theme .glass-card is (0,3,1),
+   guaranteed to win regardless of stylesheet order. */
+html.light-theme .dawn-theme .glass-card {
+  background-color: rgba(249, 250, 252, 0.72);
+  border: 1px solid rgba(74, 85, 112, 0.14);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.7) inset, 0 20px 40px -24px rgba(42, 53, 80, 0.18);
+}
+html.light-theme .dawn-theme .glass-card:hover {
+  border-color: rgba(74, 85, 112, 0.26);
+}
+html.light-theme .dawn-theme .glass-card--photo {
+  background-color: rgba(249, 250, 252, 0.9);
+}
+html.light-theme .dawn-theme .glass-bar {
+  background-color: rgba(249, 250, 252, 0.72);
+  border-color: rgba(74, 85, 112, 0.14);
+}
+html.light-theme .dawn-theme .glass-panel {
+  background-color: rgba(249, 250, 252, 0.72);
+  border-color: rgba(74, 85, 112, 0.14);
 }
 
 /* ── Light theme text corrections ──────────────────────────────────────────── */
