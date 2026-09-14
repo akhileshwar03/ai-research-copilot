@@ -281,13 +281,19 @@ def test_suspending_a_user_revokes_their_refresh_tokens(client, admin_headers, u
     assert activity["active_refresh_tokens"] == 0
 
 
-def test_delete_account_purges_humanizer_runs_and_usage(client, auth_headers, unique_email, track_usage):
-    client.post("/api/v1/chat", headers=auth_headers, json={"messages": [{"role": "user", "content": "hi"}]}).read()
-
+def test_delete_account_purges_humanizer_runs_and_usage(client, auth_headers, unique_email):
+    # Rows inserted directly (not via a live chat request) — this test's job is
+    # to verify delete_account purges every table with a user_id foreign key,
+    # not to exercise the usage-tracking background task. Mixing a background
+    # task's own DB session with a second, immediately-opened session here
+    # previously raced over the test harness's single shared SQLite
+    # connection (StaticPool) and was intermittently flaky in CI; inserting
+    # directly removes the timing dependency entirely.
     db = TestingSessionLocal()
     try:
         user_id = db.query(User).filter(User.email == unique_email).first().id
         db.add(HumanizerRun(user_id=user_id, input_text="in", output_text="out", style="normal"))
+        db.add(UsageEvent(user_id=user_id, tool="research_copilot", status_code=200, ok=True, duration_ms=5))
         db.commit()
         assert db.query(HumanizerRun).filter(HumanizerRun.user_id == user_id).count() == 1
         assert db.query(UsageEvent).filter(UsageEvent.user_id == user_id).count() == 1
