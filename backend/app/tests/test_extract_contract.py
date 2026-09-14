@@ -13,6 +13,7 @@ class _FakeResponse:
         self.text = text
         self.headers = headers or {}
         self.status_code = status_code
+        self.is_redirect = False
 
     def raise_for_status(self):
         pass

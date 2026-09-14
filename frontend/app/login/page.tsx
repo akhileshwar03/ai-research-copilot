@@ -12,6 +12,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 };
 
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { buildApiUrl } from "@/constants/config";
 import { OtpInput } from "@/components/ui/otp-input";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 import { CursorSpotlight, Glare, Reveal } from "@/features/shared/motion/motion";
@@ -89,8 +90,7 @@ export default function LoginPage() {
       toast.info(`${provider.charAt(0).toUpperCase() + provider.slice(1)} sign-in is not configured yet. Use email below.`, { duration: 4000 });
       return;
     }
-    const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-    window.location.href = `${base}/auth/oauth/${provider}`;
+    window.location.assign(buildApiUrl(`/auth/oauth/${provider}`));
   };
 
   // ── Send OTP ───────────────────────────────────────────────────────────────

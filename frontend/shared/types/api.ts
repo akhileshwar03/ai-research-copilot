@@ -1,4 +1,4 @@
-import type { ChatSession, Message } from "@/shared/types/chat";
+import type { ChatSession, Message, ResearchAction } from "@/shared/types/chat";
 
 export interface ApiError {
   error?: { code: string; message: string; request_id?: string };
@@ -6,17 +6,9 @@ export interface ApiError {
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
+// No password-based auth in this app — sign-in is email OTP or OAuth only.
 
-export interface LoginRequest { email: string; password: string }
-export interface RegisterRequest { email: string; password: string }
 export interface RefreshRequest { refresh_token?: string }
-
-export interface LoginResponse {
-  token?: string;
-  access_token?: string;
-  refresh_token?: string;
-  token_type?: string;
-}
 
 export interface RefreshResponse {
   token?: string;
@@ -32,7 +24,7 @@ export interface SendOtpResponse {
   /** Only present in dev mode (no SMTP configured). Auto-fills the OTP box. */
   _dev_code?: string;
 }
-export interface VerifyOtpRequest { email: string; code: string; password?: string }
+export interface VerifyOtpRequest { email: string; code: string }
 export interface VerifyOtpResponse {
   token?: string;
   access_token?: string;
@@ -61,7 +53,7 @@ export interface SessionsResponse {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-export interface ChatRequest { messages: Message[]; document_ids?: string[] | null }
+export interface ChatRequest { messages: Message[]; document_ids?: string[] | null; action?: ResearchAction | null }
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 

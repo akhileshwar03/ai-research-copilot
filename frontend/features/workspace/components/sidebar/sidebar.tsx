@@ -7,6 +7,7 @@ import { DocumentsPanel } from "@/features/documents/components/documents-panel"
 import { SessionsPanel } from "@/features/sessions/components/sessions-panel";
 import { useDocuments } from "@/features/documents/hooks/use-documents";
 import { useSessions } from "@/features/sessions/hooks/use-sessions";
+import { useSessionStore } from "@/stores/session-store";
 import { Glare } from "@/features/shared/motion/motion";
 import { WorkspaceNav } from "@/components/layout/workspace-nav";
 import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
@@ -43,9 +44,15 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // All three handlers read from the store's live state (useSessionStore.getState()),
+  // not the `sessions` value closed over at render time — same convention useSessions'
+  // createNewSession uses. Without it, two of these fired back-to-back (e.g. deleting
+  // two sessions quickly, or a delete racing a pin) each computed their "next sessions"
+  // array from a stale pre-render snapshot, so the second write could silently undo the
+  // first — a session reappearing after delete, or a pin flipping back after a rollback.
   const handleDeleteSession = async (id: number) => {
     await deleteSession(id);
-    const next = sessions.filter((s) => s.id !== id);
+    const next = useSessionStore.getState().sessions.filter((s) => s.id !== id);
     setSessions(next);
     if (activeSessionId === id) {
       setActiveSessionId(next[0]?.id ?? null);
@@ -53,18 +60,20 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
   };
 
   const handleRenameSession = async (id: number, title: string) => {
-    const target = sessions.find((s) => s.id === id);
+    const current = useSessionStore.getState().sessions;
+    const target = current.find((s) => s.id === id);
     if (!target) return;
     const updated = { ...target, title };
-    setSessions(sessions.map((s) => (s.id === id ? updated : s)));
+    setSessions(current.map((s) => (s.id === id ? updated : s)));
     if (email) await updateSession(updated);
   };
 
   const handlePinSession = async (id: number, pinned: boolean) => {
-    const target = sessions.find((s) => s.id === id);
+    const current = useSessionStore.getState().sessions;
+    const target = current.find((s) => s.id === id);
     if (!target) return;
     const updated = { ...target, pinned };
-    setSessions(sessions.map((s) => (s.id === id ? updated : s)));
+    setSessions(current.map((s) => (s.id === id ? updated : s)));
     if (email) await updateSession(updated);
   };
 

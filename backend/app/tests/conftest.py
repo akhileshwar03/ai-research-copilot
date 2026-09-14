@@ -57,6 +57,9 @@ class FakeChatService:
     def validate_latest_message(self, messages):
         pass
 
+    def validate_action(self, action, document_ids):
+        pass
+
     async def stream_response(
         self,
         messages,
@@ -65,12 +68,15 @@ class FakeChatService:
         document_page_counts=None,
         vision_truncated_documents=None,
         user_email="",
+        action=None,
     ):
         # Mirrors the real ChatService contract: a sources event first,
-        # then token events.
+        # then token events, then (optionally) follow-up suggestions.
         yield {"type": "sources", "sources": ["seed.pdf"]}
         for token in ["hello", " ", "world"]:
             yield {"type": "token", "value": token}
+        if action:
+            yield {"type": "suggestions", "suggestions": ["What else?"]}
 
 
 class FakeRealtimeService:
@@ -297,8 +303,11 @@ def unique_email() -> str:
 
 @pytest.fixture
 def auth_headers(client, unique_email):
-    """Register, log in, return Authorization headers for the test user."""
-    client.post("/api/v1/register", json={"email": unique_email, "password": "StrongPass1"})
-    resp = client.post("/api/v1/login", json={"email": unique_email, "password": "StrongPass1"})
+    """Sign in via the OTP flow (the only email-based auth path) and return
+    Authorization headers for the test user. No RESEND_API_KEY/SMTP is
+    configured in tests, so send-otp echoes the code back as `_dev_code`."""
+    sent = client.post("/api/v1/auth/send-otp", json={"email": unique_email})
+    code = sent.json()["_dev_code"]
+    resp = client.post("/api/v1/auth/verify-otp", json={"email": unique_email, "code": code})
     token = resp.json().get("access_token") or resp.json().get("token")
     return {"Authorization": f"bearer {token}"}

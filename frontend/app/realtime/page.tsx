@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
@@ -27,18 +27,17 @@ export default function RealtimePage() {
   const [messages, setMessages] = useState<RealtimeMessage[]>([]);
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
-  const hasAutoSelected = useRef(false);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   // Auto-open the most recent conversation on first load; leave it as a
   // fresh, unsaved conversation if the user has none yet.
-  useEffect(() => {
-    if (hasAutoSelected.current || isLoading) return;
-    hasAutoSelected.current = true;
+  if (!hasAutoSelected && !isLoading) {
+    setHasAutoSelected(true);
     if (sessions.length > 0) {
       setActiveSessionId(sessions[0].id);
       setMessages(sessions[0].messages);
     }
-  }, [isLoading, sessions]);
+  }
 
   if (!isReady || !isAuthenticated) {
     return (

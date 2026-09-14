@@ -4,16 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    hash_password,
-    hash_token,
-    validate_password_strength,
-)
+from app.core.security import create_access_token, create_refresh_token, hash_token
 from app.db.repositories.otp_repository import OtpRepository, _utcnow_naive
 from app.db.repositories.user_repository import UserRepository
 from app.services.email_service import EmailService
+from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +28,19 @@ def _is_expired(expires_at: datetime) -> bool:
     return naive_expiry < _utcnow_naive()
 
 
+def _assert_signup_allowed(user_repo: UserRepository, email: str) -> None:
+    """Admins can close sign-ups at runtime; existing accounts are unaffected."""
+    if bool(runtime_settings.get("signups_enabled")):
+        return
+    if user_repo.get_by_email(email):
+        return
+    raise AppError(
+        code="SIGNUPS_DISABLED",
+        message="New sign-ups are currently closed. If you already have an account, use the same email.",
+        status_code=403,
+    )
+
+
 class OtpService:
     def __init__(
         self,
@@ -45,19 +53,13 @@ class OtpService:
         self.email_service = email_service
         self.settings = get_settings()
 
-    def send_otp(self, email: str, require_existing_account: bool = False) -> dict:
-        """Send a 6-digit OTP to *email*.
-
-        When *require_existing_account* is True (forgot-password flow), the
-        response is identical whether or not the account exists — prevents
-        enumeration of registered email addresses.
-        """
+    def send_otp(self, email: str) -> dict:
+        """Send a 6-digit OTP to *email*. Works for both sign-in (existing
+        account) and sign-up (new account) — this app has a single, unified
+        email auth flow with no separate register/login step."""
         from app.db.repositories.otp_repository import OTP_RATE_LIMIT
 
-        if require_existing_account and not self.user_repo.get_by_email(email):
-            logger.info("otp_skipped_no_account email=%s", email)
-            return {"message": "If an account exists for this email, a code has been sent."}
-
+        _assert_signup_allowed(self.user_repo, email)
         recent = self.otp_repo.count_recent(email)
         if recent >= OTP_RATE_LIMIT:
             raise AppError(
@@ -98,7 +100,7 @@ class OtpService:
             self.otp_repo.db.commit()
             raise AppError(code="OTP_INVALID", message="Invalid verification code", status_code=400)
 
-    def verify_otp(self, email: str, code: str, password: str | None = None) -> dict:
+    def verify_otp(self, email: str, code: str) -> dict:
         token = self.otp_repo.get_latest(email=email, purpose="auth")
         if not token:
             raise AppError(code="OTP_NOT_FOUND", message="No pending verification code", status_code=400)
@@ -107,23 +109,14 @@ class OtpService:
             raise AppError(code="OTP_EXPIRED", message="Verification code has expired", status_code=400)
 
         self._check_code(token, code)
-
-        # Enforce the password policy here too: signup_request validates it, but
-        # this endpoint is directly reachable and must not mint weak accounts.
-        if password and not self.user_repo.get_by_email(email):
-            try:
-                validate_password_strength(password)
-            except ValueError as exc:
-                raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
-
         self.otp_repo.mark_used(token)
 
         is_new_user = False
         user = self.user_repo.get_by_email(email)
         if not user:
+            _assert_signup_allowed(self.user_repo, email)
             is_new_user = True
-            hashed = hash_password(password) if password else None
-            user = self.user_repo.create(email=email, hashed_password=hashed, email_verified=True)
+            user = self.user_repo.create(email=email, hashed_password=None, email_verified=True)
             self.user_repo.create_identity(
                 user_id=user.id,
                 provider="otp",
@@ -132,8 +125,6 @@ class OtpService:
             )
         else:
             user.email_verified = True
-            if password and not user.hashed_password:
-                user.hashed_password = hash_password(password)
 
         access_token = create_access_token(subject=user.email)
         refresh_token = create_refresh_token(subject=user.email)
@@ -153,30 +144,3 @@ class OtpService:
             "token_type": "bearer",
             "is_new_user": is_new_user,
         }
-
-    def reset_password(self, email: str, code: str, new_password: str) -> dict:
-        """Forgot-password flow: verify OTP then set a new password."""
-        try:
-            validate_password_strength(new_password)
-        except ValueError as exc:
-            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
-
-        token = self.otp_repo.get_latest(email=email, purpose="auth")
-        if not token:
-            raise AppError(code="OTP_NOT_FOUND", message="No pending verification code", status_code=400)
-
-        if _is_expired(token.expires_at):
-            raise AppError(code="OTP_EXPIRED", message="Verification code has expired", status_code=400)
-
-        self._check_code(token, code)
-
-        user = self.user_repo.get_by_email(email)
-        if not user:
-            raise AppError(code="USER_NOT_FOUND", message="No account found for this email", status_code=404)
-
-        self.otp_repo.mark_used(token)
-        self.user_repo.update_password(user, hash_password(new_password))
-        self.otp_repo.db.commit()
-
-        logger.info("password_reset email=%s", email)
-        return {"message": "Password reset successfully"}

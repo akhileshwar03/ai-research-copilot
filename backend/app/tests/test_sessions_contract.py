@@ -110,10 +110,10 @@ def test_session_ownership_enforced(client, auth_headers, unique_email):
     create = client.post("/api/v1/sessions", json=session_payload, headers=auth_headers)
     sid = create.json()["id"]
 
-    # Create a second user and get their headers.
+    # Create a second user (via OTP, the only email-based auth path) and get their headers.
     other_email = f"other-{unique_email}"
-    client.post("/api/v1/register", json={"email": other_email, "password": "StrongPass1"})
-    login2 = client.post("/api/v1/login", json={"email": other_email, "password": "StrongPass1"})
+    sent2 = client.post("/api/v1/auth/send-otp", json={"email": other_email})
+    login2 = client.post("/api/v1/auth/verify-otp", json={"email": other_email, "code": sent2.json()["_dev_code"]})
     token2 = login2.json().get("access_token") or login2.json().get("token")
     other_headers = {"Authorization": f"bearer {token2}"}
 

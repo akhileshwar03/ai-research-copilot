@@ -3,61 +3,21 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_refresh_token,
-    hash_password,
-    hash_token,
-    validate_password_strength,
-    verify_password,
-)
+from app.core.security import create_access_token, create_refresh_token, decode_refresh_token, hash_token
 from app.db.repositories.user_repository import UserRepository
+from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
 
 
 class AuthService:
+    """Token issuance/lifecycle for the two sign-in paths this app has: OTP
+    (see OtpService.verify_otp, which creates the user) and OAuth (below).
+    There is no password-based auth — no register/login/change-password."""
+
     def __init__(self, user_repo: UserRepository):
         self.user_repo = user_repo
         self.settings = get_settings()
-
-    def register(self, email: str, password: str) -> dict:
-        """Legacy password register — kept for backward compat. Use signup_request for new flows."""
-        try:
-            validate_password_strength(password)
-        except ValueError as exc:
-            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
-
-        if self.user_repo.get_by_email(email):
-            raise AppError(code="USER_EXISTS", message="An account with this email already exists.", status_code=400)
-
-        user = self.user_repo.create(email=email, hashed_password=hash_password(password))
-        self.user_repo.create_identity(
-            user_id=user.id, provider="password", provider_subject=email, email=email,
-        )
-        self.user_repo.db.commit()
-        logger.info("user_registered email=%s", email)
-        return {"message": "User created"}
-
-    def signup_request(self, email: str, password: str) -> dict:
-        """New signup: validates uniqueness + strength, returns OTP gate signal.
-        Actual user creation happens in OtpService.verify_otp when email is confirmed."""
-        try:
-            validate_password_strength(password)
-        except ValueError as exc:
-            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
-
-        existing = self.user_repo.get_by_email(email)
-        if existing and existing.email_verified:
-            raise AppError(
-                code="USER_EXISTS",
-                message="An account with this email already exists. Please sign in instead.",
-                status_code=400,
-            )
-        # Signal to the frontend that an OTP step is required.
-        # Never echo the password back — the frontend already holds it in state.
-        return {"email": email, "needs_otp": True}
 
     def login_or_create_oauth_user(self, email: str, provider: str, provider_subject: str) -> dict:
         """Find or create a user via OAuth, issue tokens."""
@@ -65,6 +25,12 @@ class AuthService:
         user = self.user_repo.get_by_email(email)
         is_new = False
         if not user:
+            if not bool(runtime_settings.get("signups_enabled")):
+                raise AppError(
+                    code="SIGNUPS_DISABLED",
+                    message="New sign-ups are currently closed.",
+                    status_code=403,
+                )
             is_new = True
             user = self.user_repo.create(email=email, hashed_password=None, email_verified=True)
         elif not user.email_verified:
@@ -97,49 +63,6 @@ class AuthService:
             "is_new_user": is_new,
         }
 
-    def login(self, email: str, password: str) -> dict:
-        user = self.user_repo.get_by_email(email)
-        if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
-            raise AppError(code="INVALID_CREDENTIALS", message="Invalid credentials", status_code=401)
-
-        access_token = create_access_token(subject=user.email)
-        refresh_token = create_refresh_token(subject=user.email)
-        expires_at = datetime.now(timezone.utc) + timedelta(days=self.settings.refresh_token_expire_days)
-
-        self.user_repo.create_refresh_token(
-            user_id=user.id,
-            token_hash=hash_token(refresh_token),
-            expires_at=expires_at,
-        )
-        self.user_repo.db.commit()
-        logger.info("user_login email=%s", email)
-
-        return {
-            "token": access_token,
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-        }
-
-    def change_password(self, email: str, current_password: str, new_password: str) -> dict:
-        user = self.user_repo.get_by_email(email)
-        if not user:
-            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
-        if not user.hashed_password or not verify_password(current_password, user.hashed_password):
-            raise AppError(
-                code="INVALID_CREDENTIALS",
-                message="Current password is incorrect",
-                status_code=400,
-            )
-        try:
-            validate_password_strength(new_password)
-        except ValueError as exc:
-            raise AppError(code="WEAK_PASSWORD", message=str(exc), status_code=400) from exc
-        self.user_repo.update_password(user, hash_password(new_password))
-        self.user_repo.db.commit()
-        logger.info("password_changed email=%s", email)
-        return {"message": "Password changed successfully"}
-
     def delete_account(self, email: str) -> dict:
         """Permanently delete a user account and ALL associated data.
 
@@ -153,6 +76,9 @@ class AuthService:
         from app.core.config import get_settings
         from app.db.models.chat_models import ChatSession
         from app.db.models.document import Document
+        from app.db.models.humanizer_run import HumanizerRun
+        from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
+        from app.db.models.usage_event import UsageEvent
         from app.db.repositories.document_repository import DocumentRepository
         from app.services.storage_service import get_storage_service
 
@@ -183,6 +109,18 @@ class AuthService:
 
         # 3. Delete chat sessions (cascade deletes ChatMessages via ORM relationship)
         db.query(ChatSession).filter(ChatSession.user_id == user.id).delete(synchronize_session=False)
+
+        # 3b. Every other table that references the user. On PostgreSQL the
+        #     foreign keys are enforced, so leaving any of these behind would
+        #     make the user delete itself fail with an IntegrityError.
+        db.query(HumanizerRun).filter(HumanizerRun.user_id == user.id).delete(synchronize_session=False)
+        realtime_ids = [r[0] for r in db.query(RealtimeSession.id).filter(RealtimeSession.user_id == user.id).all()]
+        if realtime_ids:
+            db.query(RealtimeMessage).filter(RealtimeMessage.session_id.in_(realtime_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(RealtimeSession).filter(RealtimeSession.id.in_(realtime_ids)).delete(synchronize_session=False)
+        db.query(UsageEvent).filter(UsageEvent.user_id == user.id).delete(synchronize_session=False)
 
         # 4. Delete user (cascade deletes UserIdentity and RefreshToken)
         db.delete(user)

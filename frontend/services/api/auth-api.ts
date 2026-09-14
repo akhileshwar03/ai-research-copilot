@@ -1,28 +1,14 @@
 import { apiRequest } from "@/services/api/client";
 import type {
-  LoginRequest, LoginResponse,
   RefreshRequest, RefreshResponse,
-  RegisterRequest,
   SendOtpRequest, SendOtpResponse, VerifyOtpRequest, VerifyOtpResponse,
   OAuthProvidersResponse,
 } from "@/shared/types/api";
 
+// No password-based auth in this app — sign-in is email OTP (sendOtp/verifyOtp)
+// or OAuth (oauthProviders + the backend's redirect-based /auth/oauth/* flow).
+
 export const authApi = {
-  register: (payload: RegisterRequest) =>
-    apiRequest<{ message: string }>("/register", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      skipAuth: true,
-    }),
-
-  login: (payload: LoginRequest) =>
-    apiRequest<LoginResponse>("/login", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      credentials: "include", // receive the httpOnly refresh cookie
-      skipAuth: true,
-    }),
-
   /** Refresh via httpOnly cookie (credentials) with optional legacy body token. */
   refresh: (payload: RefreshRequest = {}) =>
     apiRequest<RefreshResponse>("/refresh", {
@@ -43,13 +29,6 @@ export const authApi = {
       skipRefresh: true,
     }),
 
-  signup: (payload: { email: string; password: string }) =>
-    apiRequest<{ email: string; needs_otp: boolean }>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(payload),
-      skipAuth: true,
-    }),
-
   sendOtp: (payload: SendOtpRequest) =>
     apiRequest<SendOtpResponse>("/auth/send-otp", {
       method: "POST",
@@ -67,26 +46,6 @@ export const authApi = {
 
   oauthProviders: () =>
     apiRequest<OAuthProvidersResponse>("/auth/oauth/providers", {
-      skipAuth: true,
-    }),
-
-  changePassword: (currentPassword: string, newPassword: string) =>
-    apiRequest<{ message: string }>("/auth/change-password", {
-      method: "POST",
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
-    }),
-
-  forgotPasswordSend: (email: string) =>
-    apiRequest<{ message: string }>("/auth/forgot-password/send", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-      skipAuth: true,
-    }),
-
-  resetPassword: (email: string, code: string, newPassword: string) =>
-    apiRequest<{ message: string }>("/auth/reset-password", {
-      method: "POST",
-      body: JSON.stringify({ email, code, new_password: newPassword }),
       skipAuth: true,
     }),
 

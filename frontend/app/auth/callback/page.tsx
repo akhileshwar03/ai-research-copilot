@@ -22,6 +22,12 @@ import { setStoredTokens, getUserEmailFromToken } from "@/shared/lib/token-stora
 import { useAuthStore } from "@/stores/auth-store";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 
+const OAUTH_ERRORS: Record<string, string> = {
+  google_auth_failed: "Google sign-in failed. Please try again.",
+  github_auth_failed: "GitHub sign-in failed. Please try again.",
+  no_email: "We couldn't get your email from this provider. Try email sign-in instead.",
+};
+
 interface ExchangeResponse {
   access_token?: string;
   token?: string;
@@ -34,29 +40,18 @@ function AuthCallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const setAuth = useAuthStore((s) => s.setAuth);
-  const [status, setStatus] = useState<"loading" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
+  const code = params.get("code");
+  const paramError = params.get("error");
+  const initialError = paramError
+    ? OAUTH_ERRORS[paramError] ?? "Authentication failed. Please try again."
+    : !code
+      ? "No authentication code received. Please try again."
+      : "";
+  const [status, setStatus] = useState<"loading" | "error">(initialError ? "error" : "loading");
+  const [errorMsg, setErrorMsg] = useState(initialError);
 
   useEffect(() => {
-    const code = params.get("code");
-    const error = params.get("error");
-
-    if (error) {
-      const messages: Record<string, string> = {
-        google_auth_failed: "Google sign-in failed. Please try again.",
-        github_auth_failed: "GitHub sign-in failed. Please try again.",
-        no_email: "We couldn't get your email from this provider. Try email sign-in instead.",
-      };
-      setErrorMsg(messages[error] ?? "Authentication failed. Please try again.");
-      setStatus("error");
-      return;
-    }
-
-    if (!code) {
-      setErrorMsg("No authentication code received. Please try again.");
-      setStatus("error");
-      return;
-    }
+    if (!code || initialError) return;
 
     // Exchange the one-time code for tokens — keeps JWTs out of the URL.
     // credentials:include lets the backend set the httpOnly refresh cookie.
@@ -87,7 +82,7 @@ function AuthCallbackInner() {
         setErrorMsg(message);
         setStatus("error");
       });
-  }, [params, router, setAuth]);
+  }, [code, initialError, router, setAuth]);
 
   if (status === "error") {
     return (

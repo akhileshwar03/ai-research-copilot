@@ -1,217 +1,136 @@
 # Querex — AI Research Workspace
 
-A production-grade RAG (Retrieval-Augmented Generation) application that lets users upload PDF documents and chat with them using GPT-4. Built to demonstrate full-stack AI engineering: multi-tenant data isolation, streaming inference, secure OAuth, and resilient background processing.
+Querex is a full-stack AI workspace for research and writing. Five tools share one account,
+one admin panel, and one set of runtime controls:
 
-**Live:** [querex.vercel.app](https://ai-research-copilot-kappa.vercel.app) · API: [render backend](https://ai-research-copilot-xtmd.onrender.com/docs)
+| Tool | What it does | Backend |
+|---|---|---|
+| **Research Copilot** | Chat with your PDFs. Page-cited, document-grounded answers; multi-document compare; one-click research actions (summary, key findings, full report, compare, references, study questions); follow-up suggestions. | `POST /chat`, `/upload`, `/documents`, `/sessions` |
+| **Humanizer** | Rewrites AI-sounding text. *Basic* is a 3-pass GPT pipeline (analyze → best-of-N rewrite → verify); *Ultra Human* is a locally-served fine-tuned LoRA (Qwen2.5-7B). | `POST /humanize`, `/humanize/ultra`, `/humanizer/runs` |
+| **AI Checker** | AI-probability detection with per-paragraph signals, plus Writing Feedback. | `POST /checker/text`, `/checker/document`, `/checker/feedback` |
+| **Real-time AI** | Web-grounded chat (Tavily search) with cited sources and its own session history. | `POST /realtime/chat`, `/realtime/sessions` |
+| **Paper Analyzer** | Measures a PDF's real layout (margins, spacing, fonts) against a style guide. | `POST /paper-analyzer/analyze` |
+
+Text can be imported into any tool from a URL or an image (`POST /extract/url`, `/extract/image`).
+
+**Live:** frontend on Vercel · backend on Render · database on Neon (PostgreSQL + pgvector) · files on Cloudflare R2.
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Next.js Frontend                    │
-│  App Router · React 19 · Zustand · TanStack Query       │
-│  SSE streaming chat · JWT + OAuth · Theme system        │
-└──────────────────────┬──────────────────────────────────┘
-                       │ HTTPS  /api/v1/*
-┌──────────────────────▼──────────────────────────────────┐
-│                   FastAPI Backend                        │
-│                                                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
-│  │  Auth layer │  │  RAG pipeline│  │  Document svc │  │
-│  │  JWT+bcrypt │  │  Embed→Store │  │  Async ingest │  │
-│  │  OTP+OAuth  │  │  Retrieve    │  │  BG tasks     │  │
-│  └─────────────┘  └──────┬───────┘  └───────────────┘  │
-│                           │                             │
-│  ┌────────────────────────▼────────────────────────┐   │
-│  │  OpenAI API  (embeddings + GPT-4.1-mini chat)   │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                                         │
-│  ┌──────────────┐          ┌──────────────────────────┐ │
-│  │  PostgreSQL  │          │  ChromaDB (cosine space) │ │
-│  │  Users/docs/ │          │  Per-user vector chunks  │ │
-│  │  sessions    │          └──────────────────────────┘ │
-│  └──────────────┘                                       │
-└─────────────────────────────────────────────────────────┘
+Next.js 16 (App Router, React 19, TanStack Query, Zustand, Tailwind v4)
+        │  HTTPS /api/v1/*   (JWT access token + httpOnly refresh cookie)
+        ▼
+FastAPI ──┬── auth: email OTP + OAuth (Google, GitHub), one-time code exchange
+          ├── documents: upload → background ingestion (pypdf + vision captions) → pgvector
+          ├── chat: retrieval modes (top-k / whole document / exact page) + research actions
+          ├── humanizer, checker, realtime, paper analyzer, extract
+          ├── admin: stats, analytics, users, documents, settings, audit log, system
+          └── middleware: request ids, maintenance mode, per-tool usage events
+        │
+        ├── PostgreSQL (Neon) — users, sessions, documents, chunks (pgvector), settings, audit, usage
+        ├── Cloudflare R2 — private PDF storage (local disk in development)
+        ├── OpenAI — chat, embeddings, vision, classification
+        ├── Tavily — web search for Real-time AI
+        └── Ollama (local) — `humaniser-lora` for Ultra Human
 ```
 
----
+### Key engineering decisions
 
-## Key Engineering Decisions
-
-### Multi-Tenant Data Isolation (Defence-in-Depth)
-Every data access path enforces user ownership independently:
-- **Vector store:** every chunk carries `user_email` metadata; retrieval always filters by it
-- **Documents:** service layer verifies ownership before any mutation — cannot be bypassed by callers
-- **Sessions:** `get_by_id_and_user(session_id, user_id)` — ownership in the query, not a post-fetch check
-- **Chat:** document ownership re-verified in the route before the SSE stream opens
-
-This means that even if a route bug skips an auth check, the service layer still enforces isolation.
-
-### RAG Pipeline — Similarity Threshold
-Retrieval returns only chunks whose cosine distance to the query is below a configurable threshold (`RAG_SIMILARITY_THRESHOLD`, default 1.0). When a document contains no relevant content, the LLM receives an empty context block and tells the user the document doesn't contain the answer — rather than confabulating an answer from unrelated text.
-
-### OAuth Security — One-Time Code Exchange
-OAuth callbacks do **not** embed tokens in the redirect URL (which would expose them in browser history, server logs, and `Referer` headers). Instead:
-1. Callback handler stores tokens server-side under a 120-second single-use code
-2. Redirects the frontend with only: `?code=<opaque-32-byte-code>`
-3. Frontend exchanges the code for tokens via `POST /api/v1/auth/oauth/exchange`
-
-### Async PDF Ingestion
-Uploads return `202 Accepted` immediately. A `BackgroundTask` runs PDF parsing and OpenAI embedding after the response is sent, using its own database session decoupled from the request lifecycle. The document list polls every 3 seconds while any document is `processing`, stopping automatically when all reach a terminal state.
-
-### Auth Resilience
-`get_current_user_email` auto-provisions the user row when a valid JWT is presented but the row doesn't exist (Render ephemeral database reset scenario). Users are never logged out by infrastructure events unless the JWT itself has expired.
+- **Multi-tenant isolation at every layer.** Vector chunks carry `user_email`; services verify
+  ownership before any mutation; session lookups include the user id in the query.
+- **Grounded retrieval with three modes.** Plain questions use top-k similarity; counting and
+  "list all" questions get the whole document; "what's on page N" uses an exact page filter.
+  Research actions always run over the whole selected document set.
+- **Tokens never in URLs.** OAuth callbacks hand the browser a 120-second single-use code that is
+  exchanged server-side; the refresh token lives in an httpOnly cookie.
+- **Runtime control without redeploys.** Every limit, rate limit, tool kill switch, the
+  announcement banner, sign-up state and maintenance mode live in `app_settings` and are editable
+  from `/admin` (30-second cache).
+- **Observability built in.** Every tool request is recorded as a lean `usage_events` row (tool,
+  status, latency, user — never content) and every admin action is written to `admin_audit_log`.
+- **Free-tier retention.** Documents and chats older than `retention_days` are purged by a
+  cleanup that piggybacks on the uptime ping; at most one worker runs it per day.
 
 ---
 
-## Tech Stack
+## Admin panel (`/admin`)
 
-| Layer | Technology |
-|---|---|
-| Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 |
-| State | Zustand, TanStack Query |
-| Backend | FastAPI, Python 3.10+, Uvicorn |
-| AI / RAG | OpenAI GPT-4.1-mini, OpenAI Embeddings, ChromaDB, LangChain |
-| Database | PostgreSQL (production) · SQLite (local dev) + SQLAlchemy + Alembic |
-| Auth | JWT (access 60 min + refresh 30 days), bcrypt, OTP email, OAuth (Google, GitHub) |
-| Rate Limiting | slowapi (per-IP, with X-Forwarded-For proxy support) |
-| Deployment | Render (backend) + Vercel (frontend) |
+Admins are bootstrapped with the `ADMIN_EMAILS` env var and can promote others from the panel.
+
+- **Overview** — live counters, daily charts (requests, errors, sign-ups, messages, uploads,
+  humanizer runs), usage per tool with error rate and p95 latency, most active users.
+- **Users** — search, status/role filters, sort, CSV export, suspend/reinstate, promote/demote,
+  mark email verified, sign out everywhere, delete with full data purge, per-user drawer with
+  30-day usage, documents and sessions.
+- **Documents** — every document across users with status filter, re-ingest, delete.
+- **Settings** — grouped runtime settings: platform (maintenance mode, sign-ups, announcement),
+  feature switches per tool, uploads & retention, and per-tool limits.
+- **Audit & activity** — the admin audit log and recent tool requests (filter by tool, errors only).
+- **System** — environment, schema version, storage backend, model configuration, integration
+  status (with an optional live probe), and a "run retention cleanup now" action.
 
 ---
 
-## Local Development
-
-### Backend
+## Local development
 
 ```bash
-cd backend
-python -m venv venv
-source venv/bin/activate       # Windows: venv\Scripts\activate
+# Backend (uses backend/.env; DATABASE_URL may point at Neon or a local sqlite file)
+cd backend && source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env           # fill in OPENAI_API_KEY and JWT_SECRET_KEY
 alembic upgrade head
-uvicorn main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8000
+
+# Frontend
+cd frontend && npm install && npm run dev
 ```
 
-Interactive API docs: `http://localhost:8000/docs`
+The frontend reads `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`) and
+`NEXT_PUBLIC_API_PREFIX` (`/api/v1`). Without an email provider configured, the OTP code is
+returned in the API response and auto-filled in the sign-in form.
 
-### Frontend
+Note: vector storage requires PostgreSQL with the pgvector extension. On SQLite the app boots and
+every non-RAG feature works, but document ingestion fails.
+
+### Tests and checks
 
 ```bash
-cd frontend
-npm install
-cp .env.example .env.local     # defaults to http://localhost:8000 + /api/v1 prefix
-npm run dev
+cd backend && python -m pytest app/tests -q      # 350+ contract and service tests
+cd frontend && npx tsc --noEmit && npx eslint app features components services shared stores && npm run build
 ```
 
-Frontend: `http://localhost:3000`
-
-### Running Tests
-
-```bash
-cd backend
-source venv/bin/activate
-pytest app/tests/ -v
-```
-
-Tests run against an in-memory SQLite database and never touch `app.db`.
+CI (`.github/workflows/ci.yml`) runs the backend tests and the frontend type-check + build.
 
 ---
 
 ## Deployment
 
-### Render (Backend)
+- **Render** — `backend/render.yaml`: `alembic upgrade head && uvicorn app.main:app`. Required env:
+  `DATABASE_URL`, `OPENAI_API_KEY`, `JWT_SECRET_KEY`, `FRONTEND_ORIGINS`, `FRONTEND_URL`,
+  `APP_BASE_URL`, `ENVIRONMENT=production`, `ADMIN_EMAILS`, the four `R2_*` variables, and
+  optionally `RESEND_API_KEY`, `TAVILY_API_KEY`, `GOOGLE_CLIENT_*`, `GITHUB_CLIENT_*`.
+- **Vercel** — root `frontend`, env `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_API_PREFIX=/api/v1`.
+- **Ultra Human** is local-only until the model is hosted; the endpoint returns a clear 503 elsewhere.
 
-1. Create a **PostgreSQL** database in Render. Copy the **Internal Connection String**.
-2. Create a **Web Service**, root directory `backend`.
-3. Set environment variables:
-
-| Variable | Value |
-|---|---|
-| `DATABASE_URL` | PostgreSQL Internal Connection String from step 1 |
-| `OPENAI_API_KEY` | `sk-...` |
-| `JWT_SECRET_KEY` | `openssl rand -hex 32` |
-| `FRONTEND_ORIGINS` | Your Vercel URL, e.g. `https://querex.vercel.app` |
-| `FRONTEND_URL` | Same as above (no trailing slash) |
-| `APP_BASE_URL` | Your Render service URL |
-| `RESEND_API_KEY` | For OTP emails (get one free at resend.com) |
-| `ENVIRONMENT` | `production` |
-
-`render.yaml` handles build + start commands automatically.
-
-### Vercel (Frontend)
-
-1. Import the repo, root directory `frontend`.
-2. Set environment variables:
-
-| Variable | Value |
-|---|---|
-| `NEXT_PUBLIC_API_URL` | Your Render backend URL |
-| `NEXT_PUBLIC_API_PREFIX` | `/api/v1` |
-
-### OAuth Setup (Optional)
-
-**Google:** Create an OAuth 2.0 Client ID in Google Cloud Console.
-- Authorized redirect URI: `https://<your-render-url>/auth/callback/google`
-- Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in Render
-
-**GitHub:** Create an OAuth App in GitHub Settings → Developer settings.
-- Callback URL: `https://<your-render-url>/auth/callback/github`
-- Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in Render
+Full backend variable reference: `backend/.env.example`.
 
 ---
 
-## API Reference
-
-All endpoints are versioned under `/api/v1`. Interactive docs available at `/docs`.
-
-### Auth
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/v1/auth/signup` | Begin email signup (returns OTP gate) |
-| `POST` | `/api/v1/auth/send-otp` | Send/resend OTP code |
-| `POST` | `/api/v1/auth/verify-otp` | Verify OTP, complete account creation |
-| `POST` | `/api/v1/login` | Password login |
-| `POST` | `/api/v1/refresh` | Refresh access token |
-| `POST` | `/api/v1/auth/oauth/exchange` | Exchange one-time OAuth code for tokens |
-| `DELETE` | `/api/v1/auth/account` | Delete account + all data |
-
-### Documents
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/v1/upload` | Upload PDF (returns 202, processes in background) |
-| `GET` | `/api/v1/documents` | List documents (`?skip=0&limit=100`) |
-| `GET` | `/api/v1/documents/{id}/status` | Poll ingestion status |
-| `DELETE` | `/api/v1/documents/{id}` | Delete document + vectors |
-
-### Chat
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/api/v1/chat` | Stream chat response (SSE, `text/event-stream`) |
-
----
-
-## Environment Variables
-
-### Backend (`backend/.env`)
+## Repository layout
 
 ```
-OPENAI_API_KEY=sk-...
-JWT_SECRET_KEY=<random 32+ char secret>
-DATABASE_URL=sqlite:///./app.db         # local only; use PostgreSQL in production
-FRONTEND_ORIGINS=http://localhost:3000
-FRONTEND_URL=http://localhost:3000
-APP_BASE_URL=http://localhost:8000
-OPENAI_CHAT_MODEL=gpt-4.1-mini
-ENVIRONMENT=development
-RESEND_API_KEY=                          # leave empty to use dev mode (OTP printed to logs)
-```
-
-### Frontend (`frontend/.env.local`)
-
-```
-NEXT_PUBLIC_API_URL=http://localhost:8000
-NEXT_PUBLIC_API_PREFIX=/api/v1
+backend/
+  app/api/routes/        every HTTP route (auth, chat, documents, admin, app_config, ...)
+  app/api/middleware/    request context, maintenance mode, usage tracking hook
+  app/services/          business logic (chat, humanizer/, checker, retention, runtime_settings, ...)
+  app/modules/rag/       embedding, ingestion, pgvector store, retrieval
+  app/db/models/         SQLAlchemy models · app/db/repositories/  data access
+  app/tests/             pytest suite · alembic/  migrations
+  scripts/finetune/      Humanizer LoRA training pipeline (see STATE.md there)
+frontend/
+  app/                   routes (chat, humanizer, checker, realtime, paper-analyzer, admin, login)
+  features/              per-product components and hooks (admin/, chat/, humanizer/, ...)
+  services/api/          typed API clients · shared/  types and helpers · stores/  Zustand
 ```

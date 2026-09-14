@@ -3,12 +3,15 @@
 import { useCallback, useRef, useState } from "react";
 
 import { chatApi } from "@/services/api/chat-api";
-import type { Message } from "@/shared/types/chat";
+import type { Message, ResearchAction } from "@/shared/types/chat";
 
 interface StreamArgs {
   messages: Message[];
   documentIds?: string[];
+  action?: ResearchAction;
   onAssistantToken: (text: string, sources?: string[]) => void;
+  /** Follow-up questions the backend suggests once the answer is complete. */
+  onSuggestions?: (suggestions: string[]) => void;
 }
 
 /**
@@ -19,6 +22,7 @@ interface StreamArgs {
  *   event: done\ndata: \n\n
  *   event: error\ndata: {"message":"..."}\n\n
  *   event: revised\ndata: <json-encoded-full-text>\n\n
+ *   event: suggestions\ndata: <json-encoded-string-array>\n\n
  *
  * A buffer accumulates incomplete SSE frames across chunk boundaries so
  * we never try to JSON-parse a partially-received line.
@@ -29,6 +33,7 @@ export async function* parseSseStream<TSources = string[]>(
   | { type: "token"; value: string }
   | { type: "sources"; value: TSources }
   | { type: "revised"; value: string }
+  | { type: "suggestions"; value: string[] }
   | { type: "done" }
   | { type: "error"; message: string }
 > {
@@ -89,6 +94,16 @@ export async function* parseSseStream<TSources = string[]>(
           continue;
         }
 
+        if (currentEvent === "suggestions") {
+          try {
+            const parsed = JSON.parse(data) as string[];
+            if (Array.isArray(parsed)) yield { type: "suggestions", value: parsed };
+          } catch {
+            // Malformed suggestions frame — they're a convenience, keep going.
+          }
+          continue;
+        }
+
         if (currentEvent === "revised") {
           try {
             const parsed = JSON.parse(data) as string;
@@ -125,7 +140,7 @@ export function useStreamingChat() {
   }, []);
 
   const stream = useCallback(
-    async ({ messages, documentIds, onAssistantToken }: StreamArgs) => {
+    async ({ messages, documentIds, action, onAssistantToken, onSuggestions }: StreamArgs) => {
       cancel();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -133,7 +148,12 @@ export function useStreamingChat() {
 
       try {
         const response = await chatApi.stream(
-          { messages, document_ids: documentIds && documentIds.length > 0 ? documentIds : undefined },
+          {
+            // Strip client-only fields (suggestions, action labels) before sending.
+            messages: messages.map(({ role, content }) => ({ role, content })),
+            document_ids: documentIds && documentIds.length > 0 ? documentIds : undefined,
+            action,
+          },
           controller.signal,
         );
 
@@ -162,9 +182,11 @@ export function useStreamingChat() {
           } else if (event.type === "token") {
             streamedText += event.value;
             onAssistantToken(streamedText, sources);
+          } else if (event.type === "suggestions") {
+            onSuggestions?.(event.value);
           } else if (event.type === "error") {
             throw new Error(event.message);
-          } else {
+          } else if (event.type === "done") {
             break;
           }
         }

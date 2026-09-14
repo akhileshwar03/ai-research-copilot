@@ -7,6 +7,7 @@ import {
 } from "react-resizable-panels";
 
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { PlatformNotices } from "@/features/shared/components/platform-notices";
 
 interface MainLayoutProps {
   sidebar: React.ReactNode;
@@ -30,7 +31,10 @@ export default function MainLayout({
       <div className="relative z-10 h-full w-full">
       {sidebarCollapsed ? (
         /* Collapsed: full-width main area, no panel overhead */
-        <main className="h-full overflow-hidden">{children}</main>
+        <main className="flex h-full flex-col overflow-hidden">
+          <PlatformNotices />
+          <div className="min-h-0 flex-1">{children}</div>
+        </main>
       ) : (
         <PanelGroup direction="horizontal" autoSaveId="workspace-layout">
           {/* Sidebar */}
@@ -52,7 +56,10 @@ export default function MainLayout({
 
           {/* Main */}
           <Panel defaultSize={78}>
-            <main className="h-full overflow-hidden">{children}</main>
+            <main className="flex h-full flex-col overflow-hidden">
+              <PlatformNotices />
+              <div className="min-h-0 flex-1">{children}</div>
+            </main>
           </Panel>
         </PanelGroup>
       )}

@@ -28,7 +28,6 @@ export function ProbabilityGauge({
   const [displayPct, setDisplayPct] = useState(0);
 
   useEffect(() => {
-    setDisplayPct(0);
     const id = setTimeout(() => setDisplayPct(targetPct), 30);
     return () => clearTimeout(id);
   }, [targetPct]);

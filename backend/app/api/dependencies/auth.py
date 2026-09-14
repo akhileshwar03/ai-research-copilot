@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -10,13 +10,14 @@ from app.services.one_time_code_store import is_account_denied
 from app.core.security import decode_access_token
 from app.db.models.user import User
 from app.db.repositories.user_repository import UserRepository
-from app.db.session import get_db
+from app.db.session import engine, get_db
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
@@ -42,8 +43,14 @@ def get_current_user(
 
         # JWT signature is valid but the user row doesn't exist.
         # This happens when the database is reset (e.g. Render redeploy on ephemeral
-        # SQLite) while the client still holds a valid access token.
-        # Auto-provision the user so existing sessions continue to work seamlessly.
+        # SQLite) while the client still holds a valid access token. Auto-provision so
+        # existing sessions continue to work seamlessly — but only on that ephemeral
+        # SQLite setup. On a persistent store (Postgres) a missing row means the account
+        # was actually deleted out-of-band, and resurrecting it here would let anyone
+        # holding an old, still-unexpired access token silently regain a fresh account.
+        if engine.dialect.name != "sqlite":
+            raise AppError(code="ACCOUNT_DELETED", message="This account has been deleted", status_code=401)
+
         user = user_repo.create(email=email, hashed_password=None, email_verified=True)
         user_repo.create_identity(
             user_id=user.id,
@@ -68,6 +75,9 @@ def get_current_user(
         db.commit()
         logger.info("admin_bootstrapped email=%s", email)
 
+    # Lets the usage-tracking middleware attribute the request to a user
+    # without a second lookup (see app/services/usage_tracking.py).
+    request.state.user_id = user.id
     return user
 
 

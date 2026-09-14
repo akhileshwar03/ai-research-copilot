@@ -16,7 +16,20 @@ from app.api.routes.v1 import api_v1_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
-from app.db.models import app_setting, chat_models, document, one_time_code, user  # noqa: F401
+from app.db.models import (  # noqa: F401
+    admin_audit_log,
+    app_setting,
+    chat_models,
+    document,
+    document_chunk,
+    finetune_sample,
+    humanizer_run,
+    one_time_code,
+    otp,
+    realtime_models,
+    usage_event,
+    user,
+)
 from app.db.session import Base, engine
 from app.services.health_service import HealthService
 from app.services.retention_service import maybe_run_cleanup
@@ -207,6 +220,41 @@ def _run_startup_migrations() -> None:
                 conn.commit()
                 logger.info("startup_migration: uq_documents_user_name added")
 
+            # ── usage_events + admin_audit_log (migration 0018) ────────────────
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS usage_events (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    tool VARCHAR NOT NULL,
+                    status_code INTEGER NOT NULL,
+                    ok BOOLEAN NOT NULL DEFAULT 1,
+                    duration_ms INTEGER NOT NULL DEFAULT 0,
+                    request_id VARCHAR,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_usage_events_user_id ON usage_events (user_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_usage_events_tool ON usage_events (tool)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_usage_events_created_at ON usage_events (created_at)"))
+            conn.execute(text(
+                """
+                CREATE TABLE IF NOT EXISTS admin_audit_log (
+                    id INTEGER PRIMARY KEY,
+                    admin_email VARCHAR NOT NULL,
+                    action VARCHAR NOT NULL,
+                    target VARCHAR,
+                    details TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            ))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_admin_email ON admin_audit_log (admin_email)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_action ON admin_audit_log (action)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_created_at ON admin_audit_log (created_at)"))
+            conn.commit()
+
     except Exception:
         logger.exception(
             "startup_migration failed — server will continue but document endpoints may be broken"
@@ -226,7 +274,6 @@ app.state.limiter = limiter
 
 
 async def _rate_limit_error_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
-    from app.api.middleware.request_context import request_context_middleware  # noqa: F401
     request_id = getattr(request.state, "request_id", "") or request.headers.get("x-request-id", "")
     return JSONResponse(
         status_code=429,
@@ -249,6 +296,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_error_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

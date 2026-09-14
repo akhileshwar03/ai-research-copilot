@@ -13,7 +13,6 @@ export function ScanningPanel() {
   const [stageIndex, setStageIndex] = useState(0);
 
   useEffect(() => {
-    setStageIndex(0);
     const interval = setInterval(() => {
       setStageIndex((i) => Math.min(i + 1, SCAN_STAGES.length - 1));
     }, 750);

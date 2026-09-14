@@ -2,42 +2,17 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-import bcrypt as _bcrypt
 from jose import JWTError, jwt
 
 from app.core.config import get_settings
+
+# No password-based auth in this app — sign-in is email OTP or OAuth only,
+# so there is deliberately no hash_password/verify_password here.
 
 
 class TokenKind:
     ACCESS = "access"
     REFRESH = "refresh"
-
-
-def validate_password_strength(password: str) -> None:
-    """Raise ValueError if *password* fails minimum strength requirements."""
-    errors = []
-    if len(password) < 8:
-        errors.append("at least 8 characters")
-    if not any(c.isupper() for c in password):
-        errors.append("at least one uppercase letter")
-    if not any(c.islower() for c in password):
-        errors.append("at least one lowercase letter")
-    if not any(c.isdigit() for c in password):
-        errors.append("at least one digit")
-    if errors:
-        raise ValueError("Password must contain " + ", ".join(errors) + ".")
-
-
-def hash_password(password: str) -> str:
-    """Hash a password using bcrypt directly (bypasses passlib's Python 3.14 incompatibility)."""
-    pw_bytes = password.encode("utf-8")[:72]
-    return _bcrypt.hashpw(pw_bytes, _bcrypt.gensalt()).decode("utf-8")
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its bcrypt hash."""
-    pw_bytes = plain_password.encode("utf-8")[:72]
-    return _bcrypt.checkpw(pw_bytes, hashed_password.encode("utf-8"))
 
 
 def create_jwt_token(subject: str, token_type: str, expires_delta: timedelta) -> str:

@@ -36,19 +36,33 @@ class AIService:
         # feature's model choice never drifts with the app-wide default used
         # by Checker/Chat/OCR. Rewrite (Pass 2) wants creative variation;
         # classify (Pass 1/3) wants a stable, repeatable read on the text.
-        # Sampling params tuned for burstiness/perplexity, not just variety —
-        # see the comment on humanizer_rewrite_model in config.py. Only viable
-        # because this is now a classic chat-completions model; a reasoning
-        # model (gpt-5-mini/nano) rejects all four of these with a 400.
-        self.humanizer_rewrite_llm = ChatOpenAI(
-            api_key=settings.openai_api_key,
-            model=settings.humanizer_rewrite_model,
-            temperature=settings.humanizer_rewrite_temperature,
-            top_p=settings.humanizer_rewrite_top_p,
-            frequency_penalty=settings.humanizer_rewrite_frequency_penalty,
-            presence_penalty=settings.humanizer_rewrite_presence_penalty,
-            streaming=True,
-        )
+        #
+        # 2026-08-12: see the long comment on humanizer_rewrite_model in
+        # config.py for the full investigation -- short version: the single-
+        # candidate gpt-4.1-mini + these 4 sampling knobs combo was a real,
+        # measured regression (69%-98% AI-probability swings, same input).
+        # Fixed at the pipeline level via best-of-N candidate selection
+        # (humanizer_num_candidates), not by abandoning gpt-4.1-mini -- 5 real
+        # trials with best-of-3 landed 69%/69%/69%/71%/69%, all in 10-16s.
+        # These 4 knobs are still skipped automatically for any "gpt-5*"
+        # model, in case a reasoning model is ever configured again (it
+        # rejects them outright with a 400) -- kept defensive, not because
+        # gpt-5-mini is the current default.
+        rewrite_kwargs = {
+            "api_key": settings.openai_api_key,
+            "model": settings.humanizer_rewrite_model,
+            "streaming": True,
+        }
+        if settings.humanizer_rewrite_model.startswith("gpt-5"):
+            rewrite_kwargs["temperature"] = 1.0  # confirmed live: gpt-5-mini accepts this; rejects the other 3
+        else:
+            rewrite_kwargs.update(
+                temperature=settings.humanizer_rewrite_temperature,
+                top_p=settings.humanizer_rewrite_top_p,
+                frequency_penalty=settings.humanizer_rewrite_frequency_penalty,
+                presence_penalty=settings.humanizer_rewrite_presence_penalty,
+            )
+        self.humanizer_rewrite_llm = ChatOpenAI(**rewrite_kwargs)
         self.humanizer_classify_llm = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=settings.humanizer_classify_model,
@@ -76,10 +90,12 @@ class AIService:
         return response.content
 
     async def rewrite_humanize_once(self, messages: list[tuple[str, str]]) -> str:
-        """Single non-streaming rewrite call on humanizer_rewrite_model, used
-        for the Pass 3 selective-paragraph retry — that one call needs to
-        finish before the corrected paragraph can be spliced back in, so it
-        can't stream token-by-token like the main Pass 2 rewrite."""
+        """Single non-streaming rewrite call on humanizer_rewrite_model. Used for the
+        Pass 3 selective-paragraph retry (that one call needs to finish before the
+        corrected paragraph can be spliced back in, so it can't stream token-by-token
+        like the main Pass 2 rewrite) and also by the main Pass 2 rewrite itself when
+        generating each best-of-N candidate, which likewise needs the full text before
+        it can be scored."""
         response = await self.humanizer_rewrite_llm.ainvoke(messages)
         return response.content
 
