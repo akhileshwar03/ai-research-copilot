@@ -18,7 +18,6 @@ import { CheckerBackground } from "@/features/checker/components/checker-backgro
 import { CursorSpotlight, Glare, Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { TrustSection } from "@/features/checker/components/trust-section";
 import MainLayout from "@/components/layout/main-layout";
-import { ProductShellSidebar } from "@/components/layout/product-shell-sidebar";
 
 type Mode = "detect" | "feedback";
 
@@ -262,7 +261,6 @@ export default function CheckerPage() {
 
   return (
     <MainLayout
-      sidebar={<ProductShellSidebar />}
       background={
         <>
           <CheckerBackground />

@@ -14,7 +14,6 @@ import { ImportControls } from "@/features/shared/components/import-controls";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 import { CursorSpotlight, Glare } from "@/features/shared/motion/motion";
 import MainLayout from "@/components/layout/main-layout";
-import { ProductShellSidebar } from "@/components/layout/product-shell-sidebar";
 import { takeHumanizerPrefill } from "@/shared/lib/humanizer-handoff";
 
 const MAX_CHARS = 20000;
@@ -326,7 +325,6 @@ export default function HumanizerPage() {
 
   return (
     <MainLayout
-      sidebar={<ProductShellSidebar />}
       background={
         <>
           <AtmosphereBackground variant="soft" />

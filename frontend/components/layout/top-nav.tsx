@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ROUTE_TOOL, useAppConfig } from "@/features/shared/hooks/use-app-config";
+import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
 
 interface NavItem {
   href: string;
@@ -37,39 +38,50 @@ function SearchIcon() {
   );
 }
 
-interface WorkspaceNavProps {
+interface TopNavProps {
   /**
-   * When provided (Chat), search opens the caller's own fully-wired
-   * CommandPalette instance instead of this component's self-contained one.
+   * When provided (Chat), the global ⌘K shortcut is left to the caller's own
+   * fully-wired sidebar search (documents + chats) instead of this bar's own
+   * tools-only palette — see the sidebar's own search trigger for that one.
+   * The visible "Search tools" button here always opens the tools-only
+   * palette regardless, since those are two deliberately separate searches:
+   * this bar finds a *tool*, the sidebar finds a *document or chat*.
    */
   onOpenPalette?: () => void;
 }
 
-export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
+/**
+ * App-wide top bar: brand, the product switcher (moved here from the
+ * sidebar so every product's own sidebar can dedicate its full height to
+ * contextual content — documents/chats, conversation history, etc.), a
+ * tools-only quick-jump search, and account access.
+ */
+export function TopNav({ onOpenPalette }: TopNavProps) {
   const pathname = usePathname();
   const { config } = useAppConfig();
   const hasOverride = typeof onOpenPalette === "function";
-  const [selfPaletteOpen, setSelfPaletteOpen] = useState(false);
+  const [toolsSearchOpen, setToolsSearchOpen] = useState(false);
 
+  // The global ⌘K shortcut defers to the page's own richer search when one
+  // exists (chat's document/chat palette); otherwise it opens this bar's
+  // tools-only one. The visible button below is independent of this and
+  // always opens the tools-only palette.
   useEffect(() => {
-    if (hasOverride) return;
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setSelfPaletteOpen((o) => !o);
-      }
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "k") return;
+      e.preventDefault();
+      if (hasOverride) onOpenPalette!();
+      else setToolsSearchOpen((o) => !o);
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [hasOverride]);
-
-  const openPalette = () => (hasOverride ? onOpenPalette!() : setSelfPaletteOpen(true));
+  }, [hasOverride, onOpenPalette]);
 
   return (
     <>
-      <div className="shrink-0 space-y-3 border-b border-[var(--border-subtle)] px-3 py-4">
+      <header className="glass-bar relative z-20 flex h-14 shrink-0 items-center gap-4 border-b px-4">
         {/* Brand */}
-        <div className="flex items-center gap-2.5 px-1">
+        <Link href="/chat" className="flex shrink-0 items-center gap-2.5">
           <div
             className="flex h-7 w-7 items-center justify-center rounded-lg ring-1 ring-[var(--border-medium)]"
             style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
@@ -78,24 +90,13 @@ export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
             </svg>
           </div>
-          <div className="min-w-0">
-            <p className="font-headline truncate text-[13px] font-bold text-[var(--text-primary)] leading-tight">Querex</p>
-            <p className="text-[10px] text-zinc-600 leading-tight">AI workspace</p>
-          </div>
-        </div>
+          <p className="font-headline hidden text-[13px] font-bold text-[var(--text-primary)] sm:block">Querex</p>
+        </Link>
 
-        {/* Search / command palette trigger */}
-        <button
-          onClick={openPalette}
-          className="hover-surface flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] px-2.5 py-2 text-[12px] text-zinc-500 transition"
-        >
-          <SearchIcon />
-          <span className="flex-1 text-left">Search…</span>
-          <kbd className="rounded border border-[var(--border-medium)] bg-[var(--surface-2)] px-1 py-0.5 text-[10px] text-zinc-600">⌘K</kbd>
-        </button>
+        <div className="h-6 w-px shrink-0 bg-[var(--border-subtle)]" />
 
-        {/* Product nav */}
-        <nav className="space-y-0.5">
+        {/* Product switcher */}
+        <nav className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-thin">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
             const tool = ROUTE_TOOL[item.href];
@@ -106,7 +107,7 @@ export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
                 href={item.href}
                 title={disabled ? `${item.label} is temporarily unavailable` : undefined}
                 className={[
-                  "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition",
+                  "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-[13px] font-medium transition",
                   active
                     ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
                     : "hover-surface text-zinc-500",
@@ -115,9 +116,9 @@ export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
                 style={active ? { color: "var(--marketing-accent-text)" } : undefined}
               >
                 <NavIcon d={item.path} />
-                <span className="flex-1">{item.label}</span>
+                <span className="hidden md:inline">{item.label}</span>
                 {disabled && (
-                  <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-400">
+                  <span className="hidden rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-400 lg:inline">
                     off
                   </span>
                 )}
@@ -125,14 +126,25 @@ export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
             );
           })}
         </nav>
-      </div>
 
-      {!hasOverride && (
-        <CommandPalette
-          open={selfPaletteOpen}
-          onClose={() => setSelfPaletteOpen(false)}
-        />
-      )}
+        {/* Tools search — jumps between products only, not documents/chats */}
+        <button
+          onClick={() => setToolsSearchOpen(true)}
+          title="Search tools"
+          className="hover-surface flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] px-2.5 py-1.5 text-[12px] text-zinc-500 transition"
+        >
+          <SearchIcon />
+          <span className="hidden lg:inline">Search tools…</span>
+          {!hasOverride && (
+            <kbd className="hidden rounded border border-[var(--border-medium)] bg-[var(--surface-2)] px-1 py-0.5 text-[10px] text-zinc-600 lg:inline">⌘K</kbd>
+          )}
+        </button>
+
+        {/* Account */}
+        <WorkspaceProfileFooter variant="topbar" />
+      </header>
+
+      <CommandPalette open={toolsSearchOpen} onClose={() => setToolsSearchOpen(false)} />
     </>
   );
 }

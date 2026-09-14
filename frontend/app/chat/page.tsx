@@ -107,6 +107,7 @@ export default function ChatPage() {
     <>
       <MainLayout
         sidebar={<Sidebar email={email} onOpenPalette={() => setPaletteOpen(true)} />}
+        onOpenPalette={() => setPaletteOpen(true)}
         sidebarCollapsed={!sidebarOpen}
         background={
           <>

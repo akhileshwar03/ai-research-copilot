@@ -13,8 +13,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { WorkspaceNav } from "@/components/layout/workspace-nav";
-import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
 import { CheckIcon, PlusIcon } from "@/features/shared/components/icons";
 
 type SortOrder = "latest" | "alpha";
@@ -278,8 +276,6 @@ export function RealtimeSidebar({
 
   return (
     <div className="glass-panel relative z-10 flex h-full flex-col overflow-hidden">
-      <WorkspaceNav />
-
       <div className="flex-1 overflow-y-auto px-3 py-3 scrollbar-thin">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-[10px] font-semibold uppercase tracking-widest text-zinc-600">Conversations</span>
@@ -363,8 +359,6 @@ export function RealtimeSidebar({
           </div>
         )}
       </div>
-
-      <WorkspaceProfileFooter />
     </div>
   );
 }
