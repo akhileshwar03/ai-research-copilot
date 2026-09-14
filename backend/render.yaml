@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 10000
+    startCommand: alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
       # Neon Postgres — durable (idles but never hard-deletes on the free
       # tier, unlike Render's own free Postgres). Must have the pgvector
