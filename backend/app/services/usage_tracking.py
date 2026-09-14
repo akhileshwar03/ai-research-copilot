@@ -4,19 +4,17 @@ Every request to a tool endpoint (chat, humanizer, checker, ...) is recorded
 as one lean ``usage_events`` row — tool name, HTTP status, latency, and the
 user (when authenticated). Nothing about the request content is stored.
 
-Latency is measured from request start to the moment the response body has
-*finished* sending, so a streamed chat reply counts its full generation time
-rather than just the time to first byte. That works by attaching the write
-as a Starlette background task on the response: background tasks run only
-after the body is complete, and they never delay the response itself.
+``record_usage_event`` is called by ``RequestContextMiddleware`` strictly
+after the downstream ASGI app has fully finished handling the request (see
+that module's docstring for why it deliberately isn't a Starlette
+``BackgroundTask`` — that pattern raced against streaming responses). So
+latency here reflects the full response time, including a streamed chat
+reply's complete generation, and the write can never delay the response
+since it only runs once the client has already received everything.
 """
 
 import logging
 import time
-
-from starlette.background import BackgroundTask, BackgroundTasks
-from starlette.requests import Request
-from starlette.responses import Response
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +63,7 @@ def record_usage_event(
     started_at: float,
     request_id: str | None,
 ) -> None:
-    """Insert one usage row. Runs as a background task after the response
-    has been sent — opens its own session, never raises."""
+    """Insert one usage row. Opens its own session, never raises."""
     from app.db.models.usage_event import UsageEvent
     from app.db.session import SessionLocal
 
@@ -91,33 +88,3 @@ def record_usage_event(
         logger.debug("usage_event_write_failed tool=%s", tool, exc_info=True)
     finally:
         db.close()
-
-
-def attach_usage_tracking(request: Request, response: Response, *, api_prefix: str, started_at: float) -> None:
-    """Schedule a usage row for *response* if the request hit a tool route.
-
-    Chains onto any background task the route already attached (FastAPI's
-    ``BackgroundTasks`` for the upload ingestion, for example) instead of
-    replacing it.
-    """
-    tool = tool_for_request(request.method, request.url.path, api_prefix)
-    if tool is None:
-        return
-
-    task = BackgroundTask(
-        record_usage_event,
-        tool=tool,
-        user_id=getattr(request.state, "user_id", None),
-        status_code=response.status_code,
-        started_at=started_at,
-        request_id=getattr(request.state, "request_id", None),
-    )
-    existing = response.background
-    if existing is None:
-        response.background = task
-        return
-
-    combined = BackgroundTasks()
-    combined.add_task(existing)
-    combined.add_task(task)
-    response.background = combined

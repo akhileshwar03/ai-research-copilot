@@ -9,7 +9,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.api.middleware.exception_handlers import register_exception_handlers
-from app.api.middleware.request_context import request_context_middleware
+from app.api.middleware.request_context import RequestContextMiddleware
 from app.api.dependencies.services import get_health_service
 from app.api.routes.oauth import router as oauth_router
 from app.api.routes.v1 import api_v1_router
@@ -302,7 +302,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.middleware("http")(request_context_middleware)
+app.add_middleware(RequestContextMiddleware)
 
 os.makedirs(settings.uploads_dir, exist_ok=True)
 
