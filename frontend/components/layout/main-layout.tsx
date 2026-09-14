@@ -8,10 +8,14 @@ import {
 
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 import { PlatformNotices } from "@/features/shared/components/platform-notices";
+import { TopNav } from "@/components/layout/top-nav";
 
 interface MainLayoutProps {
-  sidebar: React.ReactNode;
+  /** Omit entirely for products with no contextual list (Checker, Humanizer, Paper Analyzer). */
+  sidebar?: React.ReactNode;
   children: React.ReactNode;
+  /** Chat only: defers the top bar's ⌘K shortcut to its own richer document/chat search. */
+  onOpenPalette?: () => void;
   /** When true the sidebar panel is hidden and the main area fills the screen */
   sidebarCollapsed?: boolean;
   /** Defaults to the "calm" mood atmosphere; pass a product's own background (e.g. CheckerBackground) to override. */
@@ -23,13 +27,15 @@ export default function MainLayout({
   children,
   sidebarCollapsed = false,
   background,
+  onOpenPalette,
 }: MainLayoutProps) {
   return (
-    <div className="dawn-theme relative h-screen w-screen overflow-hidden bg-[var(--app-bg)] text-white">
+    <div className="dawn-theme relative flex h-screen w-screen flex-col overflow-hidden bg-[var(--app-bg)] text-white">
       {background ?? <AtmosphereBackground variant="calm" />}
+      <TopNav onOpenPalette={onOpenPalette} />
 
-      <div className="relative z-10 h-full w-full">
-      {sidebarCollapsed ? (
+      <div className="relative z-10 min-h-0 flex-1 w-full">
+      {!sidebar || sidebarCollapsed ? (
         /* Collapsed: full-width main area, no panel overhead */
         <main className="flex h-full flex-col overflow-hidden">
           <PlatformNotices />

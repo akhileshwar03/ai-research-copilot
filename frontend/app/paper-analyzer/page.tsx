@@ -13,7 +13,6 @@ import { AtmosphereBackground } from "@/features/shared/components/atmosphere-ba
 import { CursorSpotlight, Glare, Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { ProbabilityGauge } from "@/features/checker/components/probability-gauge";
 import MainLayout from "@/components/layout/main-layout";
-import { ProductShellSidebar } from "@/components/layout/product-shell-sidebar";
 
 function gaugeColor(score: number): string {
   if (score >= 85) return "#34d399";
@@ -98,7 +97,6 @@ export default function PaperAnalyzerPage() {
 
   return (
     <MainLayout
-      sidebar={<ProductShellSidebar />}
       background={
         <>
           <AtmosphereBackground variant="calm" />

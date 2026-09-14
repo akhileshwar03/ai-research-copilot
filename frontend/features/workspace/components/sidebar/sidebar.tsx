@@ -9,8 +9,6 @@ import { useDocuments } from "@/features/documents/hooks/use-documents";
 import { useSessions } from "@/features/sessions/hooks/use-sessions";
 import { useSessionStore } from "@/stores/session-store";
 import { Glare } from "@/features/shared/motion/motion";
-import { WorkspaceNav } from "@/components/layout/workspace-nav";
-import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
 
 interface WorkspaceSidebarProps {
   email: string | null;
@@ -79,7 +77,20 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
 
   return (
     <Glare className="glass-panel flex h-full flex-col overflow-hidden">
-      <WorkspaceNav onOpenPalette={onOpenPalette} />
+      {/* Search across this workspace's documents and chats — deliberately
+          distinct from the top bar's tool-jump search (see TopNav). */}
+      <div className="shrink-0 border-b border-[var(--border-subtle)] px-3 py-3">
+        <button
+          onClick={onOpenPalette}
+          className="hover-surface flex w-full items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] px-2.5 py-2 text-[12px] text-zinc-500 transition"
+        >
+          <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span className="flex-1 text-left">Search documents & chats…</span>
+          <kbd className="rounded border border-[var(--border-medium)] bg-[var(--surface-2)] px-1 py-0.5 text-[10px] text-zinc-600">⌘K</kbd>
+        </button>
+      </div>
 
       {/* ── Scrollable body ───────────────────────────── */}
       <div className="flex-1 overflow-y-auto px-3 py-3 space-y-5 scrollbar-thin">
@@ -111,8 +122,6 @@ export default function WorkspaceSidebar({ email, onOpenPalette }: WorkspaceSide
           retentionDays={sessionRetentionDays}
         />
       </div>
-
-      <WorkspaceProfileFooter />
     </Glare>
   );
 }

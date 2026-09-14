@@ -539,77 +539,258 @@ function ShortcutsSection() {
 
 // ─── Tutorial & Help section ──────────────────────────────────────────────────
 
-const TUTORIAL_STEPS = [
+interface TutorialStep {
+  title: string;
+  desc: string;
+}
+
+interface TutorialGroup {
+  icon: string;
+  tool: string;
+  tagline: string;
+  steps: TutorialStep[];
+}
+
+const TUTORIAL_GROUPS: TutorialGroup[] = [
   {
-    step: "01",
-    title: "Create an account",
-    desc: "Sign up with your email. You'll receive a 6-digit verification code to confirm your identity. Your data stays private and isolated to your account.",
-    icon: "👤",
+    icon: "👋",
+    tool: "Getting started",
+    tagline: "One account, five tools",
+    steps: [
+      {
+        title: "Sign in",
+        desc: "Use email (a 6-digit code, no password to remember) or continue with Google or GitHub. One account gives you every tool below.",
+      },
+      {
+        title: "Switch tools from the top bar",
+        desc: "Chat, AI Checker, Humanizer, Real-time AI, and Paper Analyzer are all one click away in the bar at the top of the screen. \"Search tools…\" (top right) jumps straight to any of them by typing.",
+      },
+      {
+        title: "Two different searches, on purpose",
+        desc: "The top bar's search only finds tools. Each sidebar has its own \"Search documents & chats…\" box for finding something inside that specific workspace — they're deliberately separate.",
+      },
+    ],
   },
   {
-    step: "02",
-    title: "Upload a PDF document",
-    desc: "Click the upload icon in the Documents panel on the left sidebar, or drag and drop a PDF. Querex extracts, indexes, and embeds your document for intelligent retrieval.",
-    icon: "📄",
-  },
-  {
-    step: "03",
-    title: "Select a document",
-    desc: "Click on any uploaded document to select it as the active context. The AI will use it as a knowledge base when answering your questions.",
-    icon: "🎯",
-  },
-  {
-    step: "04",
-    title: "Start a chat session",
-    desc: "Click the + button in the Chats panel to start a new conversation. Each session maintains its own history so you can keep research threads separate.",
     icon: "💬",
+    tool: "Research Copilot",
+    tagline: "Chat with your PDFs, with page citations",
+    steps: [
+      {
+        title: "Upload a document",
+        desc: "Drag a PDF onto the sidebar, or click \"Upload your first PDF\". It's indexed in the background — you can keep working while it processes.",
+      },
+      {
+        title: "Choose which documents a chat can see",
+        desc: "Click \"Sources\" in the top-right of the chat window to pick one or more documents for that conversation. No selection means it searches everything you've uploaded. This is separate from clicking a document in the sidebar, which just opens it in the preview pane on the right.",
+      },
+      {
+        title: "Ask anything — with real citations",
+        desc: "Every answer cites the page it came from. Ask about a specific page (\"what's on page 12\") or a count across the whole document (\"how many references does this have\") and Research Copilot picks the right retrieval strategy automatically.",
+      },
+      {
+        title: "Run a one-click research action",
+        desc: "With sources selected, a row of actions appears above the input: Summarize, Key findings, Research report, Compare, References, and Study questions. Each runs over the full document set and always cites its pages.",
+      },
+      {
+        title: "Follow up, or regenerate",
+        desc: "Suggested follow-up questions appear under the latest answer — click one to ask it instantly. Hover the last reply for a Regenerate button if you want another pass.",
+      },
+      {
+        title: "Compare documents directly",
+        desc: "Select more than one document as a source, then ask a comparison question — or use the Compare research action for a structured side-by-side table.",
+      },
+    ],
   },
   {
-    step: "05",
-    title: "Ask questions",
-    desc: "Type your question in the input box and press Enter. Querex searches your document for relevant passages and synthesizes a precise, cited answer.",
-    icon: "🔍",
+    icon: "✅",
+    tool: "AI Checker",
+    tagline: "AI-probability detection and writing feedback",
+    steps: [
+      {
+        title: "Paste text or upload a PDF",
+        desc: "Check the AI Detector tab. You can paste text directly, upload a PDF, import a URL, or upload an image (text is extracted automatically).",
+      },
+      {
+        title: "Read the verdict",
+        desc: "You get an AI-probability score, a confidence read, and a set of contributing signals. Turn on Advanced Scan for a paragraph-by-paragraph breakdown — slower, but more precise about which parts read as AI-written.",
+      },
+      {
+        title: "Get writing feedback",
+        desc: "Switch to the Writing Feedback tab for structural and clarity notes on the same text, independent of the AI-detection verdict.",
+      },
+      {
+        title: "Send flagged text to the Humanizer",
+        desc: "If a result flags text as likely AI-written, an \"Apply humanization?\" prompt can hand that exact text straight to the Humanizer to rewrite.",
+      },
+    ],
   },
   {
-    step: "06",
-    title: "Compare multiple documents",
-    desc: "Check the checkbox on multiple documents to select them simultaneously. Then ask cross-document questions like 'Compare the findings of both papers.'",
-    icon: "⚡",
+    icon: "✍️",
+    tool: "Humanizer",
+    tagline: "Rewrite AI-sounding text so it reads naturally",
+    steps: [
+      {
+        title: "Choose Basic or Ultra Human",
+        desc: "Basic is a fast, multi-pass GPT rewrite. Ultra Human runs a separate fine-tuned model — slower, and only available where it's hosted, but built specifically for this task rather than a prompted general model.",
+      },
+      {
+        title: "Paste, import, or try a sample",
+        desc: "Paste text directly, import from a URL or image, or click \"Try a sample\" to see it in action before using your own text.",
+      },
+      {
+        title: "Allow elaboration, if you want it",
+        desc: "By default the rewrite keeps the same facts and roughly the same length. Turning on \"Allow elaboration\" lets it add brief clarifying context — review that output more carefully, since it's no longer a strict same-facts rewrite.",
+      },
+      {
+        title: "Compare with the diff view",
+        desc: "Switch between the plain rewritten text and a word-level diff against your original to see exactly what changed.",
+      },
+      {
+        title: "Revisit past runs",
+        desc: "Every run is saved to your history (top right) so you can come back to an earlier rewrite without redoing the work.",
+      },
+    ],
+  },
+  {
+    icon: "🌐",
+    tool: "Real-time AI",
+    tagline: "Web-grounded chat with cited sources",
+    steps: [
+      {
+        title: "Ask about anything current",
+        desc: "Unlike Research Copilot, Real-time AI isn't limited to your uploaded documents — it searches the live web and grounds its answer in what it finds.",
+      },
+      {
+        title: "Check the sources",
+        desc: "Answers come with citation chips linking to the actual pages used, so you can verify anything before relying on it.",
+      },
+      {
+        title: "Keep separate conversations",
+        desc: "Real-time AI has its own conversation history, independent from Research Copilot's chat sessions — the two products don't share context.",
+      },
+    ],
+  },
+  {
+    icon: "📐",
+    tool: "Paper Analyzer",
+    tagline: "Check a PDF's formatting against a real style guide",
+    steps: [
+      {
+        title: "Pick a style guide",
+        desc: "Choose APA, MLA, or IEEE before uploading — each has different margin, spacing, and citation rules to check against.",
+      },
+      {
+        title: "Upload your paper",
+        desc: "Every check is measured directly from the PDF's real margins, spacing, font, and alignment — nothing is guessed from the text alone.",
+      },
+      {
+        title: "Fix what's flagged",
+        desc: "Each result shows exactly which rule failed and what the style guide expects, so you know precisely what to change.",
+      },
+    ],
   },
 ];
 
-function TutorialSection() {
+function TutorialSection({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div>
       <SectionHeader
         title="Tutorial & Help"
-        subtitle="Get the most out of Querex — your AI research workspace"
+        subtitle="A quick guide to every tool in Querex"
       />
-      <div className="flex flex-col gap-4">
-        {TUTORIAL_STEPS.map(({ step, title, desc, icon }) => (
-          <div
-            key={step}
-            className="flex gap-4 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[20px]">
-              {icon}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-mono text-zinc-600">{step}</span>
-                <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
+      <div className="flex flex-col gap-8">
+        {TUTORIAL_GROUPS.map(({ icon, tool, tagline, steps }) => (
+          <div key={tool}>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[18px]">
+                {icon}
               </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-zinc-500">{desc}</p>
+              <div>
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">{tool}</p>
+                <p className="text-[11px] text-zinc-500">{tagline}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2.5 pl-1">
+              {steps.map(({ title, desc }, i) => (
+                <div
+                  key={title}
+                  className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-3.5"
+                >
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-mono text-zinc-500">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-medium text-[var(--text-primary)]">{title}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">{desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         ))}
+
+        {isAdmin && (
+          <div>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-2)] text-[18px]">
+                🛠️
+              </div>
+              <div>
+                <p className="text-[13px] font-semibold text-[var(--text-primary)]">Admin panel</p>
+                <p className="text-[11px] text-zinc-500">Visible to you because your account is an admin</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2.5 pl-1">
+              {[
+                {
+                  title: "Open it from here",
+                  desc: "\"Administration → Admin panel\" appears at the bottom of this menu's left column whenever you're signed in as an admin.",
+                },
+                {
+                  title: "Six tabs, one place",
+                  desc: "Overview (live stats and charts), Users, Documents, Settings, Audit & activity, and System — everything needed to run the platform day to day.",
+                },
+                {
+                  title: "Runtime settings apply instantly",
+                  desc: "Per-tool kill switches, maintenance mode, sign-up gating, the announcement banner, and every rate limit take effect within 30 seconds — no redeploy required.",
+                },
+                {
+                  title: "Every action is logged",
+                  desc: "Suspending a user, deleting a document, or changing a setting is written to the audit log with who did it and when.",
+                },
+              ].map(({ title, desc }, i) => (
+                <div
+                  key={title}
+                  className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-3.5"
+                >
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[var(--surface-2)] text-[10px] font-mono text-zinc-500">
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[12.5px] font-medium text-[var(--text-primary)]">{title}</p>
+                    <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-8 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-5">
         <p className="text-[13px] font-semibold text-[var(--text-primary)]">Need more help?</p>
         <p className="mt-1 text-[12px] text-zinc-500">
-          For questions, bugs, or feature requests, reach out at{" "}
-          <span className="text-zinc-300">support@querex.app</span>
+          Querex is developed in the open. Found a bug or have a request? Open an issue on{" "}
+          <a
+            href="https://github.com/akhileshwar03/ai-research-copilot"
+            target="_blank"
+            rel="noreferrer"
+            className="text-zinc-300 underline decoration-zinc-600 underline-offset-2 hover:text-[var(--text-primary)]"
+          >
+            the GitHub repository
+          </a>
+          .
         </p>
       </div>
     </div>
@@ -618,77 +799,177 @@ function TutorialSection() {
 
 // ─── What's New section ───────────────────────────────────────────────────────
 
-const FEATURES = [
+const WHATS_NEW_UPDATED = "September 2026";
+
+interface ToolSummary {
+  icon: string;
+  title: string;
+  desc: string;
+}
+
+const TOOL_SUMMARIES: ToolSummary[] = [
+  {
+    icon: "💬",
+    title: "Research Copilot",
+    desc: "Chat with your PDFs with page-cited, document-grounded answers. Six one-click research actions (summary, key findings, full report, compare, references, study questions), per-session source scoping, follow-up question suggestions, and multi-document comparison.",
+  },
+  {
+    icon: "✅",
+    title: "AI Checker",
+    desc: "AI-probability detection with an optional paragraph-by-paragraph Advanced Scan, plus a separate Writing Feedback mode — with a direct handoff to the Humanizer for anything flagged.",
+  },
+  {
+    icon: "✍️",
+    title: "Humanizer",
+    desc: "Rewrites AI-sounding text so it reads naturally. Basic runs a multi-pass GPT pipeline; Ultra Human runs a purpose-built fine-tuned model. Word-level diff view and full run history included.",
+  },
+  {
+    icon: "🌐",
+    title: "Real-time AI",
+    desc: "Web-grounded chat with cited sources and its own independent conversation history — for questions that need current information, not just your documents.",
+  },
+  {
+    icon: "📐",
+    title: "Paper Analyzer",
+    desc: "Checks a PDF's real margins, spacing, fonts, and alignment against APA, MLA, or IEEE — measured directly from the page, never guessed.",
+  },
+];
+
+interface PlatformHighlight {
+  icon: string;
+  badge: string;
+  title: string;
+  desc: string;
+}
+
+const PLATFORM_HIGHLIGHTS: PlatformHighlight[] = [
+  {
+    icon: "🧭",
+    badge: "Layout",
+    title: "Redesigned navigation",
+    desc: "The tool switcher now lives in a top bar shared by every product, so each sidebar can dedicate its full height to your documents and conversations instead of splitting space with navigation.",
+  },
+  {
+    icon: "🔎",
+    badge: "Search",
+    title: "Two purpose-built searches",
+    desc: "The top bar's search only jumps between tools. Each sidebar's own search looks specifically at that workspace's documents and chats — kept separate on purpose so neither gets cluttered with the other.",
+  },
   {
     icon: "🧠",
-    badge: "Core",
-    title: "RAG-Powered Document Q&A",
-    desc: "Querex uses Retrieval-Augmented Generation (RAG) to search your documents with vector embeddings, retrieve the most relevant passages, and generate accurate, grounded answers — no hallucinations.",
+    badge: "Research Copilot",
+    title: "One-click research actions",
+    desc: "Summarize, Key findings, Research report, Compare, References, and Study questions now run over your full selected document set in one click, every result cited.",
+  },
+  {
+    icon: "💡",
+    badge: "Research Copilot",
+    title: "Follow-up suggestions",
+    desc: "Every grounded answer now suggests three relevant follow-up questions, plus a Regenerate action if you want another pass at the same question.",
   },
   {
     icon: "🔒",
     badge: "Privacy",
-    title: "Per-Account Document Isolation",
-    desc: "Every document you upload is private to your account. No cross-account leakage — each user sees only their own PDFs, with ownership enforced at the database level.",
+    title: "Per-account isolation, end to end",
+    desc: "Every document, chat, and vector embedding is scoped to your account at the database level — enforced independently at every layer, not just the API route.",
   },
   {
-    icon: "⚡",
-    badge: "Speed",
-    title: "Streaming AI Responses",
-    desc: "Answers stream in real-time token by token, so you start reading immediately. No waiting for the full response — same feel as leading AI chat products.",
-  },
-  {
-    icon: "📚",
-    badge: "Multi-Doc",
-    title: "Multi-Document Analysis",
-    desc: "Select multiple PDFs simultaneously to run cross-document comparisons, synthesis queries, and gap analysis — perfect for literature reviews and competitive research.",
-  },
-  {
-    icon: "💬",
-    badge: "Sessions",
-    title: "Persistent Chat Sessions",
-    desc: "Your conversations are saved and synced to your account. Switch between sessions, rename them, pick up where you left off — your research history is always there.",
-  },
-  {
-    icon: "📧",
-    badge: "Auth",
-    title: "Passwordless Email OTP Login",
-    desc: "Sign in with a 6-digit code sent to your email — no password to remember or lose. Powered by Resend with a verified custom domain for reliable delivery worldwide.",
+    icon: "📡",
+    badge: "Reliability",
+    title: "Live platform status",
+    desc: "If a tool is ever paused for maintenance, you'll see a clear banner explaining it — not a silent failure.",
   },
 ];
 
-function WhatsNewSection() {
+const ADMIN_HIGHLIGHTS: PlatformHighlight[] = [
+  {
+    icon: "📊",
+    badge: "Admin",
+    title: "Full analytics dashboard",
+    desc: "Live user, document, and request counts; daily activity charts; per-tool error rates and latency; most-active users — all in the Overview tab.",
+  },
+  {
+    icon: "🎛️",
+    badge: "Admin",
+    title: "Runtime controls, no redeploy",
+    desc: "Maintenance mode, sign-up gating, an announcement banner, a kill switch per tool, and every rate limit and size cap are editable live and take effect within 30 seconds.",
+  },
+  {
+    icon: "🗂️",
+    badge: "Admin",
+    title: "Full user and document management",
+    desc: "Search, filter, and export users to CSV; suspend, promote, force sign-out, or delete with a full data purge; inspect or re-ingest any document across every account.",
+  },
+  {
+    icon: "📜",
+    badge: "Admin",
+    title: "Durable audit log",
+    desc: "Every admin action — who changed what, and when — is recorded permanently, along with a rolling log of tool requests for debugging.",
+  },
+];
+
+function FeatureCard({ icon, badge, title, desc }: PlatformHighlight) {
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-[22px]">{icon}</span>
+        <span className="rounded-md border border-[var(--border-medium)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
+          {badge}
+        </span>
+      </div>
+      <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
+      <p className="text-[12px] leading-relaxed text-zinc-500">{desc}</p>
+    </div>
+  );
+}
+
+function WhatsNewSection({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div>
-      <SectionHeader
-        title="What's New"
-        subtitle="The features that make Querex uniquely powerful"
-      />
+      <SectionHeader title="What's New" subtitle={`Last updated ${WHATS_NEW_UPDATED}`} />
 
       <div className="mb-6 flex items-center gap-3 rounded-2xl border border-[var(--border-subtle)] bg-gradient-to-r from-white/[0.04] to-transparent p-4">
         <span className="text-[24px]">🚀</span>
         <div>
-          <p className="text-[13px] font-semibold text-[var(--text-primary)]">Querex — AI Research Workspace</p>
+          <p className="text-[13px] font-semibold text-[var(--text-primary)]">Querex — one account, five AI tools</p>
           <p className="text-[12px] text-zinc-500">
-            Built for researchers, students, and professionals who work with large documents and need AI that actually cites its sources.
+            Research Copilot, AI Checker, Humanizer, Real-time AI, and Paper Analyzer, built for people who work with real documents and need answers they can verify.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {FEATURES.map(({ icon, badge, title, desc }) => (
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">Latest updates</h3>
+      <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {PLATFORM_HIGHLIGHTS.map((f) => (
+          <FeatureCard key={f.title} {...f} />
+        ))}
+      </div>
+
+      {isAdmin && (
+        <>
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">
+            For admins
+          </h3>
+          <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {ADMIN_HIGHLIGHTS.map((f) => (
+              <FeatureCard key={f.title} {...f} />
+            ))}
+          </div>
+        </>
+      )}
+
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-zinc-600">Every tool</h3>
+      <div className="flex flex-col gap-3">
+        {TOOL_SUMMARIES.map(({ icon, title, desc }) => (
           <div
             key={title}
-            className="flex flex-col gap-2 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
+            className="flex gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-0)] p-4"
           >
-            <div className="flex items-center gap-2">
-              <span className="text-[22px]">{icon}</span>
-              <span className="rounded-md border border-[var(--border-medium)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-zinc-500">
-                {badge}
-              </span>
+            <span className="text-[20px]">{icon}</span>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-zinc-500">{desc}</p>
             </div>
-            <p className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</p>
-            <p className="text-[12px] leading-relaxed text-zinc-500">{desc}</p>
           </div>
         ))}
       </div>
@@ -834,8 +1115,8 @@ export function ProfileModal({
           {active === "profile"   && <ProfileSection email={email} />}
           {active === "settings"  && <SettingsSection email={email} />}
           {active === "shortcuts" && <ShortcutsSection />}
-          {active === "tutorial"  && <TutorialSection />}
-          {active === "whatsnew"  && <WhatsNewSection />}
+          {active === "tutorial"  && <TutorialSection isAdmin={Boolean(me?.is_admin)} />}
+          {active === "whatsnew"  && <WhatsNewSection isAdmin={Boolean(me?.is_admin)} />}
         </div>
 
         {/* ── Close button ───────────────────────────────────────────── */}

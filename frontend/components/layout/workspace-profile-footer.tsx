@@ -5,13 +5,19 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/features/auth/hooks/use-auth";
 import { ProfileModal, type ProfileSection } from "@/features/workspace/components/sidebar/profile-modal";
 
+interface WorkspaceProfileFooterProps {
+  /** "sidebar" (default): full-width, bottom-anchored, menu opens upward —
+   *  used inside a vertical sidebar. "topbar": compact avatar pill, menu
+   *  opens downward, right-aligned — used in the app-wide top bar. */
+  variant?: "sidebar" | "topbar";
+}
+
 /**
  * Self-contained profile trigger + settings/sign-out menu + ProfileModal.
- * Mounted at the bottom of every product's sidebar (WorkspaceSidebar,
- * RealtimeSidebar, ProductShellSidebar) so account access is consistent
- * across the whole app rather than Chat-only.
+ * Mounted once in the app-wide top bar (see TopNav) so account access is
+ * consistent everywhere without every product's sidebar re-wiring it.
  */
-export function WorkspaceProfileFooter() {
+export function WorkspaceProfileFooter({ variant = "sidebar" }: WorkspaceProfileFooterProps) {
   const { email, logout } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileSection, setProfileSection] = useState<ProfileSection>("profile");
@@ -30,7 +36,7 @@ export function WorkspaceProfileFooter() {
 
   return (
     <>
-      <UserFooter email={email} logout={logout} onOpenProfile={openProfile} />
+      <UserFooter email={email} logout={logout} onOpenProfile={openProfile} variant={variant} />
       <ProfileModal
         email={email}
         isOpen={profileOpen}
@@ -47,10 +53,12 @@ function UserFooter({
   email,
   logout,
   onOpenProfile,
+  variant = "sidebar",
 }: {
   email: string | null;
   logout: () => void;
   onOpenProfile: (section: ProfileSection) => void;
+  variant?: "sidebar" | "topbar";
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -71,6 +79,55 @@ function UserFooter({
     setOpen(false);
     onOpenProfile(section);
   };
+
+  if (variant === "topbar") {
+    return (
+      <div ref={ref} className="relative shrink-0">
+        {open && (
+          <div className="absolute right-0 top-full z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-[var(--border-medium)] bg-[var(--surface-2)] shadow-2xl shadow-black/60 ring-1 ring-black/20">
+            <div className="border-b border-[var(--border-subtle)] px-4 py-3.5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[13px] font-bold uppercase text-[var(--text-primary)] ring-1 ring-[var(--border-medium)]">
+                  {initial}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-medium text-[var(--text-primary)]">{email}</p>
+                  <p className="text-[11px] text-zinc-600">Querex account</p>
+                </div>
+              </div>
+            </div>
+            <div className="py-1.5">
+              <MenuItem icon={<SettingsIcon />} label="Settings" onClick={() => openSection("settings")} />
+              <MenuItem icon={<ShortcutsIcon />} label="Keyboard Shortcuts" hint="⌘K" onClick={() => openSection("shortcuts")} />
+              <MenuItem icon={<TutorialIcon />} label="Tutorial & Help" onClick={() => openSection("tutorial")} />
+              <MenuItem icon={<WhatsNewIcon />} label="What's New" onClick={() => openSection("whatsnew")} />
+            </div>
+            <div className="border-t border-[var(--border-subtle)] py-1.5">
+              <MenuItem icon={<SignOutIcon />} label="Sign Out" destructive onClick={() => { setOpen(false); logout(); }} />
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() => setOpen((o) => !o)}
+          title={email ?? undefined}
+          className={[
+            "hover-surface flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] py-1 pl-1 pr-2 transition",
+            open ? "bg-[var(--surface-2)]" : "",
+          ].join(" ")}
+        >
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[10px] font-bold uppercase text-zinc-300 ring-1 ring-[var(--border-subtle)]">
+            {initial}
+          </div>
+          <svg
+            className={["h-3 w-3 shrink-0 text-zinc-600 transition-transform", open ? "rotate-180" : ""].join(" ")}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="relative shrink-0 border-t border-[var(--border-subtle)] px-3 py-3">
