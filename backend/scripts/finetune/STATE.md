@@ -2012,3 +2012,594 @@ a real login, which is the user's action, not something done on their behalf.
 **Status**: Humanizer UI update complete and verified at the code/service level. Production
 Modal integration (the actual "make this reachable for real users" step) remains the
 next real step, not started, budget-gated per Round 25's discussion.
+
+## Round 27 (2026-08-13) — Real bug found in live use: LoRA leaks literal HTML tags into output
+
+Found via a real user screenshot of Ultra Human output through the actual authenticated app
+(not a synthetic test) -- the rewrite contained literal `<i>...</i>` and `<p>` tag characters
+sitting in the plain text, e.g. `CLAUDE.md, which still said <i>not wired</i>`. Confirmed real
+and reproducible, not a frontend rendering artifact: hit the raw Ollama endpoint directly
+(bypassing the app entirely) with fresh, unrelated inputs and got the same literal-tag output
+on 2 of 3 trials -- most often on inputs containing quoted phrases, numbered lists, or
+code-like paths (e.g. `routes/humanize.py`). A plain-narrative-only test came back clean, so
+it's input-shape-dependent, not universal.
+
+**Root cause (most likely, not yet fully audited)**: raw HTML leaked into the Phase 2
+collection/AI-ify training corpus and never got cleaned before fine-tuning, so the model
+learned to reproduce tag syntax as if it were normal punctuation/emphasis when rewriting
+quoted or emphasized text. This is a **different, previously-undocumented artifact** from the
+HTML-entity contamination already covered above (`&amp;`, `&#42;` chains, fixed during Step 1
+corpus cleaning) -- that pass cleaned *entities*, not literal *tags*, and this bug proves the
+two are genuinely separate failure modes, not the same thing caught twice.
+
+**Fix shipped (symptom-level guard, not a retrain)**: added `_strip_html_artifacts()` to
+`backend/app/services/humanizer_ultra_service.py` -- regex-strips common inline HTML tags
+(`<i>`, `<b>`, `<em>`, `<strong>`, `<p>`, `<br>`, `<span>`, `<div>`, `<u>`, open or closed) and
+runs `html.unescape()` as a second safety net for any entities that slip through this
+(separate) code path from `tag.py`'s existing entity cleaning. Applied at the exact point the
+raw Ollama response text enters the service, before it reaches the route or frontend.
+
+**Verification performed**: 4 new real unit tests in
+`backend/app/tests/test_humanizer_ultra_service.py` -- the exact reproduced case from the
+screenshot, a `<p>`/`<b>` variant, an HTML-entity case, and a clean-text no-op case (confirms
+the guard doesn't mangle text that was never broken). Full backend suite: 264/264 passed (260
+prior + 4 new). Also ran the actual patched `HumanizerUltraService.generate()` end-to-end
+against the real running Ollama model on the exact reproduced input -- output that trial didn't
+trigger the artifact again (model is non-deterministic on this), but the guard's correctness is
+locked in by the unit tests regardless of whether any given run happens to trigger it.
+
+**Explicitly NOT done, and why**: no retraining or corpus re-audit this round -- the guard
+handles the live-UI symptom; a real fix means going back through the Phase 2 collection/AI-ify
+data (`collect.py`/`aiify_api.py` output) looking for literal HTML tags the way the entity pass
+already did for entities, which is a real, separate piece of work, not something to fold into
+a same-day bug-fix pass.
+
+**Status**: Live-UI symptom fixed and verified. Underlying training-corpus contamination is
+real, confirmed, and NOT fixed -- flagged here so it isn't lost, and worth surfacing again
+before any future retrain of this adapter.
+
+## Round 28 (2026-08-13) — Real finding: LoRA scores 100% AI on GPTZero on out-of-distribution content
+
+User ran the exact Ultra Human output from the Round 27 bug report (this assistant's own
+debugging-session summary text -- file paths, code identifiers like `HumanizerUltraService`,
+first-person meta-commentary about the chat session itself) through GPTZero directly. Real,
+user-reported result: **100% AI generated, 0% human, 0% mixed** confidence.
+
+**Not a regression, not a broken model -- a distribution mismatch, confirmed by checking what
+the 80% pass rate (Round 23) actually validated.** That benchmark set was 5 fixed content
+types: blog intro, business email, product description, essay paragraph, report summary --
+generic natural prose. The Round 28 input is a fundamentally different register: technical,
+list-formatted, self-referential software-debugging narration that was never part of any
+training or validation data this model has seen. Same lesson as this session's earlier GPT
+prompt-engineering work (Prompt D scoring well on one stress-test paragraph, then 100% AI on a
+different topic) -- a model tuned/validated against one content distribution does not
+automatically generalize to another, and the 80% number was never a claim about arbitrary
+input, only about those 5 specific content types.
+
+Two compounding, real factors (not excuses):
+1. **GPTZero was never used to validate anything in this session's separate GPT-prompt work**
+   (ZeroGPT and humanizeai.pro were used instead, per explicit user instruction to stop
+   checking GPTZero for that work, partly because of its low free-scan limit) -- so there is
+   no existing evidence either way for how GPTZero treats the *shipped GPT prompt's* output on
+   this kind of technical content. This finding is specific to the **Ultra Human LoRA path**,
+   not the main `/humanize` GPT path.
+2. The screenshot also shows the Round 27 punctuation-glitch pattern still present
+   (`"not yet wired" I confirmed` -- missing sentence-boundary punctuation), a separate,
+   already-flagged training-data-quality symptom, not the cause of the 100% score by itself.
+
+**Not fixed, not actionable as a quick patch** -- unlike Round 27's HTML-tag leak, there's no
+sanitizer that fixes "the model doesn't generalize to a content type it was never trained or
+validated on." Real fix would be either (a) expanding the training/validation corpus to cover
+technical/meta-narration content if that's a use case worth supporting, or (b) accepting Ultra
+Human is validated only for the 5 original content registers and scoping user expectations
+accordingly. Recorded here as a real, confirmed gap rather than left undocumented.
+
+**Status**: Real finding, not investigated further this round. No code change. Worth revisiting
+before promoting Ultra Human beyond its current "experimental/local-only" framing in the UI.
+
+## Round 29 (2026-09-12) — Corpus clean pass, step 1 of the retrain plan from the "ultra humaniser" session
+
+Per the plan worked out in that session (measure contamination, clean it, verify the length-
+ratio filter recovers "same-length" pairs, *then* decide on model size) — this round executes
+step 1 for real against the live `finetune_samples` DB, not a re-measurement. New script:
+`scripts/finetune/clean_corpus.py`, read-only against the DB (never mutates
+`finetune_samples` — writes a parallel corpus instead, so the original rows and the currently-
+shipped model's training data are untouched and this is fully reversible).
+
+**Confirmed contamination, direct DB count** (12,785 rows total, all `style=normal`, only two
+sources: `Skylion007/openwebtext` 8,225 / `nixiesearch/hackernews-comments` 4,560):
+- 4,508 rows (35%) have an HTML tag in `human_text` — the field the model is trained to
+  *produce*. `nixiesearch/hackernews-comments` uses `<p>` as its own inline paragraph
+  separator (no closing tag); `Skylion007/openwebtext` is raw scraped articles carrying full
+  `<a href>`/`<i>`/`<b>` markup.
+- 1,158 rows (9%) have a bare URL in `human_text`.
+- 280 / 759 rows have HTML/URLs in `ai_text` too (the AI-ify step didn't fully clean its own
+  source).
+This is the exact, direct cause of the live HTML-leak and "See Wikipedia: X" bugs already
+patched at the service layer (Round 27/CLAUDE.md) — the model isn't misbehaving, it was shown
+this as normal human writing thousands of times.
+
+**Cleaning approach** (verified against real contaminated rows before trusting it, not
+assumed correct): `<p>` → paragraph break (deleting it outright would run separate paragraphs
+together — confirmed via direct inspection this is how it's actually used, no closing tag);
+`<a href="...">text</a>` → keep visible text, drop the tag; every other tag stripped, inner
+text kept; bare URLs removed (regex has no `\b` word-boundary prefix — found and fixed a real
+bug where a URL glued directly onto the previous word with no space, e.g. an embedded tweet's
+`"indeedhttp://t.co/..."`, silently survived a boundary-anchored version, since both "d" and
+"h" are `\w` characters with no boundary between them); HTML entities unescaped; known
+boilerplate lines (`Read more at...`, `Originally published...`, `ADVERTISEMENT`, `Story
+continues below advertisement`, `(Visited N times, N visits today)`, `[inject-module]`-style
+template slugs, etc.) dropped **only when they stand alone as their own line** — deliberately
+not a substring match, because "originally published" also occurs as genuine embedded prose
+(a real row: *"It was originally published in hardcover fifteen years ago"*) that whole-line
+matching correctly leaves untouched while still catching every standalone-boilerplate instance
+found by direct inspection.
+
+**16 new unit tests** (`app/tests/test_clean_corpus.py`) pin every case above using the *real*
+row ids that surfaced them, including the false-positive-prevention case (embedded "originally
+published" must survive) and the URL-glued-to-word regression. Full suite: 320/320 passing (304
+prior + 16 new).
+
+**Length-ratio filter** (targets the runaway-expansion/fabrication defect directly, not
+contamination): after cleaning, rows whose `human_text`/`ai_text` word-count ratio falls
+outside `[0.80, 1.30]` are dropped — spot-checked 3 rejected rows by hand, all genuinely
+mismatched (one had a broken byline artifact — "By of the" — spliced into the article body from
+a botched caption-extraction upstream; two were 1.4-1.57x length pairs the model would have
+learned as normal "same-length" behavior).
+
+**Real result, measured**: 9,266 / 12,785 kept (72.5%) — closely matching the 72.3% figure from
+the prior session's dry-run measurement (a different, independently-written check), which is a
+useful cross-check that the ~44% contamination finding wasn't a fluke of one particular
+counting method. Zero rows were unsalvageable (cleaning never reduced a row to empty text and
+then had to be discarded for that reason alone — every drop was the length-ratio filter).
+Output: `scripts/finetune/data/train_clean.jsonl` (8,803 rows) / `eval_clean.jsonl` (463 rows),
+zero HTML tags or URLs remaining in either (verified by re-scanning both output files after the
+fact, not assumed from the cleaning logic alone) — `id`/`human_text` leakage-checked at zero
+between the two splits, and the system prompt confirmed byte-identical to what `export.py`
+(and therefore production) actually sends (6,879 chars, exact string equality checked, not
+just length).
+
+**Deliberately NOT done this round**: no DB mutation (`finetune_samples.human_text` is
+untouched — this is 100% additive/reversible), no retraining, no model-size decision. Per the
+plan: the next step is verifying whether burstiness or "plain, slightly redundant" phrasing is
+the real anti-detector signal (comparing CleverAI's own output across several topics) before
+committing to a retrain of either 7B or a smaller model — nothing about that has changed here.
+`train_clean.jsonl`/`eval_clean.jsonl` are drop-in ready for `train_modal.py` with zero code
+changes (same message format, same system prompt construction) whenever that decision is made.
+
+**Status**: Corpus clean complete and verified. Awaiting the next go-ahead (burstiness-vs-CleverAI
+verification, then a training run) — nothing trained, nothing spent.
+
+## Round 30 (2026-09-13) — Burstiness-vs-CleverAI verification, step 2 of the retrain plan
+
+The prior ("ultra humaniser") session's single bee-text sample found CleverAI's output
+*less* bursty than its AI input (3.90 vs 6.67) — directly contradicting this project's own
+prompt strategy, which chases sentence-length variance as "the single biggest signal."
+Per that session's own explicit recommendation, re-tested across multiple fresh topics
+before trusting the one-sample result. Files: `gptzero_check/clever_burstiness_check/`.
+
+**Method**: 2 of the 10 pre-existing, already-vetted genuinely-AI-generated benchmark
+inputs (`normal_batch/00_raw_ai_inputs.json`) — `01_personal_blog`, `03_opinion_piece` —
+run through CleverAI Humanizer (guest mode, reverse-engineered job-queue API), our own
+Basic path (live GPT-4.1-mini), and Ultra (live local LoRA, personal_blog only). A third
+CleverAI submission (`05_product_review`) triggered Cloudflare's Turnstile bot-challenge
+mid-session — **stopped there rather than attempt to solve or route around it**, per this
+project's own hard rule against bypassing bot-detection. 2 samples is short of the 5
+originally planned, but real and reproducible, and sufficient to check whether the earlier
+single sample generalizes.
+
+**Result — reverses the bee-text finding:**
+
+| | Original AI input | CleverAI | Our Basic | Our Ultra |
+|---|---|---|---|---|
+| personal_blog | 8.19 | **12.52** | 9.68 | 19.64 (confounded, see below) |
+| opinion_piece | 5.84 | **7.82** | 7.50 | — |
+
+Across both fresh topics, CleverAI's output is *more* bursty than its input, not less —
+the opposite of the bee-text result, and roughly in the same direction as our own Basic
+path. **One data point earlier looked like it disproved this project's core prompt
+strategy; two more now suggest the opposite.** This is exactly the failure mode STATE.md
+has hit before (a variant that scored 0% on one paragraph, 100% AI on a different topic) —
+a burstiness theory built on n=1 was about to send a retrain in the wrong direction.
+
+**Ultra's 19.64 is confounded, not a clean comparison**: its 476-word output (2.0x the
+238-word input — under the 2.5x fabrication-resample threshold, so it shipped unresampled)
+contains real invented backstory not in the source — *"as someone with freelance
+experience (not many people can say they have freelanced while in college)"* and *"I've
+had this dream job since high school."* The high burstiness is at least partly an artifact
+of this elaboration/padding, not evidence Ultra is doing the anti-detector signal better.
+Yet another live, reproducible instance of the already-documented fabrication defect —
+recorded here rather than treated as a clean data point.
+
+**Explicitly NOT resolved**: burstiness is a proxy, not GPTZero's own metric. Real GPTZero
+scores for all 5 output files are still needed to actually settle whether burstiness
+correlates with CleverAI's real-world pass rate — that requires a GPTZero account/manual
+check, handed to the user rather than automated (same "user-reported" pattern as every
+prior GPTZero number in this file). Files ready in
+`gptzero_check/clever_burstiness_check/` with a README explaining what to check and why.
+
+**Status**: Burstiness re-tested, bee-text finding did not replicate. No training, no
+model-size decision, no DB change. Awaiting real GPTZero numbers on the 5 output files
+before either committing to a retrain target or ruling out the burstiness hypothesis.
+
+## Round 31 (2026-09-13) — Basic prompt overhaul against a 28-signal detector taxonomy; v2 regressed, v3 fixed it
+
+User supplied a detailed reference doc cataloguing 28 real AI-detection signals across 5
+groups (vocabulary, sentence structure, flow/transitions, repetition/templates, tone/
+evidence). Folded the actionable ones into `AGGRESSIVE_REWRITE_PROMPT` as new RULE 5-10,
+explicitly skipping "lack of specific details" and "vague supporting evidence" — both would
+require inventing facts or sources not in the input, which conflicts with the standing fact-
+lock rule (RULE 10/formerly RULE 4).
+
+**v2 — real regression, caught by testing, not assumed fixed.** First attempt at the
+sentence-length signal just capped length ("keep most sentences under 20 words, never past
+35"). Flagged going in that this echoed an already-reverted change in this same file's
+history (a hard 10-16 word ceiling that scored 0% on one paragraph, 100% AI on another) — and
+it repeated the mistake. Real re-checks on 3 fresh AI-authored inputs (one per model: OpenAI
+gpt-4.1-mini, Groq gpt-oss-120b, Google Gemini — deliberately different model families, not
+just different topics from one model) came back **worse than the prompt it replaced**:
+
+| Checker | v1 (before this round) | v2 (length-capped) |
+|---|---|---|
+| QuillBot | 40% AI | 0% AI (only improvement) |
+| ZeroGPT | not tested this input | 83.5% AI |
+| turnitindetector.ai | not tested this input | 47% AI (47/9/44 split) |
+| humanizeai.pro | 88% AI | 100% AI GPT |
+| cleverhumanizer.ai/ai-detector | not tested this input | 91% AI |
+
+Root cause, confirmed by measuring the actual output (not guessed): sentence lengths came
+back `[11,21,16,10,24,13,4,9,11,21,15,22,12,19,4,19,12,3,22,10]` — a real range, but capped
+at 24 with nothing longer. **A ceiling alone just moves uniformity to a lower number; it
+does not create variation, and variation is the actual signal.** Clever AI Detector's own
+flagged-reasons list confirmed this directly: "overly consistent structure" and "similar
+sentence rhythms" — the exact failure mode of RULE 5 v1, just inverted from long-uniform to
+short-uniform.
+
+**v3 — fixed the actual mechanism, not just the number.** Rewrote RULE 5 to require a
+genuine mix of very-short (3-8 word) AND longer (25+ word) sentences in most paragraphs,
+explicitly calling out "a run of 3+ sentences within ~10 words of each other" as the failure
+mode regardless of which length band it sits in. Also strengthened RULE 6 with concrete,
+measurable techniques for the other two signals Clever AI Detector flagged live
+("repetitive keyword usage," "predictable sentence endings") — count the topic word, cut it
+from half the sentences that have it; don't let sentences end the same way twice in a row.
+Added "in short" to the banned-phrase list (functionally identical to the already-banned "in
+summary," just a different string — caught live opening a v2 output's closing paragraph).
+
+**Re-measured after the v3 fix**: sentence-length ranges are now genuinely jagged —
+`1-28` words (openai_howto), `3-43` (groq_llama_review), `3-34` (google_explainer) — real
+long-and-short contrast per paragraph, not a narrow band at any length. 320/320 tests still
+pass. Real detector re-checks on these 3 v3 outputs: **awaiting user's results** — not
+assumed fixed just because the mechanical bug is corrected.
+
+**Status**: v2 shipped-then-caught as a regression; v3 is live in `prompts.py` now but
+UNVALIDATED against real detectors as of this entry. Do not treat RULE 5 as settled until
+those numbers come back — this file already has two failed attempts at this exact signal on
+record (the pre-existing reverted 10-16 word ceiling, and this round's v2), so a third
+failure would not be a surprise, it would be a pattern worth escalating past prompt tuning
+entirely (i.e., the actual retrain-a-smaller-model-on-a-cleaned-corpus path from Round 29/30).
+
+**v3 real result — still bad on Clever AI Detector (90% AI), user caught it, correctly
+rejected a partial fix.** v3's jagged sentence lengths didn't fix the other signals in the
+same reference doc — flagged reasons were "lack of personal voice," "overly consistent
+structure," "repetitive keyword usage," "predictable sentence endings." v3 had only reused
+the sentence-length fix from Round 31's RULE 5/6 pass; it had not systematically covered the
+other 23 of 28 signals in the reference. User explicitly asked for "the reference 100%," not
+a subset — correct call, since the subset approach is exactly what produced an incomplete
+fix twice in a row.
+
+**v4 — full rewrite, all 28 signals, organized by the reference's own 5 groups.**
+`AGGRESSIVE_REWRITE_PROMPT`'s RULE 2-6 rebuilt one rule per reference group (vocabulary;
+sentence structure/rhythm; flow/transitions/layout; repetition/template shapes; tone/stance/
+register), each bullet mapped to one named signal with a concrete fix adapted from the
+reference's own "Fix:" line. Two signals ("lack of specific details," "vague supporting
+evidence") deliberately adapted rather than applied literally — their literal fix means
+inventing a detail or source not in the input, which the fact lock (final rule) blocks; kept
+the spirit (don't generalize/soften specifics the source already has; don't invent
+attribution) without the literal instruction to add anything new.
+
+Re-generated the same 3 multi-model inputs (OpenAI/Groq/Google) through v4. Sentence-length
+ranges: `3-32` (openai_howto), `1-34` (groq_llama_review), `2-42` (google_explainer) — still
+genuinely jagged, not regressed back to a narrow band. 320/320 tests pass. Real detector
+re-checks: **awaiting user's results** — same discipline as v3, not calling this fixed until
+the numbers come back.
+
+**Status**: v4 live in `prompts.py`, covers all 28 referenced signals (26 literally, 2
+adapted for the fact lock), UNVALIDATED against real detectors as of this entry.
+
+**v4 real result — barely moved (90%→87% AI on Clever AI Detector).** Same 4 flagged reasons
+as v3, nearly unchanged. Root-caused against the actual output text: for a procedural how-to
+with a small fixed set of named physical objects (dripper/filter/grounds/water/cup), the
+"cut the topic word", "vary sentence endings", and "add personal voice" fixes are in real
+tension with clarity and with the fact lock — you cannot pronoun-ify 5 distinct named objects
+without creating ambiguity, and a factual how-to has no personal opinion to surface without
+inventing one. Flagged as a possible genre ceiling, pending a test on non-procedural content.
+
+## Round 32 (2026-09-13) — CleverAI's own real production output flips the whole direction, and a real infra bug invalidated Rounds 31's v2-v4 tests
+
+**The reversal.** User supplied CleverAI Humanizer's own actual output (not its detector,
+its humanizer) on the coffee-howto source, independently cross-checked HUMAN on five tools
+at once: GPTZero 100%, Clever AI Detector 97%, turnitindetector.ai 65%/6% AI (itself
+cross-checked against Writer/GPTZero/ZeroGPT/Crossplag/Copyleaks/Originality AI), ZeroGPT
+12.8% AI, QuillBot 0% AI. That text does the *opposite* of everything Round 31 built: uses
+"Moreover,"/"Additionally,"/"Then,"/"After that," (banned all session), heavy passive voice
+("it is required to have", "should be disposed of"), zero contractions, the impersonal
+pronoun "one" instead of "you", and fairly even non-bursty sentence lengths (measured:
+14-20 words throughout, no short fragments, no long tail) — directly contradicting RULE 2
+(vocab variation), RULE 3 (forced burstiness), RULE 4 (ban transitions), and RULE 6
+(contractions, active voice) from the same-day 28-signal rewrite.
+
+**`AGGRESSIVE_REWRITE_PROMPT` rebuilt a second time**, this time to concretely emulate this
+real, cross-verified output rather than a theoretical taxonomy: persona changed from "casual
+close-colleague voice" to "careful, plain-spoken technical writer"; RULE 1's ban list had
+"furthermore/moreover/consequently/in conclusion/notably/fundamentally/additionally" and "it
+is important to note/it is worth considering" REMOVED (confirmed used unpunished in the
+winning example); new RULE 2 explicitly instructs USING that connector scaffolding and the
+"it is [adjective] to..." framing; RULE 3 now asks for even, moderate (~12-22 word) sentences
+instead of forced short/long contrast; RULE 4 now bans contractions, prefers "one" over "you",
+allows/encourages passive voice, and forbids injected personality/rhetorical questions —
+each one a direct reversal of what Round 31 shipped hours earlier. `AGGRESSIVE_BANNED_VOCABULARY`
+(the best-of-N scorer's list) updated to match — same words un-banned there too. Confirmed via
+a real test that a candidate stuffed with the old-banned words still loses best-of-N on
+burstiness/repetition grounds alone, so removing the vocab ban didn't quietly break that
+scorer. 320/320 tests pass (one test asserting the old persona string updated to match the
+new one — a legitimate rename, not a masked regression).
+
+**Real infra bug found and fixed, and it changes how much to trust every score logged in
+Round 31 above.** `uvicorn main:app` was started once, hours earlier in this session, WITHOUT
+`--reload` (this exact gotcha is already recorded elsewhere in this project's history — fell
+into it again). Every prompt edit from Round 31's v2 through v4 was made to the file on disk
+but **never reached the running process** — Python caches an imported module in memory,
+editing the source file doesn't touch it. Generated a v5 output right after rewriting the
+prompt, got back the OLD casual/contraction-heavy style completely unaffected by any of
+today's edits — confirmed by rereading the file (correct on disk) and process start time
+(predates all of today's prompt edits). Restarted the backend; the very next generation
+matched the new style exactly ("it is necessary to have", "The first step is to...", "one
+should wait", "one can adjust", zero contractions, correct passive voice throughout).
+
+**Practical consequence**: Round 31's v2, v3, and v4 "real detector results" were very likely
+all scoring the SAME underlying stale prompt (whatever was loaded before any of today's edits
+started) — the apparent differences between them (v2's uniform-short lengths, v3/v4's jagged
+ranges) may be ordinary temperature-driven run-to-run variance on identical input, not a
+response to any rule change. This isn't certain (no way to retroactively prove what exact
+bytes generated each historical output), but it must be flagged rather than left implied as
+solid — Round 31's whole v2→v4 arc should be treated as suspect, not just its v4 conclusion.
+
+**What's actually verified now**: v5 (the CleverAI-emulation rewrite), generated AFTER the
+restart, confirmed correct against a fresh read of `prompts.py`, and consistent across all 3
+multi-model inputs (openai_howto, groq_llama_review, google_explainer) — all three show the
+target register (no contractions, correct connector usage, passive voice, "one" pronoun,
+even sentence lengths) without needing further correction. Real detector re-checks on these
+3 outputs: awaiting the user's results — same discipline as every round today, not calling
+this fixed until real numbers come back.
+
+**Status**: v5 live in `prompts.py`, verified freshly generated post-restart, matches the
+target register on manual read across 3 topics. UNVALIDATED against real detectors. Backend
+restart discipline going forward: restart (or add `--reload`) after every `prompts.py` edit,
+every session, no exceptions — this is now the second time this exact bug has cost a round
+of work in this project's history.
+
+## Round 33 (2026-09-13) — replaced single-sample theory with a 9,266-pair corpus measurement; Round 32 was measurably wrong
+
+**Trigger**: Round 32's v5 (CleverAI-emulation prompt) was real-detector tested on the
+`groq_llama_review` text — 0/5 checkers passed (Clever AI Detector 83%, humanizeai.pro 100%,
+turnitindetector.ai 50%, ZeroGPT 100%, QuillBot 100% AI). Direct read of the output showed
+why: every sentence sat in a flat 15-30 word band, exactly the uniformity Clever AI Detector
+flagged by name ("overly consistent structure", "similar sentence rhythms"). Two follow-up
+prompt-only attempts to fix RULE 3 (a softer ask, then a "hard, checkable requirement, count
+it like a word count" version) were tested by directly regenerating and measuring sentence
+lengths — neither moved the needle (winning best-of-3 candidate still landed stdev ~3,
+11-24 word range only). Conclusion: prompting alone, competing against gpt-4.1-mini's own
+sampling bias toward safe mid-length continuations, wasn't going to fix this on its own, and
+Round 32's whole direction was built from a single competitor sample (n=1, one topic) rather
+than measured data.
+
+**The pivot, at the user's direction**: analyze our OWN clean corpus (`train_clean.jsonl` +
+`eval_clean.jsonl`, Round 29's cleaned 8,803+463 rows) directly. The `assistant` field in
+each row IS real, originally-human-written text (the label the LoRA trains toward); the
+`user` field is the AI-generated source it was rewritten from. Built
+`scripts/finetune/human_pattern_analysis.py` (read-only, local JSONL, no DB, $0) to measure
+both sides on every axis this project has argued about by feel: sentence-length distribution,
+contraction rate, "you" vs "one" pronoun choice, formal-connector frequency, passive-voice
+rate, em-dash rate, sentence-starter diversity. 9,266 real pairs, not a single sample.
+
+**Results directly falsified Round 32's core claims:**
+- Contractions: human 15.97/1000w vs AI 2.55/1000w — human writing uses contractions ~6x
+  MORE than AI, not zero as Round 32's "no contractions" rule assumed.
+- "You" vs "one": human "you" rate 12.27/1000w vs AI 7.15 (~1.7x higher in human text).
+  "One" shows almost no gap at all (3.09 human vs 2.92 AI) — not a real signal.
+- Sentence-length burstiness: human per-doc stdev 12.21 vs AI 8.46 — human text is MORE
+  bursty, not evener. Human text is 26.4% short (<=10w) / 27.9% long (>=25w) sentences vs
+  AI's 18.5% / 22.6%. Round 32's "fairly even, moderate 12-22 word" instruction pointed
+  exactly the wrong direction.
+- Formal connectors: "moreover" 20x more common in AI text (0.019 human vs 0.380 AI per
+  1000w), "furthermore" 53x, "additionally" 33x, "consequently" 88x, "however" 4x,
+  "therefore" 7x, "thus" 2.4x, "typically" 6x. Every connector Round 32 explicitly
+  un-banned and encouraged as "proven human scaffolding" is measurably an AI tell at scale
+  in our own corpus.
+- Passive voice: near-zero gap (5.36 human vs 6.00 AI per 1000w) — not a real lever.
+- Top human sentence starters: "if you", "this is", "i think", "it is", "there are",
+  "i don't", "you can", "i have" — heavy direct address and first-person framing, the
+  opposite of Round 32's "impersonal, no forced personality" register.
+
+**`AGGRESSIVE_REWRITE_PROMPT` and `AGGRESSIVE_BANNED_VOCABULARY` rebuilt a third time**,
+this time citing the exact measured ratios inline rather than a single example: RULE 1 bans
+re-added the formal connectors (moreover/furthermore/additionally/consequently/therefore/
+thus/typically/in addition/for instance); RULE 2 reverts to direct "you" address and plain
+connectors; RULE 3 keeps the "hard, checkable" sentence-variance requirement but now cites
+the real 26%/28% short/long corpus targets instead of an assumed range; RULE 4 requires
+contractions (reversing the ban), keeps passive voice neutral (no longer "preferred"), and
+allows personality/direct address back in. Persona changed from "careful, plain-spoken
+technical writer" to "a thoughtful, direct person explaining something to another person."
+320/320 tests pass (one assertion updated for the new persona string — legitimate rename).
+
+**Caveat, stated honestly, not glossed over**: the corpus itself skews toward informal/
+opinion-style content (visible in its own top starters — "i think", "i don't"), so this may
+not be a perfectly neutral sample for formal/technical genres either. But 9,266 real pairs
+measurably outweighs a single third-party sample, and directionally it lines up with the
+ORIGINAL 2026-08-12/13 real-tested prompt philosophy (contractions, direct address, banned
+AI vocabulary, forced burstiness) that was itself A/B tested against ZeroGPT before Round 31
+ever started theorizing from an unvalidated taxonomy — this is closer to a return to
+known-good territory than a new direction.
+
+**Verified post-restart** (same backend-restart discipline as Round 32, no exceptions):
+regenerated all 3 multi-model texts (openai_howto, groq_llama_review, google_explainer).
+Contractions and direct "you" address are clearly present and measured well within the
+corpus target range (7.8-25.0 contractions/1000w across the 3 texts vs ~16 target). Sentence
+variance IMPROVED over Round 32's v5/v6 (real 7-9 word and 25-32 word sentences now both
+appearing, where v5/v6 had none) but does not yet fully hit the 26%/28% short/long target in
+every text — `groq_llama_review_basic_v33.txt` has 0% sentences <=10 words even though it
+now has several >=25. Flagged as improved-but-imperfect, not claimed as solved.
+
+**Status**: v33 live in `prompts.py`, grounded in a 9,266-pair real measurement rather than
+theory or a single sample. Register signals (contractions, direct address, banned
+connectors) verified in range. Sentence-length variance measurably better than v5/v6 but
+short of the full corpus target. UNVALIDATED against real detectors as of this entry —
+awaiting the user's real checker results on `openai_howto_basic_v33.txt`,
+`groq_llama_review_basic_v33.txt`, `google_explainer_basic_v33.txt`.
+
+## Round 34 (2026-09-13) — genuinely pre-2015 corpus reveals genre-dependence; deterministic enforcement replaces failed prompt-only fixes
+
+**Trigger**: user pointed out our fine-tune corpus's "human" side, while real, might not be
+representative — asked for a genuinely pre-2015 (pre-LLM) corpus to cross-check the same
+measured patterns.
+
+**Pre-2015 corpus built**: 24 English Wikipedia articles, each pinned to its exact revision
+as of May 2013 (MediaWiki API `rvstart`, timestamp confirmed per-article — well before GPT-3
+(2020) or ChatGPT (2022), unambiguously human), plus 2 pre-1930 Gutenberg essay collections
+(Twain, Chesterton) and one 1896 cookbook, for casual-essay and procedural-instruction
+register respectively (`scripts/finetune/pre2015_corpus/`,
+`scripts/finetune/pre2015_pattern_analysis.py`). 27 documents, ~15K words.
+
+**Key finding: the two corpora disagree sharply, and the disagreement is genre, not error.**
+Fine-tune corpus (casual/blog register) vs pre-2015 corpus (formal/explanatory register):
+                                    casual(finetune)   formal(pre-2015)
+  contractions per 1000 words             15.97              1.09
+  passive constructions per 1000 words     5.36             12.85
+  direct "you" address per 1000 words     12.27              1.75
+  pct sentences <=10 words                26.4%             15.7%
+  pct sentences >=25 words                27.9%             33.6%
+  "however"/"therefore"/"typically" rate   low              moderate, real
+
+Conclusion: "human-sounding" has no single universal statistical profile — it has one PER
+GENRE. Round 32 (formal/CleverAI-style) and Round 33 (casual/corpus-style) were each right
+for one genre and wrong applied universally — this likely explains why register fixes helped
+the review text but not the explainer/procedural texts.
+
+**`AGGRESSIVE_REWRITE_PROMPT` rebuilt a fourth time (Round 34)**: genre-adaptive, citing both
+corpora's exact numbers inline. Source content is classified as CASUAL (review/opinion/blog/
+personal) or FORMAL (technical/procedural/encyclopedic) and each gets its own contraction/
+passive-voice/address/sentence-skew/connector-word targets. `AGGRESSIVE_BANNED_VOCABULARY`
+un-banned "however"/"therefore"/"thus"/"typically" (measured real, non-trivial in formal
+pre-2015 prose) while keeping "moreover"/"furthermore"/"additionally"/"consequently" banned
+(measured AI-skewed in BOTH corpora). 320/320 tests pass (persona-string assertion updated).
+
+**First real compliance failure found in THIS round, not a real-detector test**: the review
+text, told explicitly to use casual register regardless of the source's surface tone, stayed
+formal (0 contractions, 0 "you") through two separate regenerations. Combined with Round 33's
+three failed attempts to fix sentence-length variance by prompt wording alone, this is now a
+clear pattern: GPT-4.1-mini's own defaults aren't reliably overridden by system-prompt
+instructions on these two specific, checkable axes, no matter the wording. User approved
+moving both from "ask nicely in the prompt" to deterministic code.
+
+**Built, at the user's go-ahead**:
+- `detector.classify_register()` — a new, focused, single-purpose classification call that
+  decides casual-vs-formal from the SOURCE text ONCE, up front, before any rewriting — not
+  left for the rewrite model to self-classify mid-rewrite (which was the specific ask that
+  failed twice). Defaults to "casual" (this project's original, most real-tested register) on
+  any parse failure or error.
+- `pipeline._register_directive()` — tells the rewrite/retry prompts definitively which
+  register applies, computed already, not guessed.
+- `app/services/humanizer/style_check.py` (new module) — deterministic, non-LLM checks:
+  `sentence_length_findings` (flags a paragraph missing a genuine <=10-word or >=25-word
+  sentence) and `contraction_findings` (flags near-zero contractions in casual-register text
+  only — formal text is exempt since it genuinely uses few). Findings use the SAME shape as
+  detector.py's LLM findings and merge into the EXISTING Pass 3 per-paragraph retry mechanism
+  unchanged — no new retry path, a second source feeding the one already built and tested.
+- 15 new unit tests across `test_humanizer_style_check.py` and
+  `test_humanizer_detector_register.py`; existing pipeline tests updated for the new
+  register-classify call (an extra `classify_humanize` call per run). 335/335 tests pass.
+
+**Verified post-restart, real measurement, all 3 multi-model texts regenerated
+(`*_v34c.txt`)**:
+- `groq_llama_review`: register bug FIXED, confirmed by direct measurement — 15.9
+  contractions/1000w (right at the ~16 casual target), 5x "you" address, genuinely bursty
+  single paragraph (5-33 word sentence range, both extremes present) — and this passed on
+  the FIRST generation, no Pass 3 retry needed. The upfront classify-then-direct approach
+  fixed the underlying generation, not just patched around it after the fact.
+- `openai_howto` (formal, correctly 0 contractions throughout): Pass 3's deterministic check
+  fired and retried 3 of 4 paragraphs; only 1 of those 3 fully passed after one retry
+  attempt. Real, partial improvement — a single retry call is not a compliance guarantee,
+  since it's still the same LLM under the same behavioral limits.
+- `google_explainer`: classified casual (a defensible call — "have you ever wondered why the
+  sky is blue" reads as pop-science blog voice, not strictly encyclopedic); solid contraction/
+  address rates but 3 of 4 paragraphs still short of full sentence-variance compliance after
+  one retry.
+
+**Status**: v34c live in `prompts.py` + `pipeline.py` + new `style_check.py`. Register
+selection verified fixed for the one case it previously failed on. Sentence-length variance
+measurably improved via deterministic detection + retry, but one-shot retry is not a 100%
+guarantee — a future round could add a bounded retry loop if real detector results still show
+this as the dominant remaining defect. UNVALIDATED against real detectors as of this entry —
+awaiting the user's results on `openai_howto_basic_v34c.txt`, `groq_llama_review_basic_v34c.txt`,
+`google_explainer_basic_v34c.txt`.
+
+## Round 35 (2026-09-13) — formal register overshot what modern detectors actually calibrate against; narrowed to a rare exception
+
+**Trigger**: real QuillBot re-check on `openai_howto_basic_v34c.txt` (formal register,
+correctly 0 contractions per the pre-2015 corpus) came back at **97% AI** — a sharp
+regression from v33's **45% AI** on the same how-to content in casual register. Same content,
+same checker, register was the only material variable.
+
+**Diagnosis**: the pre-2015 corpus (Round 34) is genuinely pre-LLM, but its "formal" register
+source material (an 1896 cookbook, century-old essays) is calibrated to a much older written
+standard than what real AI detectors are actually trained against — contemporary (roughly
+2015-2024) web writing, where even modern how-to guides, recipe blogs, and WikiHow-style
+instructions are written casually with direct address and contractions. humanizeai.pro's own
+flagged reasoning made this concrete: it reported real human text there averages 23.2
+words/sentence vs 29.2 for AI, and our formal-register output measured 29.2 — landing
+exactly on the AI side. The formal profile wasn't wrong as a description of 19th-century
+prose; it's simply not what a 2024 detector recognizes as "human" for instructional content.
+
+**Fix**: `detector.classify_register`'s prompt and `AGGRESSIVE_REWRITE_PROMPT`'s register
+selection both corrected to treat CASUAL as the default for nearly everything, including
+how-to/instructional guides "of the kind actually published on the modern web" — FORMAL is
+now reserved for genuinely dry reference/encyclopedic material with no instructional framing
+at all (a definition, a spec, third-person throughout, never addressing the reader). 335/335
+tests pass (no test asserted the old boundary, so nothing needed updating there).
+
+**Verified post-restart**: regenerated `openai_howto_basic_v35.txt` — classified casual
+(confirmed via direct `classify_register` call, not just inferred from output), 15.3
+contractions/1000w and 9 "you" references (matching v33's successful profile), sentence
+variance 2 of 4 paragraphs still short of the full short+long target (the known one-shot-
+retry limitation from Round 34, unrelated to this fix). `groq_llama_review_basic_v34c.txt`
+and `google_explainer_basic_v34c.txt` were already casual under the old classifier (this bug
+only affected content the old prompt misrouted to formal) and don't need regenerating.
+
+**Status**: v35 live. Register-boundary regression fixed and confirmed by direct
+classification + measurement. UNVALIDATED against real detectors as of this entry — awaiting
+the user's results on `openai_howto_basic_v35.txt`.
+
+## Basic humanizer paused here (2026-09-13, end of Round 35) — user redirecting to Ultra
+
+**Stopping point, for whoever resumes this later**: v35 is live in `prompts.py` +
+`pipeline.py` + `style_check.py` + `detector.py`. Real last-measured state on the
+`openai_howto` test text: QuillBot 33% AI (best of the session), humanizeai.pro 6% AI /
+"very likely human-written" (first clean pass all session, with concrete cited reasons —
+sentence length near human average, real short-sentence presence), turnitindetector.ai 49%
+human / 19% AI (improved), ZeroGPT 96.5% AI (still failing — this IS one of the user's 4
+named Basic targets: ZeroGPT, QuillBot, Grammarly, humanizeai.pro), Clever AI Detector 93% AI
+(still failing, but was never one of the named targets — used all session as a general
+signal, has stayed 83-93% through every version tried, may just be a harder bar generally).
+
+**Not yet re-tested under v35**: `groq_llama_review` and `google_explainer` (only
+`openai_howto` was re-checked after the Round 35 register-boundary fix; the other two weren't
+affected by that specific bug, per Round 35's note, but haven't had a fresh full 5-checker
+pass under the final v35 prompt). Grammarly hasn't been checked against any version this
+session.
+
+**Open threads if this resumes**: (1) ZeroGPT specifically, the one still-failing NAMED
+target on the how-to text. (2) Whether the deterministic sentence-length retry (Round 34)
+needs a bounded retry loop instead of one shot — some paragraphs still fail after one retry.
+(3) Full 5-checker passes on the review and explainer texts under the final v35 prompt.
+User explicitly paused here to focus on Ultra Humaniser next — this is a deliberate stop,
+not an abandoned thread.

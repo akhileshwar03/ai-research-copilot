@@ -103,8 +103,21 @@ export function CommandPalette({
   const pathname = usePathname();
   const router = useRouter();
 
+  // Reset the search when the palette (re)opens — derived during render
+  // rather than in an effect, so there is never a frame with stale results.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setQuery("");
+      setActiveIndex(0);
+    }
+  }
+
   useEffect(() => {
-    if (open) { setQuery(""); setActiveIndex(0); setTimeout(() => inputRef.current?.focus(), 50); }
+    if (!open) return;
+    const id = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(id);
   }, [open]);
 
   const items = useMemo<CommandItem[]>(() => {

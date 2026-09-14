@@ -12,7 +12,6 @@ interface SessionState {
   setSessions: (sessions: ChatSession[]) => void;
   setActiveSessionId: (id: number | null) => void;
   setSortOrder: (order: SessionSortOrder) => void;
-  upsertSession: (session: ChatSession) => void;
   updateMessages: (sessionId: number, messages: Message[]) => void;
   togglePin: (sessionId: number) => void;
 }
@@ -25,17 +24,6 @@ export const useSessionStore = create<SessionState>((set) => ({
   setSessions: (sessions) => set({ sessions }),
   setActiveSessionId: (activeSessionId) => set({ activeSessionId }),
   setSortOrder: (sortOrder) => set({ sortOrder }),
-
-  upsertSession: (session) =>
-    set((state) => {
-      const index = state.sessions.findIndex((s) => s.id === session.id);
-      if (index === -1) {
-        return { sessions: [session, ...state.sessions], activeSessionId: session.id };
-      }
-      const next = [...state.sessions];
-      next[index] = session;
-      return { sessions: next };
-    }),
 
   updateMessages: (sessionId, messages) =>
     set((state) => ({

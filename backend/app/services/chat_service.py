@@ -1,3 +1,4 @@
+import json
 import logging
 import re
 
@@ -120,6 +121,79 @@ scope right now.
 """
 
 
+# ── Research actions ──────────────────────────────────────────────────────────
+# One-click structured tasks over the *whole* selected document set. Each
+# instruction is what the model actually receives as the final user turn —
+# the client-side message is only a label. Every action demands citations
+# so the output stays verifiable, which is the product's whole premise.
+RESEARCH_ACTIONS: dict[str, dict[str, str]] = {
+    "summarize": {
+        "label": "Summarize",
+        "instruction": (
+            "Write a structured summary of the selected document(s). Use these sections: "
+            "**Overview** (2-3 sentences), **Main points** (bulleted, one idea each), "
+            "**Conclusions**. Cite the page for every point, e.g. (page 4). Do not add "
+            "anything that is not in the context."
+        ),
+    },
+    "key_findings": {
+        "label": "Key findings",
+        "instruction": (
+            "Extract the key findings, results, and claims from the selected document(s) as a "
+            "numbered list. For each finding give: the finding in one sentence, the supporting "
+            "evidence or figure the document gives, and a page citation. Flag any finding the "
+            "document itself marks as tentative or limited."
+        ),
+    },
+    "report": {
+        "label": "Research report",
+        "instruction": (
+            "Produce a research report in Markdown from the selected document(s) with these "
+            "sections: # Title, ## Executive summary, ## Background, ## Methodology (if any), "
+            "## Findings, ## Limitations, ## Open questions, ## Sources. Cite pages inline "
+            "(page N) and list every document used under Sources. Stay strictly within the "
+            "context; if a section has no supporting material say so in one line."
+        ),
+    },
+    "compare": {
+        "label": "Compare documents",
+        "instruction": (
+            "Compare the selected documents. Produce: a Markdown table with one row per theme "
+            "(scope, methods, main claims, evidence, conclusions) and one column per document; "
+            "then **Agreements**, **Disagreements / contradictions** (quote the conflicting "
+            "sentences with page citations), and **Gaps** (topics covered by one document but "
+            "not another). If only one document is selected, say that a comparison needs at "
+            "least two and summarize that one instead."
+        ),
+    },
+    "references": {
+        "label": "Extract references",
+        "instruction": (
+            "List every reference, citation, or bibliography entry that appears in the selected "
+            "document(s), one per line, formatted in APA style as far as the available details "
+            "allow. Then output the same list as a BibTeX block. Include the page where each "
+            "reference appears. If the document has no reference list, say so and instead list "
+            "any in-text citations you can find."
+        ),
+    },
+    "questions": {
+        "label": "Study questions",
+        "instruction": (
+            "Generate 10 study questions that test understanding of the selected document(s), "
+            "ordered from recall to analysis. After each question give a short model answer "
+            "with a page citation. Only ask about material actually present in the context."
+        ),
+    },
+}
+
+FOLLOW_UP_PROMPT = """You suggest follow-up questions for a document-research assistant.
+Given the user's question and the assistant's answer, propose exactly 3 short follow-up \
+questions the user could ask next about the SAME documents — specific, non-redundant, and \
+answerable from a document (not general knowledge). Return ONLY a JSON array of 3 strings."""
+
+_MAX_FOLLOW_UP_ANSWER_CHARS = 3000
+
+
 class ChatService:
     def __init__(self, retrieval_service: RetrievalService, ai_service: AIService):
         self.retrieval_service = retrieval_service
@@ -149,6 +223,39 @@ class ChatService:
                     )
                 break
 
+    def validate_action(self, action: str | None, document_ids: list[str] | None) -> None:
+        """Research actions run over the whole selected document set, so
+        they are meaningless (and would silently degrade to a general-chat
+        reply) without at least one selected document."""
+        if action is None:
+            return
+        if action not in RESEARCH_ACTIONS:
+            raise AppError(code="UNKNOWN_ACTION", message=f"Unknown research action: {action}", status_code=400)
+        if not document_ids:
+            raise AppError(
+                code="ACTION_NEEDS_DOCUMENTS",
+                message="Select at least one document to run a research action.",
+                status_code=400,
+            )
+
+    async def _follow_up_suggestions(self, question: str, answer: str) -> list[str]:
+        """Three follow-up questions for the answer just streamed. One cheap,
+        deterministic call; any failure returns an empty list — suggestions
+        are a convenience, never worth failing the reply over."""
+        try:
+            raw = await self.ai_service.classify(
+                [
+                    ("system", FOLLOW_UP_PROMPT),
+                    ("user", f"Question: {question[:1000]}\n\nAnswer: {answer[-_MAX_FOLLOW_UP_ANSWER_CHARS:]}"),
+                ]
+            )
+            start, end = raw.find("["), raw.rfind("]")
+            parsed = json.loads(raw[start : end + 1]) if start != -1 and end != -1 else []
+            return [str(s).strip() for s in parsed if str(s).strip()][:3]
+        except Exception:
+            logger.debug("follow_up_suggestions_failed", exc_info=True)
+            return []
+
     async def stream_response(
         self,
         messages: list[dict],
@@ -157,6 +264,7 @@ class ChatService:
         document_page_counts: dict[str, int] | None = None,
         vision_truncated_documents: set[str] | None = None,
         user_email: str = "",
+        action: str | None = None,
     ):
         # Strip any message whose role is not user or assistant.
         # This closes the prompt injection vector where a caller sends
@@ -184,6 +292,19 @@ class ChatService:
                 latest_user_message = msg["content"]
                 break
 
+        if action:
+            # The client-side text is only a label; the model gets the real,
+            # citation-demanding instruction as the final user turn.
+            instruction = RESEARCH_ACTIONS[action]["instruction"]
+            sanitized = [m for m in sanitized]
+            for i in range(len(sanitized) - 1, -1, -1):
+                if sanitized[i]["role"] == "user":
+                    sanitized[i] = {"role": "user", "content": instruction}
+                    break
+            else:
+                sanitized.append({"role": "user", "content": instruction})
+            latest_user_message = instruction
+
         # Three retrieval modes, tried in priority order — each exists because
         # top-k similarity search structurally cannot answer that class of
         # question (a page number, or "how many", has no reliable semantic
@@ -195,7 +316,10 @@ class ChatService:
         #    whether it also sounds like a counting question.
         # 2. Aggregate/counting ("how many questions") — the whole document.
         # 3. Default — normal top-k similarity retrieval.
-        target_pages = _extract_page_numbers(latest_user_message)
+        # A research action's instruction legitimately mentions page numbers
+        # ("cite the page, e.g. (page 4)") — that must never be mistaken for
+        # a page-lookup question.
+        target_pages = [] if action else _extract_page_numbers(latest_user_message)
         page_result: dict | None = None
         if target_pages:
             page_result = self.retrieval_service.get_page_context(
@@ -240,7 +364,7 @@ class ChatService:
             # get_full_document_context. Falls back to normal retrieval if the
             # document turns out to have no ingested chunks at all (e.g.
             # still processing).
-            use_full_document = _looks_like_aggregate_query(latest_user_message)
+            use_full_document = bool(action) or _looks_like_aggregate_query(latest_user_message)
             full_doc: dict | None = None
             if use_full_document:
                 full_doc = self.retrieval_service.get_full_document_context(
@@ -342,5 +466,14 @@ class ChatService:
         # First event carries the retrieval sources so the client can render
         # citations; subsequent events are LLM tokens.
         yield {"type": "sources", "sources": sources}
+        answer_parts: list[str] = []
         async for token in self.ai_service.stream_chat(formatted_messages):
+            answer_parts.append(token)
             yield {"type": "token", "value": token}
+
+        # Follow-up suggestions (admin-switchable). Emitted after the answer
+        # so they never delay the first token.
+        if runtime_settings.get("chat_follow_up_suggestions") and context.strip():
+            suggestions = await self._follow_up_suggestions(latest_user_message, "".join(answer_parts))
+            if suggestions:
+                yield {"type": "suggestions", "suggestions": suggestions}

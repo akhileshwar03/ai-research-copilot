@@ -89,9 +89,10 @@ def test_stream_yields_token_events_from_pipeline():
     assert [e["type"] for e in events] == ["token", "token", "token"]
     assert [e["text"] for e in events] == ["hello", " ", "world"]
     assert len(fake_ai.rewrite_calls) == 1
-    # Pass 1 analyze runs before the rewrite call, Pass 3 verify runs after —
-    # two classify_humanize calls even when nothing gets flagged.
-    assert len(fake_ai.classify_calls) == 2
+    # Register classify runs first, Pass 1 analyze runs before the rewrite call, Pass 3
+    # verify runs after — three classify_humanize calls even when nothing gets flagged
+    # (2026-09-13, Round 34: register classify added).
+    assert len(fake_ai.classify_calls) == 3
 
 
 def test_stream_passes_style_through_to_rewrite_prompt():
@@ -103,19 +104,27 @@ def test_stream_passes_style_through_to_rewrite_prompt():
 
 
 def test_stream_falls_back_to_normal_for_unknown_style():
+    # An unknown style resolves to "normal", which (strict, non-expand) now routes to
+    # AGGRESSIVE_REWRITE_PROMPT rather than the old modular STYLE_GUIDANCE text -- confirm
+    # it lands on that prompt (not silently falling through to a different style's guidance,
+    # and not erroring on the unrecognized style value).
     fake_ai = _FakeAIService()
     service = _service(fake_ai)
     _run(service.stream("some text here", style="not-a-real-style"))
     system_prompt = fake_ai.rewrite_calls[0][0][1].lower()
-    assert "blog posts, social copy" in system_prompt
+    assert "matching your register to what the content actually is" in system_prompt
 
 
 def test_stream_defaults_to_strict_fidelity_rules():
+    # 2026-08-12: "normal" style, strict (non-expand) now uses AGGRESSIVE_REWRITE_PROMPT --
+    # real A/B tested against ZeroGPT (avg ~15% AI vs ~100% for the old modular prompt on the
+    # same content, see prompts.py). Its fact-preservation guarantee is worded differently
+    # from the old STRICT_HARD_RULES text, but the guarantee itself must still be present.
     fake_ai = _FakeAIService()
     service = _service(fake_ai)
     _run(service.stream("some text here"))
     system_prompt = fake_ai.rewrite_calls[0][0][1].lower()
-    assert "never add, remove, or alter any factual content" in system_prompt
+    assert "must still be recoverable in your rewrite exactly as given" in system_prompt
     assert "brief clarifying elaboration" not in system_prompt
 
 

@@ -4,7 +4,20 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
-from app.db.models import app_setting, chat_models, document, user  # noqa: F401
+from app.db.models import (  # noqa: F401
+    admin_audit_log,
+    app_setting,
+    chat_models,
+    document,
+    document_chunk,
+    finetune_sample,
+    humanizer_run,
+    one_time_code,
+    otp,
+    realtime_models,
+    usage_event,
+    user,
+)
 from app.db.session import Base, _normalize_db_url
 
 config = context.config

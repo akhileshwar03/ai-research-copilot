@@ -5,7 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import type { DocumentsResponse, SessionsResponse } from "@/shared/types/api";
-import type { Message } from "@/shared/types/chat";
+import type { Message, ResearchAction } from "@/shared/types/chat";
+import { RESEARCH_ACTIONS } from "@/shared/types/chat";
 import { useSessionStore } from "@/stores/session-store";
 import { sessionsApi } from "@/services/api/sessions-api";
 
@@ -108,18 +109,25 @@ export function useChat() {
     [sessions, activeSessionId]
   );
 
-  const sendMessage = async () => {
-    if (!activeSession || !input.trim()) {
+  /**
+   * Send a turn. With no arguments it sends the typed input; `runAction`
+   * and `regenerate` below reuse it with an explicit message list so all
+   * three entry points share one streaming/persistence path.
+   */
+  const sendMessage = async (options: { text?: string; action?: ResearchAction; history?: Message[] } = {}) => {
+    const text = (options.text ?? input).trim();
+    if (!activeSession || !text) {
       return;
     }
     const sessionId = activeSession.id;
     setChatError(sessionId, "");
 
-    const userMessage: Message = { role: "user", content: input.trim() };
-    setPendingBySession((prev) => ({ ...prev, [sessionId]: input.trim() }));
-    const baselineMessages = [...activeSession.messages, userMessage];
+    const userMessage: Message = { role: "user", content: text, ...(options.action ? { action: options.action } : {}) };
+    setPendingBySession((prev) => ({ ...prev, [sessionId]: text }));
+    const history = options.history ?? activeSession.messages;
+    const baselineMessages = [...history, userMessage];
     updateMessages(activeSession.id, baselineMessages);
-    setInput("");
+    if (options.text === undefined) setInput("");
 
     // Auto-title on first real user message (session still has default "New Chat" title)
     const isFirstMessage = activeSession.messages.filter((m) => m.role === "user").length === 0;
@@ -139,13 +147,24 @@ export function useChat() {
     }
 
     try {
+      let streamed = "";
+      let streamedSources: string | undefined;
       await stream({
         messages: baselineMessages,
         documentIds: activeSession.document_ids ?? [],
+        action: options.action,
         onAssistantToken: (text, sources) => {
+          streamed = text;
+          streamedSources = formatSources(sources);
           updateMessages(activeSession.id, [
             ...baselineMessages,
-            { role: "assistant", content: text, sources: formatSources(sources) },
+            { role: "assistant", content: text, sources: streamedSources },
+          ]);
+        },
+        onSuggestions: (suggestions) => {
+          updateMessages(activeSession.id, [
+            ...baselineMessages,
+            { role: "assistant", content: streamed, sources: streamedSources, suggestions },
           ]);
         },
       });
@@ -164,6 +183,29 @@ export function useChat() {
     } catch {
       toast.error("Session not saved — check your connection", { duration: 4000 });
     }
+  };
+
+  /** One-click research task over the session's selected documents. The
+   *  visible user turn is a short label; the backend swaps in the real,
+   *  citation-demanding instruction (see RESEARCH_ACTIONS in chat_service.py). */
+  const runAction = async (action: ResearchAction) => {
+    if (!activeSession) return;
+    if (!(activeSession.document_ids ?? []).length) {
+      toast.error("Select at least one document (Sources, top right) to run a research action.");
+      return;
+    }
+    const label = RESEARCH_ACTIONS.find((a) => a.key === action)?.label ?? action;
+    await sendMessage({ text: label, action });
+  };
+
+  /** Re-ask the last user question, replacing the last assistant reply. */
+  const regenerate = async () => {
+    if (!activeSession || isStreaming) return;
+    const msgs = activeSession.messages;
+    const lastUserIndex = [...msgs].map((m) => m.role).lastIndexOf("user");
+    if (lastUserIndex === -1) return;
+    const lastUser = msgs[lastUserIndex];
+    await sendMessage({ text: lastUser.content, action: lastUser.action, history: msgs.slice(0, lastUserIndex) });
   };
 
   /** Change which documents this session's retrieval is scoped to — persisted
@@ -200,7 +242,9 @@ export function useChat() {
   return {
     input,
     setInput,
-    sendMessage,
+    sendMessage: () => sendMessage(),
+    runAction,
+    regenerate,
     cancelStreaming: cancel,
     retryLastMessage,
     isStreaming,

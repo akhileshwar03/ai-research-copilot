@@ -5,8 +5,12 @@ from app.tests.conftest import TestingSessionLocal
 
 
 def _login(client, email: str):
-    client.post("/api/v1/register", json={"email": email, "password": "StrongPass1"})
-    return client.post("/api/v1/login", json={"email": email, "password": "StrongPass1"})
+    """Sign in via the OTP flow — the only email-based auth path. No
+    RESEND_API_KEY/SMTP is configured in tests, so send-otp echoes the code
+    back as `_dev_code`."""
+    sent = client.post("/api/v1/auth/send-otp", json={"email": email})
+    code = sent.json()["_dev_code"]
+    return client.post("/api/v1/auth/verify-otp", json={"email": email, "code": code})
 
 
 # ── Refresh via httpOnly cookie ────────────────────────────────────────────────

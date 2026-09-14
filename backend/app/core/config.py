@@ -25,13 +25,23 @@ class Settings(BaseSettings):
     # app-wide default. Rewrite is the creative pass; classify backs the cheap
     # analyze/verify passes.
     #
-    # Rewrite deliberately uses a classic chat-completions model, not a
-    # reasoning model (gpt-5-mini/nano reject temperature/top_p/frequency_penalty/
-    # presence_penalty outright — confirmed via direct 400 errors). Perplexity and
-    # burstiness, the two signals every major AI detector scores first, are exactly
-    # what those sampling params let us push on. Losing them for a reasoning model
-    # meant rewriting with the least controllable output for the one pass where
-    # control over lexical unpredictability matters most.
+    # 2026-08-12: two real regressions chased down back to back on this line.
+    #
+    # First: found the rewrite model had silently drifted from its original
+    # ship value ("gpt-5-mini") to "gpt-4.1-mini" to unlock the 4 sampling
+    # knobs below (gpt-5-mini/nano reject them with a 400). Side-by-side test
+    # against our own AI Checker: gpt-4.1-mini + those knobs, SINGLE candidate,
+    # swung 69%-98% AI probability run to run on identical input -- an actual
+    # regression, not just "no improvement". Briefly reverted to gpt-5-mini,
+    # which held a steady 69% -- but at ~35-47s/call vs ~4-8s for gpt-4.1-mini.
+    #
+    # Second, better fix: paired with best-of-N candidate selection (see
+    # humanizer_num_candidates below and pipeline.py), gpt-4.1-mini alone
+    # stops spiking -- 5 real trials, same input, landed 69%/69%/69%/71%/69%,
+    # all in 10-16s. Best-of-3 was already washing out the exact volatility
+    # that made the single-candidate version look broken. Back to
+    # "gpt-4.1-mini" as the default: same steady ~69% floor as gpt-5-mini,
+    # at roughly gpt-4.1-mini's original speed instead of gpt-5-mini's.
     humanizer_rewrite_model: str = "gpt-4.1-mini"
     # Was "gpt-5-nano" (a reasoning model) until 2026-08-10 -- real measured latency
     # on the exact same classify prompt/input: gpt-5-nano 30.9s vs gpt-4.1-mini 3.9s,
@@ -45,13 +55,41 @@ class Settings(BaseSettings):
     # explicit go-ahead on the speed/quality trade-off.
     humanizer_classify_model: str = "gpt-4.1-mini"
     # Sampling params for the rewrite pass only (Pass 1/3 classify calls stay
-    # deterministic — these don't apply there). Tuned toward the human range of
-    # burstiness (sentence-to-sentence perplexity swings of 0.6-1.2) rather than
-    # the tight, low-variance band typical of raw LLM output (~0.2-0.4).
-    humanizer_rewrite_temperature: float = 1.05
-    humanizer_rewrite_top_p: float = 0.97
-    humanizer_rewrite_frequency_penalty: float = 0.55
-    humanizer_rewrite_presence_penalty: float = 0.35
+    # deterministic — these don't apply there).
+    #
+    # 2026-08-12: reset to match the exact conditions the AGGRESSIVE_REWRITE_PROMPT
+    # (prompts.py) was validated under -- temperature=0.85, everything else left at
+    # OpenAI's defaults. That's not a guess: the 8-trial ZeroGPT test (avg ~15% AI,
+    # several literal 0%s) was run with these exact values, no top_p/frequency/
+    # presence tuning stacked on top. The old 1.05/0.97/0.55/0.35 combo was tuned for
+    # the OLD prompt system and never re-validated against this one -- shipping the
+    # new prompt with the old knobs would be a real, untested combination, not the
+    # one with actual evidence behind it.
+    humanizer_rewrite_temperature: float = 0.85
+    humanizer_rewrite_top_p: float = 1.0
+    humanizer_rewrite_frequency_penalty: float = 0.0
+    humanizer_rewrite_presence_penalty: float = 0.0
+
+    # 2026-08-12: real-world check (our own AI Checker, not a guess) showed a
+    # single rewrite pass was inconsistent -- the exact same input scored
+    # anywhere from 69% to 97% AI probability run to run, purely from sampling
+    # randomness at temperature=1.05. Best-of-N fixes this at the source:
+    # generate this many independent candidates per chunk from the ORIGINAL
+    # text in parallel (never chained on each other, so no drift risk), score
+    # each with a free local heuristic (banned AI vocabulary + sentence-length
+    # burstiness), and keep the best. This replaced an earlier "humanize the
+    # output 4-5 times sequentially" design that was explicitly rejected as
+    # the wrong approach -- it multiplied latency without fixing the real
+    # inconsistency, and risked drifting from the source with every extra hop.
+    #
+    # Briefly raised 3 -> 5, then reverted the same day: that change was based on a
+    # ~50% per-candidate "0% on both detectors" hit rate that turned out to be overfit
+    # to one heavily-clichéd test paragraph (see prompts.py's AGGRESSIVE_REWRITE_PROMPT
+    # comment, and humanizer_prompt_log.md from that session for the full record) --
+    # a head-to-head generalization check on different content showed the prompt that
+    # produced that hit rate was actually worse than the one it replaced. Back to 3,
+    # matching what the current (reverted) prompt was originally validated with.
+    humanizer_num_candidates: int = 3
 
     # "Ultra Human" tab -- the real Phase 2 fine-tuned LoRA (Qwen2.5-7B + adapter,
     # 80% real GPTZero pass rate, see backend/scripts/finetune/STATE.md), served
@@ -64,6 +102,16 @@ class Settings(BaseSettings):
     humanizer_ultra_ollama_url: str = "http://localhost:11434"
     humanizer_ultra_model: str = "humaniser-lora"
     humanizer_ultra_timeout_seconds: float = 180.0
+    # Ultra-only input ceiling, separate from the shared humanize_max_words (3,000).
+    # 2026-08-13, measured on the live endpoint rather than estimated: generation runs
+    # ~4.3 tok/s and output averages ~2 tokens per input word, i.e. roughly half a second
+    # of wall clock per input word. 600 words is therefore about a 5-minute request --
+    # already the outer edge of what an HTTP call should hold, and the honest limit to
+    # advertise. The old code had no Ultra-specific limit at all, so a 936-word input
+    # (perfectly legal under humanize_max_words) hit the 180s timeout on every attempt
+    # with no way for the user to succeed. Raise this only alongside a real re-measurement
+    # of throughput on the target hardware -- it is a latency budget, not a quality knob.
+    humanizer_ultra_max_words: int = 600
 
     jwt_secret_key: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"
@@ -124,10 +172,6 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     github_client_id: str = ""
     github_client_secret: str = ""
-    apple_client_id: str = ""
-    apple_team_id: str = ""
-    apple_key_id: str = ""
-    apple_private_key: str = ""
 
     # Frontend URL for OAuth redirects
     frontend_url: str = "http://localhost:3000"
@@ -135,6 +179,23 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.frontend_origins.split(",") if origin.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str | None:
+        """In development only, additionally allow any localhost/127.0.0.1 port.
+
+        `frontend_origins` is a fixed allowlist (3000/3001 by default), but the
+        dev frontend doesn't always land on one of those — e.g. it auto-picks
+        a random free port when 3000 is already taken by another project, or a
+        local preview/proxy tool forwards through its own port. Without this,
+        every such setup fails CORS preflight with a 400 and the frontend sees
+        a bare "Failed to fetch", which looks identical to the backend being
+        down and is confusing to debug. Production is unaffected — this regex
+        is None outside development, so `frontend_origins` alone still governs.
+        """
+        if not self.is_development:
+            return None
+        return r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
     @property
     def admin_email_list(self) -> list[str]:

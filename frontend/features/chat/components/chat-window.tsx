@@ -6,6 +6,7 @@ import { ChatHeader } from "@/features/chat/components/chat-header";
 import { ChatInput } from "@/features/chat/components/chat-input";
 import { ChatMessageList } from "@/features/chat/components/chat-message-list";
 import { useChat } from "@/features/chat/hooks/use-chat";
+import { ResearchActionsBar } from "@/features/chat/components/research-actions";
 import type { DocumentItem } from "@/shared/types/api";
 
 interface ChatWindowProps {
@@ -15,7 +16,7 @@ interface ChatWindowProps {
 }
 
 export default function ChatWindow({ email, documents, sidebarOpen = true }: ChatWindowProps) {
-  const { input, setInput, sendMessage, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat();
+  const { input, setInput, sendMessage, runAction, regenerate, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat();
   const [isDragging, setIsDragging] = useState(false);
 
   // Derive user initial from email for avatar
@@ -103,6 +104,13 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
             if (el) (el as HTMLTextAreaElement).focus();
           }, 0);
         }}
+        onRegenerate={regenerate}
+      />
+      <ResearchActionsBar
+        selectedCount={(activeSession.document_ids ?? []).length}
+        documentsAvailable={documents.length}
+        disabled={isStreaming}
+        onRun={runAction}
       />
       <ChatInput
         value={input}

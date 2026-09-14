@@ -17,6 +17,7 @@ class _FakeResponse:
         self.text = text
         self.headers = headers or {}
         self.status_code = status_code
+        self.is_redirect = False
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -109,6 +110,44 @@ def test_extract_text_from_url_raises_on_fetch_failure(monkeypatch):
     _patch_client(monkeypatch, exc=httpx.ConnectError("boom"))
     with pytest.raises(AppError) as exc_info:
         _run(extract_text_from_url("https://example.com/down"))
+    assert exc_info.value.code == "URL_FETCH_FAILED"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://169.254.169.254/latest/meta-data/",  # cloud metadata endpoint
+        "http://127.0.0.1:8000/internal",
+        "http://localhost/internal",
+        "http://10.0.0.5/internal",
+        "http://192.168.1.1/internal",
+    ],
+)
+def test_extract_text_from_url_blocks_ssrf_to_private_addresses(monkeypatch, url):
+    # A client should never even be constructed for a private/link-local target —
+    # the host check must reject it before any network call is attempted.
+    def _fail_if_called(**kwargs):
+        raise AssertionError("httpx.AsyncClient should not be constructed for a private-IP target")
+
+    monkeypatch.setattr(extraction_module.httpx, "AsyncClient", _fail_if_called)
+    with pytest.raises(AppError) as exc_info:
+        _run(extract_text_from_url(url))
+    assert exc_info.value.code == "URL_FETCH_FAILED"
+
+
+def test_extract_text_from_url_follows_redirect_and_rechecks_host(monkeypatch):
+    """A public URL that redirects must have the redirect target re-checked, not
+    just the original URL — otherwise a public host could 302 to an internal one."""
+    redirect_response = _FakeResponse(headers={"location": "http://169.254.169.254/secret"}, status_code=302)
+    redirect_response.is_redirect = True
+
+    class _RedirectClient(_FakeAsyncClient):
+        async def get(self, url, headers=None):
+            return redirect_response
+
+    monkeypatch.setattr(extraction_module.httpx, "AsyncClient", lambda **kwargs: _RedirectClient())
+    with pytest.raises(AppError) as exc_info:
+        _run(extract_text_from_url("https://example.com/redirector"))
     assert exc_info.value.code == "URL_FETCH_FAILED"
 
 

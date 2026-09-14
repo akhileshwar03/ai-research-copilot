@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from app.core.security import hash_password, hash_token
+from app.core.security import hash_token
 from app.db.repositories.document_repository import DocumentRepository
 from app.db.repositories.user_repository import UserRepository
 from app.services.auth_service import AuthService
@@ -11,8 +11,10 @@ from app.services.auth_service import AuthService
 def test_user_repository_refresh_token_flow(db_session):
     repo = UserRepository(db_session)
     email = f"repo-test-{int(datetime.now().timestamp())}@example.com"
-    user = repo.create(email=email, hashed_password=hash_password("StrongPass1"))
-    repo.create_identity(user.id, "password", email, email)
+    # No password auth in this app — accounts are always created via OTP or
+    # OAuth, so hashed_password is always None.
+    user = repo.create(email=email, hashed_password=None)
+    repo.create_identity(user.id, "otp", email, email)
     token_hash = hash_token("sample-token")
     repo.create_refresh_token(
         user_id=user.id,
@@ -104,25 +106,17 @@ def test_document_repository_pagination(db_session):
     assert total == 5
 
 
-def test_auth_service_login_returns_access_and_refresh_tokens(db_session, unique_email):
+def test_auth_service_oauth_login_returns_access_and_refresh_tokens(db_session, unique_email):
     repo = UserRepository(db_session)
-    repo.create(email=unique_email, hashed_password=hash_password("StrongPass1"))
-    db_session.commit()
-
     service = AuthService(user_repo=repo)
-    response = service.login(unique_email, "StrongPass1")
+
+    response = service.login_or_create_oauth_user(unique_email, provider="google", provider_subject=unique_email)
     assert "token" in response
     assert "access_token" in response
     assert "refresh_token" in response
+    assert response["is_new_user"] is True
 
-
-def test_auth_service_rejects_weak_password(db_session):
-    repo = UserRepository(db_session)
-    service = AuthService(user_repo=repo)
-
-    from app.core.exceptions import AppError
-    import pytest
-
-    with pytest.raises(AppError) as exc_info:
-        service.register("weak@example.com", "abc")
-    assert exc_info.value.code == "WEAK_PASSWORD"
+    # A second call for the same identity finds the existing user rather than
+    # creating a duplicate.
+    response2 = service.login_or_create_oauth_user(unique_email, provider="google", provider_subject=unique_email)
+    assert response2["is_new_user"] is False

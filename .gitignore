@@ -90,5 +90,16 @@ backend/scripts/finetune/.modal_run_id.json
 backend/scripts/finetune/.tag_nano_cursor.json
 backend/scripts/finetune/corpus_signal_check_results.json
 backend/scripts/finetune/eval_detector_results.json
+backend/scripts/finetune/human_pattern_analysis_results.json
+backend/scripts/finetune/pre2015_pattern_analysis_results.json
+# Raw third-party text samples (Wikipedia/Gutenberg) — same reasoning as
+# backend/scripts/finetune/data/ above: not for a public repo.
+backend/scripts/finetune/pre2015_corpus/
 # Kaggle working dirs: corpus chunks staged for/pulled from Kaggle kernels
 backend/scripts/finetune/kaggle/work/
+# =========================
+# Local artefacts that must never be committed
+# =========================
+.DS_Store
+backend/app.db
+backend/scripts/finetune/ollama_model/

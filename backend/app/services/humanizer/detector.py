@@ -89,8 +89,71 @@ def findings_summary(findings: list[dict]) -> str:
     return "Specific problems detected in this text — fix these:\n" + "\n".join(lines)
 
 
+_REGISTER_PROMPT = """Classify the CONTENT TYPE of the text below, not its current tone or \
+wording. Answer with exactly one word: "casual" or "formal".
+
+2026-09-13, Round 35 correction: an earlier version of this prompt classified procedural \
+how-to/instructional content as "formal" by default. That was tested for real and made \
+things measurably worse (QuillBot AI-score went from 45% to 97% on identical how-to content \
+switching from casual to formal register) — real AI detectors are calibrated against \
+contemporary (roughly 2015-2024) web writing, where even modern how-to guides and blog \
+instructions are written casually, with direct address and contractions. "Formal" should be \
+reserved for genuinely dry reference material, not for instructional content generally.
+
+- "casual": a product/gadget review, an opinion or personal piece, a blog post, a first-person \
+narrative, OR a how-to/instructional guide of the kind actually published on the modern web \
+(a recipe blog, a WikiHow-style guide, a product setup guide) — anything where a real modern \
+human writer would naturally address the reader directly and write conversationally, even if \
+the specific text you're given happens to read stiffly right now. This is the default for \
+almost everything — judge the CONTENT TYPE, not the current writing style.
+- "formal": ONLY for genuinely dry reference/encyclopedic material with no instructional \
+framing at all — a definition, a technical specification, an explainer written in third \
+person throughout with no direct address anywhere. If the text could plausibly appear as a \
+numbered step-by-step guide, a review, or an opinion piece, classify it "casual", not \
+"formal", even if it currently reads dry.
+
+Respond with exactly one word and nothing else: casual or formal."""
+
+
+async def classify_register(ai_service, text: str) -> str:
+    """2026-09-13, Round 34: decides which of AGGRESSIVE_REWRITE_PROMPT's two register
+    profiles (casual/formal, see prompts.py) applies to a given source text, computed
+    ONCE from the source before any rewriting -- not left to the rewrite model to judge
+    for itself mid-rewrite. This exists because asking the rewrite model to both (a)
+    classify the content's register and (b) simultaneously override the source's often-
+    already-formal surface tone to match that register was tested twice for real and
+    failed both times (see STATE.md Round 34): a product review with zero personal
+    address in its AI-generated source stayed zero-contraction, zero-"you" even after an
+    explicit "override the source's surface tone" instruction was added. Splitting the
+    decision out to its own focused, single-purpose call removes that double burden.
+
+    Defaults to "casual" on any parse failure or classifier error -- casual is this
+    project's original, most real-detector-tested register (the 2026-08-13 "Prompt G"
+    baseline that beat every alternative tried that day), so failing toward it is safer
+    than failing toward the newer, less-tested formal profile."""
+    try:
+        raw = await ai_service.classify_humanize([("system", _REGISTER_PROMPT), ("human", text)])
+    except Exception:
+        logger.exception("humanizer_register_classify_failed")
+        return "casual"
+    normalized = (raw or "").strip().lower()
+    if "formal" in normalized and "casual" not in normalized:
+        return "formal"
+    return "casual"
+
+
 def flagged_paragraphs(findings: list[dict]) -> set[int]:
     """Distinct 0-based paragraph indices with a flagged issue. Findings
     with no paragraph index (whole-text issues) aren't included — they
-    can't be targeted by a single-paragraph retry."""
-    return {f["paragraph"] for f in findings if isinstance(f.get("paragraph"), int)}
+    can't be targeted by a single-paragraph retry.
+
+    The bool exclusion is load-bearing, not defensive noise: bool subclasses
+    int in Python, so a model emitting `"paragraph": true` (a plausible
+    malformed response for "yes, this paragraph has an issue") would silently
+    become a retry of paragraph 1 — some unrelated paragraph rewritten against
+    another paragraph's findings."""
+    return {
+        f["paragraph"]
+        for f in findings
+        if isinstance(f.get("paragraph"), int) and not isinstance(f.get("paragraph"), bool)
+    }

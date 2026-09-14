@@ -15,8 +15,10 @@ interface ChatMessageListProps {
   isStreaming: boolean;
   /** First letter of the current user's email — shown in the avatar */
   userInitial?: string;
-  /** Called when an empty-state suggestion chip is clicked */
+  /** Called when a suggestion chip (empty state or follow-up) is clicked */
   onSuggestionClick?: (text: string) => void;
+  /** Re-run the last question; shown on the final assistant reply */
+  onRegenerate?: () => void;
 }
 
 const SUGGESTION_CHIPS = [
@@ -112,7 +114,19 @@ function MessageTimestamp() {
 
 // ─── Message bubble ───────────────────────────────────────────────────────────
 
-function MessageBubble({ message, userInitial }: { message: Message; userInitial: string }) {
+function MessageBubble({
+  message,
+  userInitial,
+  isLast,
+  onSuggestionClick,
+  onRegenerate,
+}: {
+  message: Message;
+  userInitial: string;
+  isLast: boolean;
+  onSuggestionClick?: (text: string) => void;
+  onRegenerate?: () => void;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -131,11 +145,17 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
           AI responses are glass-card, matching the mockup's elevated cards. */}
       {isUser ? (
         <div className="relative max-w-[80%] rounded-2xl rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)]">
+          {message.action && (
+            <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-80">
+              <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              Research action
+            </span>
+          )}
           <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
         </div>
       ) : (
         <Glare className="glass-card relative block max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 text-[var(--bubble-ai-text)]">
-            <div className="prose prose-sm prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+            <div className="max-w-none text-[14px] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -199,9 +219,37 @@ function MessageBubble({ message, userInitial }: { message: Message; userInitial
               </div>
             )}
 
-            {/* Copy — appears on hover */}
-            <div className="mt-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Follow-up suggestions — only on the latest reply, where they're actionable */}
+            {isLast && message.suggestions && message.suggestions.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {message.suggestions.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => onSuggestionClick?.(s)}
+                    className="hover-surface rounded-full border border-[var(--border-subtle)] px-2.5 py-1 text-left text-[11.5px] text-zinc-400 transition hover:text-zinc-200"
+                    title="Ask this next"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Copy / regenerate — appear on hover */}
+            <div className="mt-1.5 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
               <CopyButton text={message.content} />
+              {isLast && onRegenerate && (
+                <button
+                  onClick={onRegenerate}
+                  className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-zinc-500 transition hover:text-zinc-300"
+                  title="Regenerate this answer"
+                >
+                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Regenerate
+                </button>
+              )}
             </div>
         </Glare>
       )}
@@ -219,6 +267,7 @@ export function ChatMessageList({
   isStreaming,
   userInitial = "?",
   onSuggestionClick,
+  onRegenerate,
 }: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -318,7 +367,18 @@ export function ChatMessageList({
         )}
 
         {visibleMessages.map((message, index) => (
-          <MessageBubble key={index} message={message} userInitial={userInitial} />
+          // Keyed by role+content, not array index: retrying a failed send pops the
+          // last 1-2 entries and reinserts new ones at the same indices, and an
+          // index-only key would let React reuse the old bubble's DOM/internal state
+          // (e.g. a stale sources chip) for the new message before content settles.
+          <MessageBubble
+            key={`${index}:${message.role}:${message.content}`}
+            message={message}
+            userInitial={userInitial}
+            isLast={index === visibleMessages.length - 1 && message.role === "assistant" && !isStreaming}
+            onSuggestionClick={onSuggestionClick}
+            onRegenerate={onRegenerate}
+          />
         ))}
 
         {/* Streaming indicator */}

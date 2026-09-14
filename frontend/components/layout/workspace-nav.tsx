@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { CommandPalette } from "@/components/ui/command-palette";
+import { ROUTE_TOOL, useAppConfig } from "@/features/shared/hooks/use-app-config";
 
 interface NavItem {
   href: string;
@@ -46,6 +47,7 @@ interface WorkspaceNavProps {
 
 export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
   const pathname = usePathname();
+  const { config } = useAppConfig();
   const hasOverride = typeof onOpenPalette === "function";
   const [selfPaletteOpen, setSelfPaletteOpen] = useState(false);
 
@@ -96,20 +98,29 @@ export function WorkspaceNav({ onOpenPalette }: WorkspaceNavProps) {
         <nav className="space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href;
+            const tool = ROUTE_TOOL[item.href];
+            const disabled = tool ? config.tools[tool] === false : false;
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={disabled ? `${item.label} is temporarily unavailable` : undefined}
                 className={[
                   "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition",
                   active
                     ? "bg-[var(--surface-2)] text-[var(--text-primary)]"
                     : "hover-surface text-zinc-500",
+                  disabled ? "opacity-60" : "",
                 ].join(" ")}
                 style={active ? { color: "var(--marketing-accent-text)" } : undefined}
               >
                 <NavIcon d={item.path} />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {disabled && (
+                  <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-red-400">
+                    off
+                  </span>
+                )}
               </Link>
             );
           })}

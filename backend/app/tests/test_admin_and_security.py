@@ -4,7 +4,6 @@
 - admins can view stats, manage users, and adjust runtime settings
 - suspended users are locked out of every authenticated endpoint
 - OTP verification burns the token after too many failed attempts
-- verify-otp enforces the full password policy for new accounts
 """
 
 import uuid
@@ -24,8 +23,12 @@ def _make_admin(email: str) -> None:
 
 
 def _register_and_login(client, email: str) -> dict:
-    client.post("/api/v1/register", json={"email": email, "password": "StrongPass1"})
-    resp = client.post("/api/v1/login", json={"email": email, "password": "StrongPass1"})
+    """Sign in via the OTP flow — the only email-based auth path. No
+    RESEND_API_KEY/SMTP is configured in tests, so send-otp echoes the code
+    back as `_dev_code`."""
+    sent = client.post("/api/v1/auth/send-otp", json={"email": email})
+    code = sent.json()["_dev_code"]
+    resp = client.post("/api/v1/auth/verify-otp", json={"email": email, "code": code})
     token = resp.json().get("access_token") or resp.json().get("token")
     return {"Authorization": f"bearer {token}"}
 
@@ -176,31 +179,17 @@ def test_otp_burns_after_max_failed_attempts(client, unique_email):
     for _ in range(5):
         resp = client.post(
             "/api/v1/auth/verify-otp",
-            json={"email": unique_email, "code": "000000", "password": "StrongPass1"},
+            json={"email": unique_email, "code": "000000"},
         )
         assert resp.status_code in (400, 429)
 
     # ...after which even the *correct* code path is dead (token burned):
     resp = client.post(
         "/api/v1/auth/verify-otp",
-        json={"email": unique_email, "code": "000000", "password": "StrongPass1"},
+        json={"email": unique_email, "code": "000000"},
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] in ("OTP_NOT_FOUND", "OTP_TOO_MANY_ATTEMPTS")
-
-
-def test_verify_otp_rejects_weak_password_for_new_account(client, unique_email):
-    send = client.post("/api/v1/auth/send-otp", json={"email": unique_email})
-    assert send.status_code == 200
-    dev_code = send.json().get("_dev_code")
-    assert dev_code, "dev mode should return the OTP code"
-
-    resp = client.post(
-        "/api/v1/auth/verify-otp",
-        json={"email": unique_email, "code": dev_code, "password": "weak"},
-    )
-    assert resp.status_code == 400
-    assert resp.json()["error"]["code"] == "WEAK_PASSWORD"
 
 
 # ── Document file serving ──────────────────────────────────────────────────────

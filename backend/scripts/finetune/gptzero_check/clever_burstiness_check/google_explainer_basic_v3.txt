@@ -1,0 +1,7 @@
+Ever paused on a bright afternoon and thought, why does the sky show off this blue shade instead of green, red, or just nothing at all? The deal is about how sunlight messes with the air around us.
+
+Sunlight seems white, sure, but it’s actually a mix of every color you find in a rainbow. Light moves in waves, each color carrying its own wavelength fingerprint. Reds and oranges stretch out long and lazy, but blues and violets snap along much quicker, with tighter waves.
+
+When sunlight crashes into Earth’s atmosphere filled mostly with nitrogen and oxygen molecules, the long red and yellow waves breeze through without much fuss—hence sunlight looks warm and yellow when you see it directly. But blue light? Those short waves slam into air molecules, scattering all over the place. This scattering gig goes by the name Rayleigh scattering. Because blue light keeps ricocheting around above us, it paints the sky in that familiar blue hue, like a soft glowing coat.
+
+Now, why isn’t the sky violet instead? After all, violet waves are even shorter than blue. The catch: the Sun doesn’t kick out as much violet light as blue, plus our eyes just aren’t wired to catch violet well. So, when you step outside on a sunny day, what’s really happening is blue light playing an endless cosmic pinball game, bouncing off the air and right into your eyeballs. Simple as that.

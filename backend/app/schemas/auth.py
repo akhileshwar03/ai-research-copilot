@@ -1,11 +1,6 @@
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class AuthRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
 class AuthResponse(BaseModel):
     token: str
     access_token: str
@@ -36,11 +31,6 @@ class MeResponse(BaseModel):
     created_at: str | None = None
 
 
-class SignupResponse(BaseModel):
-    email: EmailStr
-    needs_otp: bool
-
-
 class SendOtpResponse(BaseModel):
     message: str
     # Only present in dev mode (no email provider configured).
@@ -60,21 +50,3 @@ class SendOtpRequest(BaseModel):
 class VerifyOtpRequest(BaseModel):
     email: EmailStr
     code: str
-    password: str | None = None
-
-
-class SignupRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-
-class ResetPasswordRequest(BaseModel):
-    """Forgot-password flow: OTP code + new password (no current password needed)."""
-    email: EmailStr
-    code: str
-    new_password: str

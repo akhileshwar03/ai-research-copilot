@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -739,12 +740,14 @@ export function ProfileModal({
     retry: false,
   });
 
-  // Sync to new initialSection when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      setActive(initialSection);
-    }
-  }, [isOpen, initialSection]);
+  // Sync to the requested section each time the modal opens — derived
+  // during render (React's "adjusting state on prop change" pattern), not
+  // in an effect, so the first frame already shows the right section.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) setActive(initialSection);
+  }
 
   // Scroll content to top on section change
   useEffect(() => {
@@ -761,7 +764,16 @@ export function ProfileModal({
 
   if (!isOpen) return null;
 
-  return (
+  // Rendered via a portal straight onto <body>: this component is mounted
+  // inside the sidebar, whose glass-panel background uses `backdrop-filter`
+  // — a property that (like `transform`) creates a new containing block for
+  // `position: fixed` descendants. Without the portal, this modal's
+  // `fixed inset-0` was being contained within the sidebar's own box instead
+  // of the viewport, so it only ever covered the sidebar's width/height and
+  // sat *below* unrelated content elsewhere on the page (e.g. the chat
+  // input) in paint order — the settings dialog looked clipped and content
+  // from the rest of the app rendered on top of it.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
@@ -836,6 +848,7 @@ export function ProfileModal({
           </svg>
         </button>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
