@@ -302,6 +302,42 @@ def test_suspending_a_user_revokes_their_refresh_tokens(client, admin_headers, u
     assert activity["active_refresh_tokens"] == 0
 
 
+def test_bulk_delete_users_reports_success_and_per_item_failure(client, admin_headers, unique_email):
+    victim_a = "bulk-a-" + unique_email
+    victim_b = "bulk-b-" + unique_email
+    _register_and_login(client, victim_a)
+    _register_and_login(client, victim_b)
+
+    users = client.get(f"/api/v1/admin/users?q={unique_email}", headers=admin_headers).json()["users"]
+    admin_id = next(u["id"] for u in users if u["email"] == unique_email and u.get("is_admin"))
+    id_a = next(u["id"] for u in users if u["email"] == victim_a)
+    id_b = next(u["id"] for u in users if u["email"] == victim_b)
+
+    # Mix two real deletions with one that must fail (deleting the calling
+    # admin) and a duplicate of an already-processed id - the batch should
+    # still succeed for the valid entries rather than aborting entirely.
+    resp = client.post(
+        "/api/v1/admin/users/bulk-delete",
+        headers=admin_headers,
+        json={"user_ids": [id_a, id_b, admin_id, id_a]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert sorted(body["deleted"]) == sorted([victim_a, victim_b])
+    assert len(body["failed"]) == 1
+    assert body["failed"][0]["user_id"] == admin_id
+    assert body["failed"][0]["error"]
+
+    remaining = client.get(f"/api/v1/admin/users?q={unique_email}", headers=admin_headers).json()["users"]
+    assert not any(u["email"] in (victim_a, victim_b) for u in remaining)
+    assert any(u["email"] == unique_email for u in remaining)
+
+
+def test_bulk_delete_rejects_empty_list(client, admin_headers):
+    resp = client.post("/api/v1/admin/users/bulk-delete", headers=admin_headers, json={"user_ids": []})
+    assert resp.status_code == 422
+
+
 def test_delete_account_purges_humanizer_runs_and_usage(client, auth_headers, unique_email):
     # Rows inserted directly (not via a live chat request) — this test's job is
     # to verify delete_account purges every table with a user_id foreign key,
