@@ -12,6 +12,18 @@ interface ChatHeaderProps {
   documents: DocumentItem[];
   selectedDocumentIds: string[];
   onChangeSelectedDocuments: (documentIds: string[]) => void;
+  /** In-chat search — searches this conversation's own message text. Distinct
+   * from the top bar's tool search and the sidebar's document/chat search. */
+  searchOpen?: boolean;
+  onToggleSearch?: () => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
+  searchMatchCount?: number;
+  /** 0-based index of the currently focused result, for the "N of M" readout. */
+  searchActiveResult?: number;
+  onSearchNext?: () => void;
+  onSearchPrev?: () => void;
+  onSearchClose?: () => void;
 }
 
 // ─── Markdown export helper ───────────────────────────────────────────────────
@@ -108,6 +120,129 @@ function ExportMenu({ title, messages }: { title: string; messages: Message[] })
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── In-chat search: find text within this conversation ──────────────────────
+//
+// This used to be a plain button that re-dispatched a synthetic ⌘K keydown —
+// which just reopens the sidebar's "search documents & chats" palette (or, on
+// pages without that override, the top bar's tool search). Neither of those
+// searches the words in the conversation actually on screen, so the button
+// did nothing a user asking to "search within the chat" would recognize as
+// working. This replaces it with a real search: it filters this session's
+// own messages, highlights matches, and scrolls between them.
+
+function ChatSearchControl({
+  open,
+  onToggle,
+  query,
+  onQueryChange,
+  matchCount,
+  activeResult,
+  onNext,
+  onPrev,
+  onClose,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  query: string;
+  onQueryChange: (value: string) => void;
+  matchCount: number;
+  activeResult: number;
+  onNext: () => void;
+  onPrev: () => void;
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, onClose]);
+
+  const hasQuery = query.length > 0;
+  const counterLabel = !hasQuery ? "" : matchCount === 0 ? "No results" : `${activeResult + 1} of ${matchCount}`;
+
+  if (!open) {
+    return (
+      <button
+        onClick={onToggle}
+        title="Search this conversation"
+        className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2 py-1 text-zinc-600 transition hover:border-[var(--border-medium)] hover:text-zinc-400 sm:flex"
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <span className="text-[11px]">Search this chat</span>
+      </button>
+    );
+  }
+
+  return (
+    <div ref={ref} className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-medium)] bg-[var(--surface-2)] pl-2.5 pr-1 py-1">
+      <svg className="h-3 w-3 shrink-0 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+      </svg>
+      <input
+        ref={inputRef}
+        value={query}
+        onChange={(e) => onQueryChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            if (e.shiftKey) onPrev();
+            else onNext();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+        placeholder="Search this chat…"
+        className="w-36 bg-transparent text-[12px] text-zinc-200 outline-none placeholder:text-zinc-600 sm:w-44"
+      />
+      {hasQuery && (
+        <span className="shrink-0 whitespace-nowrap text-[11px] text-zinc-600">{counterLabel}</span>
+      )}
+      <button
+        onClick={onPrev}
+        disabled={matchCount === 0}
+        title="Previous match (Shift+Enter)"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 transition hover:text-zinc-300 disabled:opacity-30 disabled:hover:text-zinc-500"
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+      <button
+        onClick={onNext}
+        disabled={matchCount === 0}
+        title="Next match (Enter)"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 transition hover:text-zinc-300 disabled:opacity-30 disabled:hover:text-zinc-500"
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+      <button
+        onClick={onClose}
+        title="Close search"
+        className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 transition hover:text-zinc-300"
+      >
+        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -219,7 +354,21 @@ function SourcesPicker({
   );
 }
 
-export function ChatHeader({ sidebarOpen = true, documents, selectedDocumentIds, onChangeSelectedDocuments }: ChatHeaderProps) {
+export function ChatHeader({
+  sidebarOpen = true,
+  documents,
+  selectedDocumentIds,
+  onChangeSelectedDocuments,
+  searchOpen = false,
+  onToggleSearch,
+  searchQuery = "",
+  onSearchQueryChange,
+  searchMatchCount = 0,
+  searchActiveResult = 0,
+  onSearchNext,
+  onSearchPrev,
+  onSearchClose,
+}: ChatHeaderProps) {
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
 
@@ -231,7 +380,14 @@ export function ChatHeader({ sidebarOpen = true, documents, selectedDocumentIds,
     window.dispatchEvent(new CustomEvent("toggle-sidebar"));
 
   return (
-    <header className="glass-bar flex shrink-0 items-center gap-2 border-b px-4 py-3.5">
+    // relative + z-20: the Sources/Export dropdowns below are nested inside
+    // this header, but the header's own backdrop-filter (see .glass-bar)
+    // gives it an isolated compositing layer — without an explicit z-index
+    // here, the later-in-DOM ChatMessageList painted its own content on top
+    // of that whole layer wherever an open dropdown overflowed past the
+    // header's height, so the panel showed chat text bleeding through it
+    // instead of sitting cleanly above the conversation.
+    <header className="glass-bar relative z-20 flex shrink-0 items-center gap-2 border-b px-4 py-3.5">
       {/* Sidebar toggle */}
       <button
         onClick={toggleSidebar}
@@ -258,21 +414,21 @@ export function ChatHeader({ sidebarOpen = true, documents, selectedDocumentIds,
       {/* Export session */}
       {messages.length > 1 && <ExportMenu title={title} messages={messages} />}
 
-      {/* Cmd+K hint */}
-      <button
-        onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
-        className="hidden shrink-0 items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] px-2 py-1 transition hover:border-[var(--border-medium)] sm:flex"
-        title="Open command palette"
-      >
-        <svg className="h-3 w-3 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <span className="text-[11px] text-zinc-700">Search</span>
-        <div className="flex items-center gap-0.5">
-          <kbd className="flex h-4 items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-2)] px-1 text-[9px] font-mono text-zinc-700">⌘</kbd>
-          <kbd className="flex h-4 items-center rounded border border-[var(--border-subtle)] bg-[var(--surface-2)] px-1 text-[9px] font-mono text-zinc-700">K</kbd>
-        </div>
-      </button>
+      {/* Search this conversation's own messages — separate from the top
+          bar's tool search and the sidebar's document/chat search. */}
+      {onToggleSearch && onSearchQueryChange && onSearchNext && onSearchPrev && onSearchClose && (
+        <ChatSearchControl
+          open={searchOpen}
+          onToggle={onToggleSearch}
+          query={searchQuery}
+          onQueryChange={onSearchQueryChange}
+          matchCount={searchMatchCount}
+          activeResult={searchActiveResult}
+          onNext={onSearchNext}
+          onPrev={onSearchPrev}
+          onClose={onSearchClose}
+        />
+      )}
 
       <SourcesPicker
         documents={documents}
