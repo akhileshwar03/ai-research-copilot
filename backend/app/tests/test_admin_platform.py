@@ -20,6 +20,7 @@ import pytest
 
 from app.db import session as db_session_module
 from app.db.models.admin_audit_log import AdminAuditLog
+from app.db.models.chat_models import ChatMessage, ChatSession
 from app.db.models.document import Document
 from app.db.models.humanizer_run import HumanizerRun
 from app.db.models.usage_event import UsageEvent
@@ -362,6 +363,38 @@ def test_delete_account_purges_humanizer_runs_and_usage(client, auth_headers, un
     try:
         assert db.query(HumanizerRun).filter(HumanizerRun.user_id == user_id).count() == 0
         assert db.query(UsageEvent).filter(UsageEvent.user_id == user_id).count() == 0
+    finally:
+        db.close()
+
+
+def test_delete_account_with_chat_messages_does_not_raise_fk_violation(client, auth_headers, unique_email):
+    # Regression test for a real production incident: deleting a
+    # ChatSession via a bulk Query.delete() does NOT cascade to its
+    # ChatMessage rows (that only happens for db.delete(session_obj), and
+    # there's no ondelete="CASCADE" on the FK either), so any account with
+    # an actual chat message used to blow up account deletion with an
+    # IntegrityError. This bit an admin doing a bulk delete of test
+    # accounts — it silently aborted partway through the batch, deleting
+    # some accounts but not others, once it hit one with real messages.
+    db = TestingSessionLocal()
+    try:
+        user_id = db.query(User).filter(User.email == unique_email).first().id
+        session = ChatSession(user_id=user_id, title="t")
+        db.add(session)
+        db.flush()
+        db.add(ChatMessage(session_id=session.id, role="user", content="hi"))
+        db.commit()
+        session_id = session.id
+    finally:
+        db.close()
+
+    resp = client.delete("/api/v1/auth/account", headers=auth_headers)
+    assert resp.status_code == 200
+
+    db = TestingSessionLocal()
+    try:
+        assert db.query(ChatMessage).filter(ChatMessage.session_id == session_id).count() == 0
+        assert db.query(ChatSession).filter(ChatSession.id == session_id).count() == 0
     finally:
         db.close()
 
