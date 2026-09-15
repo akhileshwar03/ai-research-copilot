@@ -74,7 +74,7 @@ class AuthService:
         """
         from app.api.dependencies.services import get_vector_store_manager
         from app.core.config import get_settings
-        from app.db.models.chat_models import ChatSession
+        from app.db.models.chat_models import ChatMessage, ChatSession
         from app.db.models.document import Document
         from app.db.models.humanizer_run import HumanizerRun
         from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
@@ -107,8 +107,21 @@ class AuthService:
         # 2. Delete document DB rows
         db.query(Document).filter(Document.user_email == email).delete(synchronize_session=False)
 
-        # 3. Delete chat sessions (cascade deletes ChatMessages via ORM relationship)
-        db.query(ChatSession).filter(ChatSession.user_id == user.id).delete(synchronize_session=False)
+        # 3. Delete chat messages, then their sessions. `ChatSession.messages`
+        #    declares `cascade="all, delete"`, but that only fires for
+        #    ORM-tracked object deletion (`db.delete(session_obj)`) — a bulk
+        #    `Query.delete()` bypasses the unit-of-work entirely, and
+        #    ChatMessage.session_id has no `ondelete="CASCADE"` at the
+        #    database level either. Deleting the sessions first therefore
+        #    raised a real IntegrityError (foreign key violation) for any
+        #    account with an actual chat message, aborting the whole delete —
+        #    a live bug caught via the admin bulk-delete tool stopping partway
+        #    through a batch. retention_service.py's expiry sweep already
+        #    gets this order right; this mirrors it.
+        session_ids = [r[0] for r in db.query(ChatSession.id).filter(ChatSession.user_id == user.id).all()]
+        if session_ids:
+            db.query(ChatMessage).filter(ChatMessage.session_id.in_(session_ids)).delete(synchronize_session=False)
+            db.query(ChatSession).filter(ChatSession.id.in_(session_ids)).delete(synchronize_session=False)
 
         # 3b. Every other table that references the user. On PostgreSQL the
         #     foreign keys are enforced, so leaving any of these behind would

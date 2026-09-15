@@ -629,6 +629,17 @@ def bulk_delete_users(
         except AppError as exc:
             db.rollback()
             failed.append(BulkDeleteFailure(user_id=user_id, error=exc.message))
+        except Exception:
+            # Defense in depth: an unexpected DB error (e.g. an
+            # unanticipated foreign-key constraint) must not abort every
+            # remaining ID in the batch — one real incident deleted 16 of
+            # 29 selected users before an uncaught IntegrityError on the
+            # 17th silently killed the whole request. Roll back so the
+            # session is usable again, report this one as failed, and keep
+            # going.
+            logger.exception("bulk_delete_users: unexpected error deleting user_id=%s", user_id)
+            db.rollback()
+            failed.append(BulkDeleteFailure(user_id=user_id, error="Unexpected server error — see logs"))
     return BulkDeleteUsersResponse(deleted=deleted, failed=failed)
 
 
