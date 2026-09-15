@@ -145,6 +145,26 @@ export function Button({
 }
 
 export function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (next: boolean) => void; disabled?: boolean }) {
+  // Two deliberate choices here, both from a real reported bug:
+  //
+  // 1. Always carries its own border, regardless of checked state — the
+  //    off-state fill (--surface-3) sits only a shade away from this
+  //    panel's own background in the light "dawn" theme, so without an
+  //    explicit outline an "off" toggle was nearly invisible instead of
+  //    reading as a control in its off position.
+  //
+  // 2. The track's color and the knob's position both come from the same
+  //    `checked` value, so they can never *end up* disagreeing — but they
+  //    used to animate at different visual speeds (the knob's `transform`
+  //    is GPU-composited and reads as "arrived" almost instantly; a
+  //    `background-color` fade takes the same ~150ms on the clock but
+  //    reads as still-in-progress for most of it, since it passes through
+  //    perceptibly different intermediate shades). A screenshot taken
+  //    mid-update — right after load, or right after a click — caught the
+  //    knob already at its new position while the color was still
+  //    mid-fade, looking like two different states glued together. Fixed
+  //    by not animating color/border at all: only the knob's slide is
+  //    animated, so the two can never visually disagree, at any instant.
   return (
     <button
       type="button"
@@ -152,12 +172,26 @@ export function Toggle({ checked, onChange, disabled }: { checked: boolean; onCh
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className="relative h-5 w-9 shrink-0 rounded-full transition disabled:opacity-50"
-      style={{ backgroundColor: checked ? "var(--marketing-accent)" : "var(--surface-3)" }}
+      className="relative h-5 w-9 shrink-0 rounded-full border disabled:opacity-50"
+      style={{
+        backgroundColor: checked ? "var(--marketing-accent)" : "var(--surface-3)",
+        borderColor: checked ? "var(--marketing-accent)" : "var(--border-strong)",
+      }}
     >
       <span
-        className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform"
-        style={{ transform: checked ? "translateX(18px)" : "translateX(2px)" }}
+        className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full border shadow transition-transform"
+        style={{
+          // left-0.5 pins the un-transformed base at a fixed 2px — without
+          // an explicit left, the browser was resolving the knob's static
+          // position based on the button's own layout (landing well right
+          // of the actual edge), so this translateX was stacking on top of
+          // an unpredictable starting point instead of a known one. That's
+          // what let the checked-state knob slide most of its own width
+          // past the track's right edge.
+          transform: checked ? "translateX(14px)" : "translateX(0)",
+          backgroundColor: "#ffffff",
+          borderColor: checked ? "transparent" : "var(--border-strong)",
+        }}
       />
     </button>
   );

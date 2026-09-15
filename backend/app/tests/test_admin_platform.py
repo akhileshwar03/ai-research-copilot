@@ -14,6 +14,7 @@
 
 import asyncio
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -27,6 +28,7 @@ from app.services.chat_service import RESEARCH_ACTIONS, ChatService
 from app.services.runtime_settings import runtime_settings
 from app.tests.conftest import TestingSessionLocal
 from app.tests.test_admin_and_security import _make_admin, _register_and_login
+import app.api.middleware.request_context as request_context_module
 
 
 def _set(key, value):
@@ -153,6 +155,25 @@ def test_closed_signups_reject_new_emails_only(client, unique_email):
         assert client.post("/api/v1/auth/send-otp", json={"email": unique_email}).status_code == 200
     finally:
         _set("signups_enabled", True)
+
+
+
+# ── Retention ──────────────────────────────────────────────────────────────────
+
+def test_retention_cleanup_runs_on_ordinary_requests_not_just_root_and_health(client, auth_headers, monkeypatch):
+    """Regression guard: retention cleanup used to depend entirely on an
+    external uptime monitor hitting exactly "/" or "/health" - paths the
+    frontend never calls. On a deployment where that pinger was
+    misconfigured or simply stopped, cleanup silently never ran, while
+    the UI kept showing an "expires in Nd" countdown that implied it was.
+    It's now triggered from the request middleware itself, so any real
+    traffic - here, a plain, unrelated API call - offers it a chance to run."""
+    spy = MagicMock()
+    monkeypatch.setattr(request_context_module, "maybe_run_cleanup", spy)
+
+    resp = client.get("/api/v1/sessions", headers=auth_headers)
+    assert resp.status_code == 200
+    assert spy.call_count >= 1
 
 
 # ── Usage tracking ─────────────────────────────────────────────────────────────
