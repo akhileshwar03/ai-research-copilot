@@ -2,7 +2,7 @@ import os
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -32,7 +32,6 @@ from app.db.models import (  # noqa: F401
 )
 from app.db.session import Base, engine
 from app.services.health_service import HealthService
-from app.services.retention_service import maybe_run_cleanup
 
 settings = get_settings()
 
@@ -322,15 +321,16 @@ register_exception_handlers(app)
 
 
 @app.get("/")
-async def root(background_tasks: BackgroundTasks):
-    # The uptime ping lands here; it doubles as the retention-cleanup trigger.
-    background_tasks.add_task(maybe_run_cleanup)
+async def root():
+    # Retention cleanup no longer depends on this specific path being
+    # pinged — see RequestContextMiddleware, which triggers it on every
+    # real request instead. This endpoint exists for external uptime
+    # monitors (Render's own health check, or a third-party pinger).
     return {"message": settings.app_name, "version": "v1", "docs": "/docs"}
 
 
 @app.get("/health")
-def health(background_tasks: BackgroundTasks, service: HealthService = Depends(get_health_service)):
-    background_tasks.add_task(maybe_run_cleanup)
+def health(service: HealthService = Depends(get_health_service)):
     return service.health()
 
 

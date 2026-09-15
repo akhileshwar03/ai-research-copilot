@@ -27,6 +27,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.config import get_settings
+from app.services.retention_service import maybe_run_cleanup
 from app.services.runtime_settings import runtime_settings
 from app.services.usage_tracking import record_usage_event, tool_for_request
 
@@ -98,9 +99,20 @@ async def _send_maintenance_response(send: Send, request_id: str) -> None:
 
 
 class RequestContextMiddleware:
-    """Assigns a request id, enforces maintenance mode, logs completion, and
-    records a usage event for tool routes — all strictly after the
-    downstream app has fully finished handling the request."""
+    """Assigns a request id, enforces maintenance mode, logs completion,
+    records a usage event for tool routes, and offers the retention
+    cleanup a chance to run — all strictly after the downstream app has
+    fully finished handling the request.
+
+    Retention used to depend entirely on an external uptime monitor hitting
+    exactly "/" or "/health" — paths the frontend itself never calls. On any
+    deployment without that specific external pinger configured (or if it
+    silently stopped), cleanup would never run at all, while the UI kept
+    showing an "expires in Nd" countdown that implied it was. Triggering it
+    here means it runs on any real traffic the app receives; the function
+    itself is already cheaply throttled (see maybe_run_cleanup), so calling
+    it on every request costs nothing beyond an in-process time check on
+    all but the rare request that actually claims the cleanup cycle."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -163,3 +175,8 @@ class RequestContextMiddleware:
                 started_at=started_at,
                 request_id=request_id,
             )
+
+        # See the class docstring: this is now the sole reliable trigger for
+        # retention. maybe_run_cleanup's own in-process throttle makes this
+        # a cheap no-op on all but roughly one request per ten minutes.
+        await run_in_threadpool(maybe_run_cleanup)
