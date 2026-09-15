@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { ChatHeader } from "@/features/chat/components/chat-header";
 import { ChatInput } from "@/features/chat/components/chat-input";
 import { ChatMessageList } from "@/features/chat/components/chat-message-list";
 import { useChat } from "@/features/chat/hooks/use-chat";
+import { visibleChatMessages } from "@/features/chat/lib/messages";
 import { ResearchActionsBar } from "@/features/chat/components/research-actions";
 import type { DocumentItem } from "@/shared/types/api";
 
@@ -18,6 +19,49 @@ interface ChatWindowProps {
 export default function ChatWindow({ email, documents, sidebarOpen = true }: ChatWindowProps) {
   const { input, setInput, sendMessage, runAction, regenerate, cancelStreaming, retryLastMessage, isStreaming, activeSession, chatError, setSessionDocuments } = useChat();
   const [isDragging, setIsDragging] = useState(false);
+
+  // ── In-chat search ──────────────────────────────────────────────────────
+  // Distinct from both the top bar's tool search and the sidebar's
+  // "search documents & chats" — this searches the *text of the currently
+  // open conversation*. Owned here (the shared parent of ChatHeader, which
+  // renders the search box, and ChatMessageList, which highlights/scrolls
+  // to results) rather than in either child.
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
+  const [chatSearchQuery, setChatSearchQuery] = useState("");
+  const [chatSearchActiveResult, setChatSearchActiveResult] = useState(0);
+
+  const chatSearchMatches = useMemo(() => {
+    const query = chatSearchQuery.trim().toLowerCase();
+    if (!query) return [];
+    return visibleChatMessages(activeSession?.messages ?? [])
+      .map((message, index) => ({ index, message }))
+      .filter(({ message }) => message.content.toLowerCase().includes(query));
+  }, [activeSession?.messages, chatSearchQuery]);
+
+  // Clamp instead of reset on every keystroke, so typing a narrower query
+  // that still contains the current result keeps it selected.
+  const activeResult = Math.min(chatSearchActiveResult, Math.max(0, chatSearchMatches.length - 1));
+
+  const goToNextMatch = useCallback(() => {
+    if (chatSearchMatches.length === 0) return;
+    setChatSearchActiveResult((i) => (i + 1) % chatSearchMatches.length);
+  }, [chatSearchMatches.length]);
+
+  const goToPrevMatch = useCallback(() => {
+    if (chatSearchMatches.length === 0) return;
+    setChatSearchActiveResult((i) => (i - 1 + chatSearchMatches.length) % chatSearchMatches.length);
+  }, [chatSearchMatches.length]);
+
+  const closeChatSearch = useCallback(() => {
+    setChatSearchOpen(false);
+    setChatSearchQuery("");
+    setChatSearchActiveResult(0);
+  }, []);
+
+  const handleChatSearchQueryChange = useCallback((value: string) => {
+    setChatSearchQuery(value);
+    setChatSearchActiveResult(0);
+  }, []);
 
   // Derive user initial from email for avatar
   const userInitial = email ? email[0].toUpperCase() : "?";
@@ -72,6 +116,15 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
         documents={documents}
         selectedDocumentIds={activeSession?.document_ids ?? []}
         onChangeSelectedDocuments={setSessionDocuments}
+        searchOpen={chatSearchOpen}
+        onToggleSearch={() => (chatSearchOpen ? closeChatSearch() : setChatSearchOpen(true))}
+        searchQuery={chatSearchQuery}
+        onSearchQueryChange={handleChatSearchQueryChange}
+        searchMatchCount={chatSearchMatches.length}
+        searchActiveResult={activeResult}
+        onSearchNext={goToNextMatch}
+        onSearchPrev={goToPrevMatch}
+        onSearchClose={closeChatSearch}
       />
 
       {/* Error banner with Retry */}
@@ -105,6 +158,8 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
           }, 0);
         }}
         onRegenerate={regenerate}
+        searchQuery={chatSearchQuery.trim()}
+        activeMatchIndex={chatSearchMatches.length > 0 ? chatSearchMatches[activeResult]?.index ?? null : null}
       />
       <ResearchActionsBar
         selectedCount={(activeSession.document_ids ?? []).length}

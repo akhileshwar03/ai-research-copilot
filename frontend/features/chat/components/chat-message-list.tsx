@@ -9,6 +9,7 @@ import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import type { Message } from "@/shared/types/chat";
 import { Glare } from "@/features/shared/motion/motion";
 import { CopyButton } from "@/features/shared/components/copy-button";
+import { visibleChatMessages } from "@/features/chat/lib/messages";
 
 interface ChatMessageListProps {
   messages: Message[];
@@ -19,6 +20,36 @@ interface ChatMessageListProps {
   onSuggestionClick?: (text: string) => void;
   /** Re-run the last question; shown on the final assistant reply */
   onRegenerate?: () => void;
+  /** In-chat search (see ChatHeader's search control) — lowercased query text, or "" when closed. */
+  searchQuery?: string;
+  /** Index (within this list's own visible-messages array) of the currently focused search result, or null. */
+  activeMatchIndex?: number | null;
+}
+
+/** Wraps every case-insensitive occurrence of `query` in `text` with <mark>. Plain-text only —
+ * used for the user's own messages, which render as a raw <p>, not through ReactMarkdown. */
+function highlightPlainText(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let i = 0;
+  let key = 0;
+  while (i < text.length) {
+    const at = lower.indexOf(q, i);
+    if (at === -1) {
+      parts.push(text.slice(i));
+      break;
+    }
+    if (at > i) parts.push(text.slice(i, at));
+    parts.push(
+      <mark key={key++} className="rounded-sm bg-[var(--marketing-accent)]/40 text-inherit">
+        {text.slice(at, at + query.length)}
+      </mark>,
+    );
+    i = at + query.length;
+  }
+  return parts;
 }
 
 const SUGGESTION_CHIPS = [
@@ -120,17 +151,27 @@ function MessageBubble({
   isLast,
   onSuggestionClick,
   onRegenerate,
+  searchQuery,
+  isActiveMatch,
+  bubbleRef,
 }: {
   message: Message;
   userInitial: string;
   isLast: boolean;
   onSuggestionClick?: (text: string) => void;
   onRegenerate?: () => void;
+  searchQuery?: string;
+  isActiveMatch?: boolean;
+  bubbleRef?: (el: HTMLDivElement | null) => void;
 }) {
   const isUser = message.role === "user";
+  const isMatch = Boolean(searchQuery && message.content.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className={`animate-message-in group flex items-end gap-3 ${isUser ? "flex-row-reverse" : ""}`}>
+    <div
+      ref={bubbleRef}
+      className={`animate-message-in group flex items-end gap-3 ${isUser ? "flex-row-reverse" : ""}`}
+    >
       {/* Avatar */}
       <div className={[
         "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ring-1",
@@ -144,17 +185,41 @@ function MessageBubble({
       {/* Bubble — user stays a solid accent fill (the "sent" affordance);
           AI responses are glass-card, matching the mockup's elevated cards. */}
       {isUser ? (
-        <div className="relative max-w-[80%] rounded-2xl rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)]">
+        <div
+          className="relative max-w-[80%] rounded-2xl rounded-tr-sm bg-[var(--bubble-user-bg)] px-4 py-3 text-[var(--bubble-user-text)] transition-[outline-color]"
+          style={
+            isActiveMatch
+              ? { outline: "2px solid var(--marketing-accent)", outlineOffset: 2 }
+              : isMatch
+                ? { outline: "1px solid var(--marketing-accent)", outlineOffset: 2 }
+                : undefined
+          }
+        >
           {message.action && (
             <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide opacity-80">
               <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
               Research action
             </span>
           )}
-          <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{message.content}</p>
+          <p className="text-[14px] leading-relaxed whitespace-pre-wrap">
+            {searchQuery ? highlightPlainText(message.content, searchQuery) : message.content}
+          </p>
         </div>
       ) : (
-        <Glare className="glass-card relative block max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 text-[var(--bubble-ai-text)]">
+        <Glare
+          className="glass-card relative block max-w-[80%] rounded-2xl rounded-tl-sm px-4 py-3 text-[var(--bubble-ai-text)] transition-[outline-color]"
+          // Search-match highlight uses `outline`, not Tailwind's `ring` (box-shadow-based):
+          // .glass-card sets its own plain box-shadow at the same specificity, later in the
+          // stylesheet, so a ring's box-shadow was silently overridden into invisibility on
+          // every assistant bubble — outline is a separate property, so it can't collide.
+          style={
+            isActiveMatch
+              ? { outline: "2px solid var(--marketing-accent)", outlineOffset: 2 }
+              : isMatch
+                ? { outline: "1px solid var(--marketing-accent)", outlineOffset: 2 }
+                : undefined
+          }
+        >
             <div className="max-w-none text-[14px] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
@@ -268,11 +333,14 @@ export function ChatMessageList({
   userInitial = "?",
   onSuggestionClick,
   onRegenerate,
+  searchQuery = "",
+  activeMatchIndex = null,
 }: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showScrollFab, setShowScrollFab] = useState(false);
   const wasStreamingRef = useRef(false);
+  const bubbleRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -305,13 +373,14 @@ export function ChatMessageList({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Strip the auto-inserted welcome stub from either name variant
-  const visibleMessages = messages.filter(
-    (m) => !(m.role === "assistant" && (
-      m.content === "Welcome to AI Research Copilot." ||
-      m.content === "Welcome to Querex."
-    ))
-  );
+  // Jump to whichever message the in-chat search bar has focused.
+  useEffect(() => {
+    if (activeMatchIndex == null) return;
+    const el = bubbleRefs.current.get(activeMatchIndex);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeMatchIndex]);
+
+  const visibleMessages = visibleChatMessages(messages);
 
   return (
     <div ref={containerRef} className="relative flex-1 overflow-y-auto bg-[var(--app-bg)] scrollbar-thin">
@@ -366,20 +435,40 @@ export function ChatMessageList({
           </div>
         )}
 
-        {visibleMessages.map((message, index) => (
+        {visibleMessages.map((message, index) => {
           // Keyed by role+content, not array index: retrying a failed send pops the
           // last 1-2 entries and reinserts new ones at the same indices, and an
           // index-only key would let React reuse the old bubble's DOM/internal state
           // (e.g. a stale sources chip) for the new message before content settles.
-          <MessageBubble
-            key={`${index}:${message.role}:${message.content}`}
-            message={message}
-            userInitial={userInitial}
-            isLast={index === visibleMessages.length - 1 && message.role === "assistant" && !isStreaming}
-            onSuggestionClick={onSuggestionClick}
-            onRegenerate={onRegenerate}
-          />
-        ))}
+          //
+          // EXCEPT for the bubble currently being streamed into: its content
+          // grows on every token, so a content-based key changed every token,
+          // which made React tear down and remount the bubble's DOM node each
+          // time — replaying the 0.25s message-in fade/rise on every single
+          // token instead of letting the text print in place. That's what
+          // read as a flicker ("invisible and visible... going and coming")
+          // instead of a clean stream. This one bubble gets a stable,
+          // content-independent key instead; every other bubble (already
+          // finished, or the user's own message) keeps the content-based key.
+          const isStreamingBubble = isStreaming && index === visibleMessages.length - 1 && message.role === "assistant";
+          const key = isStreamingBubble ? `${index}:${message.role}:streaming` : `${index}:${message.role}:${message.content}`;
+          return (
+            <MessageBubble
+              key={key}
+              message={message}
+              userInitial={userInitial}
+              isLast={index === visibleMessages.length - 1 && message.role === "assistant" && !isStreaming}
+              onSuggestionClick={onSuggestionClick}
+              onRegenerate={onRegenerate}
+              searchQuery={searchQuery || undefined}
+              isActiveMatch={activeMatchIndex === index}
+              bubbleRef={(el) => {
+                if (el) bubbleRefs.current.set(index, el);
+                else bubbleRefs.current.delete(index);
+              }}
+            />
+          );
+        })}
 
         {/* Streaming indicator */}
         {isStreaming && (
