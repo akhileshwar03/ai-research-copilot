@@ -252,6 +252,12 @@ export const adminApi = {
   deleteUser: (userId: number) =>
     apiRequest<{ message: string }>(`/admin/users/${userId}`, { method: "DELETE" }),
 
+  bulkDeleteUsers: (userIds: number[]) =>
+    apiRequest<{ deleted: string[]; failed: { user_id: number; error: string }[] }>("/admin/users/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ user_ids: userIds }),
+    }),
+
   revokeUserSessions: (userId: number) =>
     apiRequest<{ message: string }>(`/admin/users/${userId}/revoke-sessions`, { method: "POST" }),
 

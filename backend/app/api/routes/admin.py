@@ -20,7 +20,7 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import case, func, text
 from sqlalchemy.orm import Session
 
@@ -564,13 +564,11 @@ def revoke_user_sessions(
     return MessageResponse(message=f"Revoked {revoked} active session(s) for {user.email}")
 
 
-@router.delete("/users/{user_id}", response_model=MessageResponse)
-def delete_user(
-    user_id: int,
-    admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-    auth_service: AuthService = Depends(get_auth_service),
-):
+def _delete_one_user(user_id: int, admin: User, db: Session, auth_service: AuthService) -> str:
+    """Shared by the single and bulk delete endpoints so both apply the
+    exact same safety guards. Returns the deleted user's email, or raises
+    AppError (caught per-item by the bulk endpoint, propagated as-is by
+    the single one)."""
     user = _get_user_or_404(db, user_id)
     if user.id == admin.id:
         raise AppError(
@@ -583,7 +581,55 @@ def delete_user(
     target_email = user.email
     auth_service.delete_account(email=target_email)
     record_admin_action(db, admin_email=admin.email, action="user.delete", target=target_email)
+    return target_email
+
+
+@router.delete("/users/{user_id}", response_model=MessageResponse)
+def delete_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    target_email = _delete_one_user(user_id, admin, db, auth_service)
     return MessageResponse(message=f"User {target_email} and all their data deleted")
+
+
+class BulkDeleteUsersRequest(BaseModel):
+    user_ids: list[int] = Field(min_length=1, max_length=100)
+
+
+class BulkDeleteFailure(BaseModel):
+    user_id: int
+    error: str
+
+
+class BulkDeleteUsersResponse(BaseModel):
+    deleted: list[str]
+    failed: list[BulkDeleteFailure]
+
+
+@router.post("/users/bulk-delete", response_model=BulkDeleteUsersResponse)
+def bulk_delete_users(
+    body: BulkDeleteUsersRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Delete multiple accounts in one call. Applies the exact same guards
+    as deleting one at a time (can't delete yourself, can't delete the
+    last admin) - one failing entry (e.g. an ID that turns out to be the
+    last admin) does not abort the rest of the batch; every ID is
+    attempted independently and both outcomes are reported."""
+    deleted: list[str] = []
+    failed: list[BulkDeleteFailure] = []
+    for user_id in dict.fromkeys(body.user_ids):  # de-dupe, preserve order
+        try:
+            deleted.append(_delete_one_user(user_id, admin, db, auth_service))
+        except AppError as exc:
+            db.rollback()
+            failed.append(BulkDeleteFailure(user_id=user_id, error=exc.message))
+    return BulkDeleteUsersResponse(deleted=deleted, failed=failed)
 
 
 @router.get("/users/{user_id}/documents")

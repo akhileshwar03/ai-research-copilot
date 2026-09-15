@@ -184,6 +184,7 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   const [sort, setSort] = useState<UserSort>("newest");
   const [skip, setSkip] = useState(0);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
   const limit = 50;
 
   const params = { skip, limit, q: search, status, role, sort };
@@ -227,6 +228,46 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
     }
   };
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (userIds: number[]) => adminApi.bulkDeleteUsers(userIds),
+    onSuccess: (res) => {
+      if (res.deleted.length > 0) {
+        toast.success(`Deleted ${res.deleted.length} user${res.deleted.length === 1 ? "" : "s"}`);
+      }
+      if (res.failed.length > 0) {
+        toast.error(
+          `${res.failed.length} could not be deleted: ${res.failed.map((f) => f.error).join("; ")}`,
+          { duration: 6000 },
+        );
+      }
+      setCheckedIds(new Set());
+      setSelectedUser(null);
+      invalidate();
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Bulk delete failed"),
+  });
+
+  const toggleChecked = (userId: number) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(userId)) next.delete(userId);
+      else next.add(userId);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = () => {
+    const ids = Array.from(checkedIds);
+    if (ids.length === 0) return;
+    if (
+      window.confirm(
+        `Permanently delete ${ids.length} user${ids.length === 1 ? "" : "s"} and ALL their data (documents, chats, everything)? This cannot be undone.`,
+      )
+    ) {
+      bulkDeleteMutation.mutate(ids);
+    }
+  };
+
   const handleExport = async () => {
     try {
       const blob = await adminApi.exportUsers({ q: search, status, role });
@@ -249,10 +290,38 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   // Keep the drawer's user in sync with the freshly fetched list after an action.
   const drawerUser = selectedUser ? users.find((u) => u.id === selectedUser.id) ?? selectedUser : null;
 
+  // Self can never be bulk-deleted (same rule as the row-level action), so
+  // it's excluded from "select all" and never gets a checkbox at all.
+  const selectableUsers = users.filter((u) => currentEmail?.toLowerCase() !== u.email.toLowerCase());
+  const allSelectableChecked = selectableUsers.length > 0 && selectableUsers.every((u) => checkedIds.has(u.id));
+  const someSelectableChecked = selectableUsers.some((u) => checkedIds.has(u.id));
+
+  const toggleSelectAll = () => {
+    setCheckedIds((prev) => {
+      if (allSelectableChecked) {
+        const next = new Set(prev);
+        selectableUsers.forEach((u) => next.delete(u.id));
+        return next;
+      }
+      const next = new Set(prev);
+      selectableUsers.forEach((u) => next.add(u.id));
+      return next;
+    });
+  };
+
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-headline text-[15px] font-bold text-zinc-200">Users ({total})</h2>
+        {checkedIds.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12.5px] text-zinc-400">{checkedIds.size} selected</span>
+            <Button onClick={() => setCheckedIds(new Set())}>Clear selection</Button>
+            <Button variant="danger" onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
+              {bulkDeleteMutation.isPending ? "Deleting…" : `Delete ${checkedIds.size} selected`}
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-wrap items-center gap-2">
           <input
             value={search}
@@ -283,11 +352,24 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
           </Button>
           <Button onClick={handleExport} title="Download the filtered list as CSV">Export CSV</Button>
         </div>
+        )}
       </div>
 
       <TableShell>
         <thead className={THEAD_CLASS}>
           <tr>
+            <Th>
+              <input
+                type="checkbox"
+                checked={allSelectableChecked}
+                ref={(el) => {
+                  if (el) el.indeterminate = someSelectableChecked && !allSelectableChecked;
+                }}
+                onChange={toggleSelectAll}
+                onClick={(e) => e.stopPropagation()}
+                title="Select all"
+              />
+            </Th>
             <Th>Email</Th>
             <Th>Status</Th>
             <Th>Role</Th>
@@ -300,14 +382,23 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
         </thead>
         <tbody>
           {isLoading ? (
-            <EmptyRow colSpan={8}>Loading users…</EmptyRow>
+            <EmptyRow colSpan={9}>Loading users…</EmptyRow>
           ) : users.length === 0 ? (
-            <EmptyRow colSpan={8}>{search || status !== "all" || role !== "all" ? "No users match these filters" : "No users yet"}</EmptyRow>
+            <EmptyRow colSpan={9}>{search || status !== "all" || role !== "all" ? "No users match these filters" : "No users yet"}</EmptyRow>
           ) : (
             users.map((user) => {
               const isSelf = currentEmail?.toLowerCase() === user.email.toLowerCase();
               return (
                 <tr key={user.id} onClick={() => setSelectedUser(user)} className={`cursor-pointer ${ROW_CLASS}`}>
+                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    {!isSelf && (
+                      <input
+                        type="checkbox"
+                        checked={checkedIds.has(user.id)}
+                        onChange={() => toggleChecked(user.id)}
+                      />
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-zinc-200">
                     {user.email}
                     {isSelf && (
