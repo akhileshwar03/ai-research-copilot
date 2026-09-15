@@ -24,40 +24,52 @@ const ICONS: Record<ResearchAction, string> = {
  * One-click research tasks over the selected documents. Shown between the
  * conversation and the input so it reads as "what can I do with these
  * sources", not as another chat suggestion.
+ *
+ * Sits on its own glass-bar strip (matching the header/input bars) rather
+ * than floating directly on the atmosphere background — without a real
+ * background it read as a stray gradient smear sitting between two solid
+ * bars, and the label + six pills fighting for one flex-wrap row looked
+ * uneven. The label now gets its own line on narrow widths, and the pills
+ * always stay on one line, scrolling horizontally instead of wrapping —
+ * an earlier version switched to flex-wrap from `sm:` up, which on an
+ * ordinary desktop width just traded "scrolls" for "wraps to two rows
+ * anyway", not actually one line as intended.
  */
 export function ResearchActionsBar({ selectedCount, documentsAvailable, disabled, onRun }: ResearchActionsBarProps) {
   if (documentsAvailable === 0) return null;
   const needsSelection = selectedCount === 0;
 
   return (
-    <div className="shrink-0 px-4 pt-2">
-      <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-1.5">
-        <span className="mr-1 text-[10.5px] font-semibold uppercase tracking-wide text-zinc-600">
-          {needsSelection ? "Research actions · select sources first" : `Research actions · ${selectedCount} source${selectedCount === 1 ? "" : "s"}`}
+    <div className="glass-bar shrink-0 border-t px-4 py-2.5">
+      <div className="mx-auto flex max-w-3xl flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+        <span className="shrink-0 whitespace-nowrap text-[10.5px] font-semibold uppercase tracking-wide text-zinc-500">
+          {needsSelection ? "Select sources first" : `${selectedCount} source${selectedCount === 1 ? "" : "s"} selected`}
         </span>
-        {RESEARCH_ACTIONS.map((action) => {
-          const tooFew = action.minDocs != null && selectedCount < action.minDocs;
-          const isDisabled = disabled || needsSelection || tooFew;
-          const title = needsSelection
-            ? "Pick documents under Sources (top right) first"
-            : tooFew
-              ? `Select at least ${action.minDocs} documents to compare`
-              : action.hint;
-          return (
-            <button
-              key={action.key}
-              onClick={() => onRun(action.key)}
-              disabled={isDisabled}
-              title={title}
-              className="hover-surface flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-0)] px-2.5 py-1 text-[11.5px] font-medium text-zinc-400 transition hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[action.key]} />
-              </svg>
-              {action.label}
-            </button>
-          );
-        })}
+        <div className="scrollbar-thin -mx-1 flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-1">
+          {RESEARCH_ACTIONS.map((action) => {
+            const tooFew = action.minDocs != null && selectedCount < action.minDocs;
+            const isDisabled = disabled || needsSelection || tooFew;
+            const title = needsSelection
+              ? "Pick documents under Sources (top right) first"
+              : tooFew
+                ? `Select at least ${action.minDocs} documents to compare`
+                : action.hint;
+            return (
+              <button
+                key={action.key}
+                onClick={() => onRun(action.key)}
+                disabled={isDisabled}
+                title={title}
+                className="hover-surface flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11.5px] font-medium text-zinc-400 transition hover:border-[var(--border-medium)] hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:border-[var(--border-subtle)] disabled:hover:text-zinc-400"
+              >
+                <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={ICONS[action.key]} />
+                </svg>
+                {action.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

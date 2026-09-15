@@ -160,6 +160,7 @@ export default function ChatWindow({ email, documents, sidebarOpen = true }: Cha
         onRegenerate={regenerate}
         searchQuery={chatSearchQuery.trim()}
         activeMatchIndex={chatSearchMatches.length > 0 ? chatSearchMatches[activeResult]?.index ?? null : null}
+        sessionKey={activeSession.id}
       />
       <ResearchActionsBar
         selectedCount={(activeSession.document_ids ?? []).length}
