@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
@@ -38,6 +38,21 @@ export default function RealtimePage() {
       setMessages(sessions[0].messages);
     }
   }
+
+  // Jump straight to the bottom — where the conversation was left off —
+  // whenever a conversation opens, whether by clicking one in the sidebar or
+  // by the auto-open above. Without this, opening a session rendered every
+  // one of its messages and simply left the scroll position at the
+  // browser's default (the top), so it always opened on the first message
+  // instead of the last. useLayoutEffect (not useEffect) so this runs
+  // before the browser paints — it opens already scrolled, rather than
+  // visibly flashing the top of the conversation for a frame first.
+  // `behavior: "auto"` is an instant jump, not the smooth scroll used
+  // elsewhere for "a new message just arrived" — this is a restore, not
+  // an animation.
+  useLayoutEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "auto" });
+  }, [activeSessionId]);
 
   if (!isReady || !isAuthenticated) {
     return (

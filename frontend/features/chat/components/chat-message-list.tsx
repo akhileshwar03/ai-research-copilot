@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -24,15 +24,28 @@ interface ChatMessageListProps {
   searchQuery?: string;
   /** Index (within this list's own visible-messages array) of the currently focused search result, or null. */
   activeMatchIndex?: number | null;
+  /** Identifies which conversation `messages` belongs to (the session id, or "new" for an
+   * unsaved one) — see the mount-scroll effect below for why this exists. */
+  sessionKey?: string | number;
 }
 
-/** Wraps every case-insensitive occurrence of `query` in `text` with <mark>. Plain-text only —
- * used for the user's own messages, which render as a raw <p>, not through ReactMarkdown. */
-function highlightPlainText(text: string, query: string): React.ReactNode {
+/** Wraps every case-insensitive occurrence of `query` in `text` with <mark>.
+ *
+ * Deliberately stateless: an earlier version threaded a mutable "is this the
+ * first mark yet" tracker through these calls to tag one mark as the scroll
+ * target. React Strict Mode's dev-only double-invocation of component
+ * render functions (react-markdown's `components.p` etc. are real function
+ * components, so this applies to them) called that mutation twice and threw
+ * away the first, marked result — so the *kept* render always saw the
+ * tracker already "used" and never tagged anything. A render function
+ * mutating shared state is exactly what double-invocation exists to catch.
+ * The scroll effect below finds its target with a plain post-render DOM
+ * query instead, which is safe to run any number of times. */
+function highlightPlainText(text: string, query: string): ReactNode {
   if (!query) return text;
   const lower = text.toLowerCase();
   const q = query.toLowerCase();
-  const parts: React.ReactNode[] = [];
+  const parts: ReactNode[] = [];
   let i = 0;
   let key = 0;
   while (i < text.length) {
@@ -50,6 +63,25 @@ function highlightPlainText(text: string, query: string): React.ReactNode {
     i = at + query.length;
   }
   return parts;
+}
+
+/** Runs highlightPlainText over every string leaf in a React node tree, leaving element
+ * structure (bold, links, list markers, table cells...) untouched. This is what makes search
+ * highlighting work inside ReactMarkdown's rendered output, not just the user's own plain-text
+ * bubbles — a markdown reply's paragraph can contain nested <strong>/<em>/<a> elements around
+ * the actual text, so a naive string-only highlighter would only ever match unformatted runs. */
+function highlightNode(node: ReactNode, query: string): ReactNode {
+  if (!query) return node;
+  if (typeof node === "string") return highlightPlainText(node, query);
+  if (Array.isArray(node) || (node && typeof node === "object" && Symbol.iterator in node)) {
+    return Children.map(node as ReactNode, (child) => highlightNode(child, query));
+  }
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode };
+    if (props.children == null) return node;
+    return cloneElement(node, undefined, highlightNode(props.children, query));
+  }
+  return node;
 }
 
 const SUGGESTION_CHIPS = [
@@ -237,15 +269,21 @@ function MessageBubble({
                       </code>
                     );
                   },
-                  p: ({ children }) => <p className="mb-3 text-[14px] leading-relaxed last:mb-0">{children}</p>,
+                  // Every text-bearing renderer below runs its children through
+                  // highlightNode so in-chat search actually finds text inside a
+                  // markdown reply, not just the user's own plain messages — a
+                  // long research report can be many screens tall, and without
+                  // this a search match only ever ringed the whole bubble with no
+                  // way to see where inside it the word actually was.
+                  p: ({ children }) => <p className="mb-3 text-[14px] leading-relaxed last:mb-0">{highlightNode(children, searchQuery ?? "")}</p>,
                   ul: ({ children }) => <ul className="mb-3 space-y-1 pl-4 text-[14px] last:mb-0">{children}</ul>,
                   ol: ({ children }) => <ol className="mb-3 space-y-1 pl-4 text-[14px] last:mb-0">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                  h1: ({ children }) => <h1 className="mb-3 text-[16px] font-bold">{children}</h1>,
-                  h2: ({ children }) => <h2 className="mb-2 text-[15px] font-semibold">{children}</h2>,
-                  h3: ({ children }) => <h3 className="mb-2 text-[14px] font-semibold">{children}</h3>,
+                  li: ({ children }) => <li className="leading-relaxed">{highlightNode(children, searchQuery ?? "")}</li>,
+                  h1: ({ children }) => <h1 className="mb-3 text-[16px] font-bold">{highlightNode(children, searchQuery ?? "")}</h1>,
+                  h2: ({ children }) => <h2 className="mb-2 text-[15px] font-semibold">{highlightNode(children, searchQuery ?? "")}</h2>,
+                  h3: ({ children }) => <h3 className="mb-2 text-[14px] font-semibold">{highlightNode(children, searchQuery ?? "")}</h3>,
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-[var(--border-medium)] pl-4 italic text-zinc-400">{children}</blockquote>
+                    <blockquote className="border-l-2 border-[var(--border-medium)] pl-4 italic text-zinc-400">{highlightNode(children, searchQuery ?? "")}</blockquote>
                   ),
                   table: ({ children }) => (
                     <div className="mb-3 overflow-x-auto">
@@ -253,10 +291,10 @@ function MessageBubble({
                     </div>
                   ),
                   th: ({ children }) => (
-                    <th className="border border-[var(--border-subtle)] bg-[var(--surface-3)] px-3 py-1.5 text-left font-semibold">{children}</th>
+                    <th className="border border-[var(--border-subtle)] bg-[var(--surface-3)] px-3 py-1.5 text-left font-semibold">{highlightNode(children, searchQuery ?? "")}</th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-[var(--border-subtle)] px-3 py-1.5">{children}</td>
+                    <td className="border border-[var(--border-subtle)] px-3 py-1.5">{highlightNode(children, searchQuery ?? "")}</td>
                   ),
                 }}
               >
@@ -335,6 +373,7 @@ export function ChatMessageList({
   onRegenerate,
   searchQuery = "",
   activeMatchIndex = null,
+  sessionKey,
 }: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -351,6 +390,24 @@ export function ChatMessageList({
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < 220;
   }, []);
+
+  // Jump straight to the bottom — where the conversation was left off —
+  // whenever a *different* conversation is opened. Without this, opening a
+  // chat rendered every one of its messages and simply left the scroll
+  // position wherever the browser's default (the top) put it, so it always
+  // opened on the first message instead of where you'd stopped. A plain
+  // `useEffect` here would paint that wrong top-of-list frame first and
+  // only jump afterward, as a visible flash-then-jump; `useLayoutEffect`
+  // runs before the browser paints, so the jump itself is invisible — it
+  // opens already at the bottom, in the very first frame. Setting
+  // `scrollTop` directly rather than `scrollIntoView` is also deliberate:
+  // it's an instant restore of where you were, not a "new message arrived"
+  // animation, so it shouldn't smooth-scroll through the whole history.
+  useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [sessionKey]);
 
   // Smart auto-scroll: only force-scroll when user is near the bottom
   // OR when streaming just kicked off (so the user sees the first token appear).
@@ -373,11 +430,18 @@ export function ChatMessageList({
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Jump to whichever message the in-chat search bar has focused.
+  // Jump to whichever message the in-chat search bar has focused — specifically to its
+  // first highlighted <mark>, not just the top of the bubble. A research-report reply
+  // can be many screens tall, so scrolling the bubble container only proved the match
+  // was *somewhere* in it; this puts the actual matched text on screen. Found with a
+  // plain post-render DOM query rather than tagged during rendering — see
+  // highlightPlainText's comment for why tagging during render was the actual bug here.
   useEffect(() => {
     if (activeMatchIndex == null) return;
-    const el = bubbleRefs.current.get(activeMatchIndex);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const bubble = bubbleRefs.current.get(activeMatchIndex);
+    if (!bubble) return;
+    const mark = bubble.querySelector("mark");
+    (mark ?? bubble).scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeMatchIndex]);
 
   const visibleMessages = visibleChatMessages(messages);
