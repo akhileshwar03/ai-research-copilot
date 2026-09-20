@@ -103,8 +103,12 @@ class _FakeClient:
     async def __aexit__(self, *exc):
         return False
 
-    async def post(self, url, json=None):
+    async def post(self, url, json=None, headers=None):
         self.calls.append(json)
+        self.urls = getattr(self, "urls", [])
+        self.urls.append(url)
+        self.headers = getattr(self, "headers", [])
+        self.headers.append(headers)
         return self._responder(json)
 
 
@@ -165,8 +169,14 @@ def test_num_predict_never_exceeds_what_the_timeout_can_generate():
             f"{words}w asks for {allowance} tokens = {generation_seconds:.0f}s, too close to the 180s timeout"
         )
 
-    # The old sizing is exactly what this rules out.
-    assert _num_predict_for(_words(140), 180.0) < 760
+    # The old (pre-fix) sizing ignored the time budget entirely and would have asked
+    # for 760 tokens here regardless of generation rate. Assert against the current
+    # rate-derived ceiling rather than a hardcoded historical number, so this doesn't
+    # silently stop meaning anything the next time _MEASURED_GEN_TOKENS_PER_SECOND
+    # changes (as it did 2026-09-18, 7B -> 3B, 4.3 -> 10.0 tok/s) — the real invariant
+    # is that sizing tracks the timeout budget, not a specific token count.
+    budget_ceiling_140w = int(180.0 * _MEASURED_GEN_TOKENS_PER_SECOND * 0.6)
+    assert _num_predict_for(_words(140), 180.0) <= max(760, budget_ceiling_140w)
 
 
 def test_num_predict_ceiling_tracks_a_changed_timeout():
@@ -397,12 +407,20 @@ def test_runaway_guard_keeps_the_closest_attempt_when_every_sample_is_bad(monkey
     """If resampling never recovers, ship the least-bad attempt rather than failing the
     run outright — and stop after the bounded budget instead of looping."""
     source = " ".join(["word"] * 100)
-    replies = iter([" ".join(["a"] * 900), " ".join(["b"] * 400), " ".join(["c"] * 600)])
+    replies = iter(
+        [
+            " ".join(["a"] * 900),
+            " ".join(["b"] * 400),
+            " ".join(["c"] * 600),
+            " ".join(["d"] * 800),
+            " ".join(["e"] * 700),
+        ]
+    )
 
     client = _patch_client(monkeypatch, lambda payload: _FakeResponse({"message": {"content": next(replies)}}))
     result = asyncio.run(HumanizerUltraService().generate(source))
 
-    assert len(client.calls) == 3  # initial + 2 resamples, the configured ceiling
+    assert len(client.calls) == 5  # initial + 4 resamples, the configured ceiling
     assert result.startswith("b"), "the attempt closest to source length wins"
 
 
@@ -425,6 +443,100 @@ def test_normal_length_output_is_not_resampled(monkeypatch):
     assert len(client.calls) == 1
 
 
+# ── Entity/citation invariant guard (2026-09-18) ─────────────────────────────
+# Real, confirmed defect found validating the 3B follow-up LoRA: a fabricated
+# quote attributed to a real person, an impossible anachronistic misquote, and
+# fabricated bylines with invented dates -- all fitting inside an otherwise
+# unremarkable length, so _MAX_EXPANSION_RATIO alone would ship them. See
+# app/services/humanizer/entity_check.py's docstring for the full incident.
+
+
+def test_fabricated_named_entity_is_resampled(monkeypatch):
+    """A real, confirmed failure shape: the model invents a named source not
+    present anywhere in the input. Length stays completely normal (1.0x) so
+    only the entity guard, not the expansion guard, should trigger this."""
+    source = "The company announced a new product line this quarter."
+    fabricated = "The company announced a new line, said Marc Andreessen in an interview."
+    clean = "The company announced a new product line this quarter, per the release."
+    replies = iter([fabricated, clean])
+
+    client = _patch_client(monkeypatch, lambda payload: _FakeResponse({"message": {"content": next(replies)}}))
+    result = asyncio.run(HumanizerUltraService().generate(source))
+
+    assert len(client.calls) == 2, "a fabricated named entity must trigger exactly one resample"
+    assert "Andreessen" not in result
+
+
+def test_standalone_fabricated_byline_is_stripped_without_spending_a_resample(monkeypatch):
+    """Real fix (2026-09-19): when a fabrication shows up as its own standalone line
+    (a byline, a photo credit) rather than woven into a real sentence, it should be
+    deleted outright for free -- zero resamples spent -- instead of costing a full
+    extra generation round trip the way test_fabricated_named_entity_is_resampled's
+    inline case correctly still does."""
+    source = "Public libraries have existed for a very long time, evolving from ancient scrolls to modern community spaces."
+    fabricated = (
+        "Public libraries have a long, rich history going back thousands of years, from ancient scrolls to today's spaces.\n\n"
+        "Posted by Matthew Stibbe | March 30th, 2017."
+    )
+    client = _patch_client(monkeypatch, _ok(fabricated))
+    result = asyncio.run(HumanizerUltraService().generate(source))
+
+    assert len(client.calls) == 1, "a standalone fabricated line must be stripped for free, not resampled"
+    assert "Matthew Stibbe" not in result
+    assert "Public libraries have a long, rich history" in result
+
+
+def test_entity_guard_keeps_least_fabricated_attempt_when_every_sample_invents(monkeypatch):
+    """If resampling never lands on a clean attempt, ship whichever fabricated
+    the fewest new entities rather than failing the run outright -- same
+    least-bad philosophy as the expansion guard, bounded by the same budget."""
+    source = "The team finished the project ahead of schedule."
+    worse = "The team, led by Sarah Connor and John Smith, finished the Boston project early."
+    better = "The team finished the Boston project ahead of schedule."
+    replies = iter([worse, worse, better])
+
+    client = _patch_client(monkeypatch, lambda payload: _FakeResponse({"message": {"content": next(replies)}}))
+    result = asyncio.run(HumanizerUltraService().generate(source))
+
+    assert len(client.calls) == 3  # initial + 2 resamples, the shared budget ceiling
+    assert "Connor" not in result and "Smith" not in result
+
+
+def test_output_reusing_only_source_entities_is_not_resampled(monkeypatch):
+    """An entity that genuinely comes from the source (just rephrased around)
+    must not trigger a resample -- only NEW entities are a violation."""
+    source = "Marc Andreessen spoke at the conference about new technology trends."
+    client = _patch_client(
+        monkeypatch, _ok("At the conference, Marc Andreessen discussed emerging technology trends.")
+    )
+
+    asyncio.run(HumanizerUltraService().generate(source))
+
+    assert len(client.calls) == 1
+
+
+def test_scraped_website_furniture_is_stripped_without_a_resample(monkeypatch):
+    """Real fabrication caught this session: a faithful rewrite had a full blog
+    comment-form footer appended ("Read more articles like this", "Post A
+    Comment", "Subscribe here..."). None of it asserts a fact, so
+    check_entity_invariant never flags it -- this must be caught by the separate,
+    unconditional strip_junk_furniture step, and for free (no resample), same as
+    the standalone-byline case."""
+    source = "Noise-cancelling headphones use active noise cancellation to block ambient sound so you can focus on your music more clearly in noisy environments."
+    fabricated = (
+        "Noise-cancelling headphones use active noise cancellation to block out ambient "
+        "sound, letting you focus on your music more clearly even in noisy places.\n\n"
+        "Read more articles like this\n\nPost A Comment\n\nSubscribe here and get latest update straight into you inbox..."
+    )
+    client = _patch_client(monkeypatch, _ok(fabricated))
+    result = asyncio.run(HumanizerUltraService().generate(source))
+
+    assert len(client.calls) == 1, "junk furniture must be stripped for free, not resampled"
+    assert "Post A Comment" not in result
+    assert "Subscribe here" not in result
+    assert "Noise-cancelling headphones use active noise cancellation" in result
+
+
 def test_strips_inline_scraped_cross_reference_prefix():
     """Live browser run on the bee text: a chunk came back opening with
     "See Wikipedia: Bee Despite being individual insects..." — scraped cross-reference
@@ -440,3 +552,98 @@ def test_inline_reference_stripping_respects_a_source_that_mentions_wikipedia():
     source = "The Wikipedia article on bees is a good starting point for further reading."
     raw = "See Wikipedia: Bee for more on this topic."
     assert _strip_scraped_credit_lines(raw, source) == raw
+
+
+# ── Backend dispatch: off / local / modal (2026-09-19) ───────────────────────
+
+
+def test_backend_off_refuses_before_any_network_call(monkeypatch):
+    """The 'off' backend must fail fast, before touching the network at all --
+    otherwise a misconfigured 'off' state would still cold-start a Modal
+    container or hit local Ollama needlessly."""
+    monkeypatch.setattr("app.services.humanizer_ultra_service.runtime_settings.get", lambda key: "off")
+    called = {"n": 0}
+
+    def _boom(**kw):
+        called["n"] += 1
+        raise AssertionError("should never construct an httpx client when backend is off")
+
+    monkeypatch.setattr("app.services.humanizer_ultra_service.httpx.AsyncClient", _boom)
+
+    with pytest.raises(AppError) as exc:
+        asyncio.run(HumanizerUltraService().generate("some text"))
+
+    assert exc.value.code == "ULTRA_DISABLED"
+    assert exc.value.status_code == 503
+    assert called["n"] == 0
+
+
+def test_backend_modal_hits_the_openai_compatible_endpoint_with_both_auth_layers(monkeypatch):
+    """Real behavior verified live against the deployed Modal endpoint before writing
+    this test (2026-09-19): both Modal's own proxy-auth headers (Modal-Key/Modal-Secret)
+    and vLLM's --api-key (Authorization: Bearer) are required, and the request must be
+    OpenAI-chat-completions shaped, not Ollama's /api/chat shape."""
+    monkeypatch.setattr("app.services.humanizer_ultra_service.runtime_settings.get", lambda key: "modal")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_URL", "https://example.modal.direct")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_KEY", "wk-test")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_SECRET", "ws-test")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_API_KEY", "vllm-test-key")
+    get_settings.cache_clear()
+
+    def _responder(payload):
+        return _FakeResponse({"choices": [{"message": {"content": "rewritten via modal"}}]})
+
+    client = _patch_client(monkeypatch, _responder)
+    result = asyncio.run(HumanizerUltraService().generate("some source text to rewrite"))
+
+    assert result == "rewritten via modal"
+    assert client.urls[0] == "https://example.modal.direct/v1/chat/completions"
+    assert client.headers[0]["Modal-Key"] == "wk-test"
+    assert client.headers[0]["Modal-Secret"] == "ws-test"
+    assert client.headers[0]["Authorization"] == "Bearer vllm-test-key"
+    # OpenAI chat-completions shape, not Ollama's {"messages": ..., "stream": ..., "options": ...}
+    assert "messages" in client.calls[0]
+    assert client.calls[0]["temperature"] == 1.0
+    assert client.calls[0]["top_p"] == 0.95
+    assert client.calls[0]["repetition_penalty"] == 1.15
+
+    get_settings.cache_clear()
+
+
+def test_backend_modal_retries_through_a_cold_start_503(monkeypatch):
+    """Per Modal's own docs (verified 2026-09-19, not assumed): a 503 on a cold
+    container is the documented "cold start just triggered, retry" signal, not a
+    real failure. This must be retried, not surfaced as ULTRA_ERROR on the first 503."""
+    monkeypatch.setattr("app.services.humanizer_ultra_service.runtime_settings.get", lambda key: "modal")
+    monkeypatch.setattr("app.services.humanizer_ultra_service.asyncio.sleep", lambda *_: _instant_sleep())
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_URL", "https://example.modal.direct")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_KEY", "wk-test")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_SECRET", "ws-test")
+    monkeypatch.setenv("HUMANIZER_ULTRA_MODAL_API_KEY", "vllm-test-key")
+    get_settings.cache_clear()
+
+    attempts = {"n": 0}
+
+    def _responder(payload):
+        attempts["n"] += 1
+        if attempts["n"] < 3:
+            return _FakeResponse({"error": "no upstreams available"}, status_code=503)
+        return _FakeResponse({"choices": [{"message": {"content": "rewritten after cold start"}}]})
+
+    _patch_client(monkeypatch, _responder)
+    result = asyncio.run(HumanizerUltraService().generate("some source text"))
+
+    assert result == "rewritten after cold start"
+    assert attempts["n"] == 3
+
+    get_settings.cache_clear()
+
+
+async def _instant_sleep(*_a, **_kw):
+    return None

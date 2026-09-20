@@ -198,9 +198,36 @@ another, an occasional aside — rather than holding one uniform register end to
 manufacture this with typos, broken grammar, or gimmicks; it should come from genuine variation \
 in phrasing and pacing, never from injected errors."""
 
+# 2026-09-19: the second rule below (never introduce a new scene/anecdote) is a real addition,
+# added after a live production incident -- Ultra Human, on an otherwise faithful rewrite of a
+# short mindfulness essay about a pigeon and a quiet city, appended a fabricated closing paragraph
+# about a classroom and "Hey, can I go to the bathroom?" that had nothing to do with the source.
+# Neither the expansion-ratio guard (this stayed under 2.5x) nor entity_check.py (no checkable
+# proper noun/date/number was invented, just an unrelated tangent) could see this failure class at
+# all, so the fix tried here is prompt-level, not just a new guard.
+#
+# Tested for real before shipping, not assumed: 2 independent generations of the exact failing
+# input WITHOUT this line both reproduced some form of fabricated addendum; 2 independent
+# generations WITH this line were both clean. A second candidate addition ("no external
+# references/comments not in the input") was tested alongside this one and NOT kept -- it
+# suppressed the specific byline-fabrication wording it named, but the underlying tendency just
+# shifted shape (a fabricated photo credit, a stray "Source" tag) and caused a new, worse
+# regression on an unrelated sample (the model abandoned rewriting entirely and wrote a fictional
+# first-person reaction to the source instead). Keeping only the rule with real, repeated, net-
+# positive evidence behind it.
+#
+# Still a real caveat: this prompt is the same text export.py bakes into every training row
+# (see that file and STATE.md) -- the model was trained on the version WITHOUT this line, so
+# this change runs it slightly out of the distribution it was tuned on. The evidence above is
+# real, not a rationalization, but this should be watched over time, not trusted blindly, and
+# ideally folded into the training-time prompt on the next retrain rather than left as a
+# permanent runtime-only divergence.
 STRICT_HARD_RULES = """Hard rules:
 - Preserve the original meaning, facts, claims, numbers, names, and citations exactly. Never add, \
 remove, or alter any factual content.
+- Never introduce a new scene, example, anecdote, or claim that is not directly implied by the \
+source — this includes any tangent, aside, or ending that is not part of what the source is \
+actually about.
 - Preserve ALL markdown formatting exactly — headings, bold, bullet points, links. Preserve any \
 keywords the source text depends on (this may be used for SEO).
 - Use em dashes sparingly — roughly one per paragraph at most. Stacking several in one passage is \

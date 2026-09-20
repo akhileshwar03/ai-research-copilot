@@ -116,6 +116,7 @@ class SettingDescriptor(BaseModel):
     category: str
     category_label: str
     description: str
+    choices: list[str] | None = None
 
 
 class SettingsUpdate(BaseModel):

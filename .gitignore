@@ -88,6 +88,7 @@ backend/scripts/finetune/data/
 # Per-run local state / analysis outputs (regenerable, not source)
 backend/scripts/finetune/.modal_run_id.json
 backend/scripts/finetune/.tag_nano_cursor.json
+backend/scripts/finetune/.collect_cursor.json
 backend/scripts/finetune/corpus_signal_check_results.json
 backend/scripts/finetune/eval_detector_results.json
 backend/scripts/finetune/human_pattern_analysis_results.json
@@ -103,3 +104,11 @@ backend/scripts/finetune/kaggle/work/
 .DS_Store
 backend/app.db
 backend/scripts/finetune/ollama_model/
+# Ollama model pulls used for local QA of finetune checkpoints (GBs of GGUF
+# binaries, regenerable from the Modal volume, never for a public repo).
+backend/scripts/finetune/ollama_model_3b/
+backend/scripts/finetune/ollama_model_3b_q4/
+backend/scripts/finetune/ollama_model_3b_v2/
+# One-off eval/validation result dumps from iterative prompt/guard testing —
+# regenerable by rerunning the corresponding script, not source.
+backend/scripts/finetune/gptzero_check/

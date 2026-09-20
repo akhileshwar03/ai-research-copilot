@@ -33,6 +33,11 @@ class SettingDef:
     max: float
     description: str
     category: str = "limits"
+    # Only meaningful for str settings: restricts the value to one of these
+    # exact strings (e.g. a backend selector) instead of any text up to `max`
+    # chars. None (the default) means "unrestricted text", same as before
+    # this field existed.
+    choices: frozenset[str] | None = None
 
 
 def _bool_setting(description: str, category: str) -> SettingDef:
@@ -105,6 +110,27 @@ def _defs() -> dict[str, SettingDef]:
             int, 500, 50000, "Maximum characters accepted per chat message (matches the frontend counter)", "research_copilot"
         ),
         # ── Humanizer ───────────────────────────────────────────────────────
+        # 2026-09-19: which backend serves Ultra Human. "local" = the existing
+        # Ollama/llama.cpp path (this dev Mac or a future always-on home
+        # machine) -- fine for one user at a time, not built for concurrency.
+        # "modal" = the new Modal + vLLM deployment (scripts/finetune/
+        # serve_ultra_vllm.py), built specifically for multiple simultaneous
+        # users (~10-20x Ollama's throughput under concurrent load, measured/
+        # researched 2026-09-19). "off" = Ultra Human answers 503 regardless of
+        # which backend would otherwise be configured, same shape as the
+        # existing tool_*_enabled kill switches but scoped to just this one
+        # sub-feature so Basic keeps working. Default "local" preserves exactly
+        # today's behavior for anyone who hasn't touched this setting yet.
+        "humanizer_ultra_backend": SettingDef(
+            str,
+            0,
+            10,
+            "Which backend serves Ultra Human: 'local' (Ollama, single-user, this machine or a "
+            "future always-on home machine), 'modal' (Modal + vLLM, built for multiple concurrent "
+            "users), or 'off' (Ultra Human unavailable, Basic still works).",
+            "humanizer",
+            choices=frozenset({"off", "modal", "local"}),
+        ),
         "humanize_max_chars": SettingDef(int, 500, 50000, "Maximum characters accepted per Humaniser request", "humanizer"),
         "humanize_min_words": SettingDef(
             int,
@@ -169,6 +195,7 @@ def _env_defaults() -> dict[str, SettingValue]:
         "tool_realtime_enabled": True,
         "tool_paper_analyzer_enabled": True,
         "tool_extract_enabled": True,
+        "humanizer_ultra_backend": "local",
         "chat_follow_up_suggestions": True,
         "max_upload_size_mb": s.max_upload_size_mb,
         "rag_top_k": s.rag_top_k,
@@ -222,6 +249,12 @@ def _coerce(key: str, d: SettingDef, value) -> SettingValue:
             raise AppError(
                 code="SETTING_OUT_OF_RANGE",
                 message=f"{key} must be at most {int(d.max)} characters",
+                status_code=400,
+            )
+        if d.choices is not None and text not in d.choices:
+            raise AppError(
+                code="INVALID_SETTING_VALUE",
+                message=f"{key} must be one of: {', '.join(sorted(d.choices))}",
                 status_code=400,
             )
         return text
@@ -355,6 +388,7 @@ def describe_settings() -> list[dict]:
             "category": d.category,
             "category_label": CATEGORY_LABELS.get(d.category, d.category),
             "description": d.description,
+            "choices": sorted(d.choices) if d.choices else None,
         }
         for key, d in _defs().items()
     ]

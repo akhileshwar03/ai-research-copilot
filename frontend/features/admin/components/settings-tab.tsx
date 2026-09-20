@@ -17,6 +17,7 @@ const SETTING_LABELS: Record<string, string> = {
   tool_realtime_enabled: "Real-time AI",
   tool_paper_analyzer_enabled: "Paper Analyzer",
   tool_extract_enabled: "URL / image text extraction",
+  humanizer_ultra_backend: "Ultra Human backend",
   chat_follow_up_suggestions: "Follow-up question suggestions",
   max_upload_size_mb: "Maximum upload size (MB)",
   rag_top_k: "Retrieved chunks per query (top-k)",
@@ -65,6 +66,23 @@ function SettingRow({
   let control: React.ReactNode;
   if (setting.type === "bool") {
     control = <Toggle checked={Boolean(current)} onChange={(v) => onChange(v)} />;
+  } else if (setting.type === "str" && setting.choices && setting.choices.length > 0) {
+    // A constrained str setting (e.g. the Ultra Human backend selector) — a dropdown
+    // of exactly the valid values instead of free text, so this can't be typo'd into
+    // an invalid backend name from the admin panel.
+    control = (
+      <select
+        value={String(current)}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${INPUT_CLASS} w-40`}
+      >
+        {setting.choices.map((choice) => (
+          <option key={choice} value={choice}>
+            {choice}
+          </option>
+        ))}
+      </select>
+    );
   } else if (setting.type === "str") {
     control = (
       <input
@@ -102,7 +120,8 @@ function SettingRow({
         <p className="text-[12px] text-zinc-500">
           {setting.description}
           {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
-          {setting.type === "str" && ` · up to ${setting.max} characters`}
+          {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
+          {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-2">

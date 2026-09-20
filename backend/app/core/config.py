@@ -91,27 +91,71 @@ class Settings(BaseSettings):
     # matching what the current (reverted) prompt was originally validated with.
     humanizer_num_candidates: int = 3
 
-    # "Ultra Human" tab -- the real Phase 2 fine-tuned LoRA (Qwen2.5-7B + adapter,
-    # 80% real GPTZero pass rate, see backend/scripts/finetune/STATE.md), served
-    # locally via Ollama. NOT production-hosted yet (that's the still-unstarted
-    # Modal integration) -- only reachable when running against a local Ollama
-    # instance with `humaniser-lora` loaded. In any other environment this stays
-    # unreachable and the endpoint returns a clear "unavailable" error rather than
-    # hanging or crashing; the tab surfaces that gracefully rather than pretending
-    # to work. Long timeout on purpose -- real measured cold starts ran up to ~120s.
+    # "Ultra Human" tab -- switched 2026-09-18 from the Phase-2 7B LoRA to the Phase-2
+    # follow-up 3B LoRA (Qwen2.5-3B + adapter, humaniser-lora-3b-v2), after a real,
+    # documented comparison (not a guess): ~2.3x faster (measured 9.9-10.3 tok/s vs the
+    # 7B's 4.3-4.4 tok/s on this box), 41% the disk/RAM footprint (3.3GB vs 8.1GB q8_0
+    # GGUF), and built on a materially more rigorous pipeline -- fresh 3,000-row corpus,
+    # 4-round strict pre-clean, verified 50/50 OpenAI/Google AI-ify split, two full
+    # training runs (the first caught real overfitting via trainer_state.json, the
+    # second confirmed a clean monotonic eval-loss curve) -- versus the 7B, which never
+    # got retrained on its own post-hoc-cleaned corpus. Detector results across 10 total
+    # samples (6 tools: Quillbot, ZeroGPT, T-Checker/cross-check, humanizeai.pro,
+    # CleverHumanizer, GPTZero) came back 8/10 clean, comparable to or better than the
+    # 7B's original 80% GPTZero-only validation. Fabrication risk (fake bylines/quotes/
+    # dates) is real and roughly equivalent between the two models -- it is NOT solved by
+    # this switch, only mitigated by the model-agnostic entity_check.py guard already
+    # wired into _generate_chunk_checked below, which both models share identically.
+    # Rollback is a one-line revert to "humaniser-lora" if a real production issue shows up.
+    #
+    # NOT production-hosted yet (that's the still-unstarted Modal integration) -- only
+    # reachable when running against a local Ollama instance with the model loaded. In
+    # any other environment this stays unreachable and the endpoint returns a clear
+    # "unavailable" error rather than hanging or crashing; the tab surfaces that
+    # gracefully rather than pretending to work. Long timeout on purpose -- real
+    # measured cold starts on the 7B ran up to ~120s; not yet re-measured on the 3B.
     humanizer_ultra_ollama_url: str = "http://localhost:11434"
-    humanizer_ultra_model: str = "humaniser-lora"
+    humanizer_ultra_model: str = "humaniser-lora-3b-v2"
     humanizer_ultra_timeout_seconds: float = 180.0
     # Ultra-only input ceiling, separate from the shared humanize_max_words (3,000).
-    # 2026-08-13, measured on the live endpoint rather than estimated: generation runs
-    # ~4.3 tok/s and output averages ~2 tokens per input word, i.e. roughly half a second
-    # of wall clock per input word. 600 words is therefore about a 5-minute request --
+    # 2026-08-13, measured on the live endpoint rather than estimated: the 7B ran ~4.3
+    # tok/s and output averaged ~2 tokens per input word, i.e. roughly half a second of
+    # wall clock per input word. 600 words is therefore about a 5-minute request --
     # already the outer edge of what an HTTP call should hold, and the honest limit to
     # advertise. The old code had no Ultra-specific limit at all, so a 936-word input
     # (perfectly legal under humanize_max_words) hit the 180s timeout on every attempt
-    # with no way for the user to succeed. Raise this only alongside a real re-measurement
-    # of throughput on the target hardware -- it is a latency budget, not a quality knob.
+    # with no way for the user to succeed. The 2026-09-18 switch to the 3B (measured
+    # ~2.3x faster) was verified end-to-end at this same 600-word ceiling via the real
+    # generate() code path -- 7 chunks, 2 resamples, 217.4s total, no timeouts, wide
+    # margin -- so this ceiling still holds for the 3B. It has NOT yet been raised to
+    # capture the 3B's speed headroom (see _MEASURED_GEN_TOKENS_PER_SECOND in
+    # humanizer_ultra_service.py, also still on the 7B's conservative rate) -- raise
+    # either only alongside a fresh, real re-measurement, not a guess.
     humanizer_ultra_max_words: int = 600
+
+    # 2026-09-19: the "modal" backend (runtime_settings.humanizer_ultra_backend) --
+    # scripts/finetune/serve_ultra_vllm.py, a Modal + vLLM deployment of the same
+    # run_1789757317 merged model, built for concurrent multi-user traffic (see that
+    # file's docstring for the real researched throughput numbers behind this choice).
+    # Static/env config, not admin-editable, matching humanizer_ultra_ollama_url's
+    # pattern -- these are endpoint/credential values, not tunable knobs. Two auth
+    # layers stack here, both real and verified against Modal's own docs before
+    # building this: Modal's own proxy auth (Modal-Key/Modal-Secret headers) rejects
+    # unauthenticated requests at the edge BEFORE they can trigger a container cold
+    # start or count toward billing; vLLM's own --api-key (Authorization: Bearer)
+    # sits underneath it as a second, cheap check. Empty defaults so a deployment
+    # that never sets these simply can't select "modal" successfully rather than
+    # silently sending blank credentials.
+    humanizer_ultra_modal_url: str = ""
+    humanizer_ultra_modal_key: str = ""
+    humanizer_ultra_modal_secret: str = ""
+    humanizer_ultra_modal_api_key: str = ""
+    # Separate from humanizer_ultra_timeout_seconds (180s, tuned for the local path's
+    # different cold-start profile) -- real, measured 2026-09-19: a cold Modal
+    # container took 92s just to become ready, before any generation starts. 180s
+    # would leave only ~88s for actual output on a cold request, tight for anything
+    # but a single short chunk. 240s leaves real room for cold start + a full chunk.
+    humanizer_ultra_modal_timeout_seconds: float = 240.0
 
     jwt_secret_key: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"

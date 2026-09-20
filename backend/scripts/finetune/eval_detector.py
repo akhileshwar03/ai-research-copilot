@@ -84,16 +84,40 @@ async def run_phase1_pipeline(ai_service: AIService, text: str, style: str) -> s
 
 class PerplexityScorer:
     def __init__(self):
-        logger.info("Loading GPT-2 (reference LM for perplexity/burstiness)...")
+        # 2026-09-17: real benchmark (not assumed) on this exact one-sentence-
+        # at-a-time scoring pattern, 1,255 real corpus sentences: CPU 105.5s
+        # vs MPS 69.2s -- a real 1.52x speedup on this M1 Mac. Modest, not
+        # dramatic, because GPT-2 is tiny and each call is a separate small
+        # forward pass (no batching here), so per-call dispatch overhead eats
+        # into MPS's advantage -- worth using, not worth assuming would be
+        # much larger than it is.
+        self.device = "mps" if torch.backends.mps.is_available() else "cpu"
+        logger.info("Loading GPT-2 (reference LM for perplexity/burstiness) on %s...", self.device)
         self.tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-        self.model = GPT2LMHeadModel.from_pretrained("gpt2")
+        self.model = GPT2LMHeadModel.from_pretrained("gpt2").to(self.device)
         self.model.eval()
 
     def sentence_perplexities(self, text: str) -> list[float]:
+        # 2026-09-16: found the hard way, at scale (row ~1400 of an 8,177-row real
+        # run, not caught by any prior small-sample test) — _SENTENCE_SPLIT only
+        # splits on whitespace immediately after . ! or ?, so a chunk of real
+        # scraped text with no sentence-ending punctuation at all (a wall of text,
+        # a run-on list, code-like content) survives as ONE "sentence" of
+        # arbitrary length. GPT-2's position embedding table is fixed at
+        # self.model.config.n_positions (1024) tokens; one 1727-token "sentence"
+        # crashed here with a bare IndexError deep in the embedding layer,
+        # killing a multi-hour run with no partial output saved. Truncate any
+        # oversized chunk to the model's real limit instead of crashing — this
+        # scorer is a comparative signal (mean/variance across chunks), not a
+        # semantic evaluation, so scoring a truncated prefix of a pathological
+        # chunk is a reasonable degradation, not silent wrong output.
+        max_len = self.model.config.n_positions
         sentences = [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
         perplexities = []
         for sent in sentences:
-            ids = self.tokenizer(sent, return_tensors="pt")["input_ids"]
+            ids = self.tokenizer(sent, return_tensors="pt")["input_ids"].to(self.device)
+            if ids.shape[1] > max_len:
+                ids = ids[:, :max_len]
             if ids.shape[1] < 2:
                 continue
             with torch.no_grad():

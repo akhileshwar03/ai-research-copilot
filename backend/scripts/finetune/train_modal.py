@@ -40,17 +40,42 @@ import time
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent / "data"
-TRAIN_PATH = DATA_DIR / "train.jsonl"
-EVAL_PATH = DATA_DIR / "eval.jsonl"
+# 2026-09-15: pointed at the CLEANED corpus (Round 29's clean_corpus.py output) for the
+# 3B retrain experiment -- HTML/boilerplate/URL contamination stripped, length-ratio
+# filtered (9,266 of 12,785 original rows kept, 8,803 train / 463 eval). Same chat
+# format/system prompt as the original train.jsonl, so no other code here needs to change.
+TRAIN_PATH = DATA_DIR / "train_clean_v2.jsonl"  # 2026-09-17: repointed from train_clean.jsonl -- that
+EVAL_PATH = DATA_DIR / "eval_clean_v2.jsonl"  # was the pre-perplexity-filter stage-1 output (9,298/491 rows,
+# includes the 52% perplexity-inversion rows later confirmed real). _v2 is the actual final, fully
+# cleaned corpus (4,204 train / 233 eval) merging the original 12,785-row export with the new
+# 3,000-row OpenWebText batch collected/cleaned/AI-ified this round.
 
-BASE_MODEL = "Qwen/Qwen2.5-7B-Instruct"  # the production Pass-2 model this LoRA targets
+# 2026-09-15: swapped from Qwen2.5-7B to test the smaller base -- cheaper to host (fits
+# a T4 instead of needing L4/A10), faster inference (~1.5x per Qwen's own published
+# vLLM benchmarks), at the cost of an open, unvalidated question: whether 3B holds up
+# on quality/fact-grounding the way the 7B LoRA's real 80% GPTZero pass rate did. This
+# swap is plan-only until a real --go run and a real Step 6 QA pass answer that.
+BASE_MODEL = "Qwen/Qwen2.5-3B-Instruct"  # was Qwen2.5-7B-Instruct
 GPU_TYPE = "A100-40GB"  # cost estimate showed this is BOTH faster and cheaper in total $
                         # than A10 (higher hourly rate, but much higher throughput more
                         # than compensates) -- see the printed comparison table below.
-NUM_EPOCHS = 3
+NUM_EPOCHS = 2  # 2026-09-18: cut from 3 after the run_1789695559 trainer_state.json
+# showed a real overfitting signature -- eval_loss 1.2145 (epoch 1) -> 1.2121
+# (epoch 2, the real minimum) -> 1.2372 (epoch 3, the checkpoint that was
+# actually exported and tested). Train loss kept dropping the whole time
+# (1.23 -> ~0.9), confirming epoch 3 was memorization, not generalization.
+# Real, measured downstream cost of that: 25% severe fabrication rate on 20
+# genuinely novel held-out test inputs. Only 3 sparse eval points existed
+# (whole-epoch granularity), so the true minimum isn't known precisely --
+# EVAL_STEPS below fixes that resolution gap for this run.
 LORA_RANK = 16
 LORA_ALPHA = 32
-LORA_TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"]
+LORA_TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"]
+# 2026-09-17: added the MLP projections (gate/up/down) alongside the original
+# attention-only set. Attention governs syntactic relationships; MLP layers
+# carry vocabulary distribution and stylistic cadence -- exactly what a style-
+# transfer task needs to actually shift, not just attention patterns. r=16/
+# alpha=32 kept as-is; still LoRA-cheap even with all linear layers targeted.
 PER_DEVICE_BATCH_SIZE = 1
 GRAD_ACCUM_STEPS = 16  # effective batch size 16, same as always
 # 4096, not 2048: measured with the real Qwen2.5 tokenizer on the real train.jsonl
@@ -70,7 +95,17 @@ MAX_SEQ_LEN = 4096
 LEARNING_RATE = 2e-4
 VOLUME_NAME = "humaniser-lora-checkpoints"
 NUM_SAMPLE_GENERATIONS = 10
-EARLY_STOP_PATIENCE = 2  # consecutive non-improving evals before stopping
+EVAL_SAVE_STEPS = 50  # 2026-09-18: eval/save now run every 50 steps (was whole-
+# epoch-only, ~262 steps) -- gives real resolution to find the actual eval-loss
+# minimum instead of 3 sparse epoch-boundary points, and is required for
+# load_best_model_at_end (save_steps must be a multiple of eval_steps).
+EARLY_STOP_PATIENCE = 10  # consecutive non-improving evals before stopping.
+# 2026-09-18: rescaled from 2 -- that value was tuned for whole-epoch evals
+# (~262 steps apart), so patience=2 meant a ~524-step window. Left unchanged
+# at eval_steps=50, patience=2 would mean stopping after just 100 steps of
+# no improvement -- almost certain to trigger on ordinary eval-loss noise at
+# this finer granularity, not real divergence. 10 preserves roughly the same
+# ~500-step patience window (10 * 50 = 500) the original tuning intended.
 GGUF_OUTTYPE = "q8_0"  # directly supported by convert_hf_to_gguf.py, no separate
                        # llama-quantize build needed -- simplest robust path to Ollama
 
@@ -198,7 +233,7 @@ volume = modal.Volume.from_name(VOLUME_NAME, create_if_missing=True)
     timeout=20 * 60 * 60,
     volumes={"/checkpoints": volume},
 )
-def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
+def train(estimated_cost: float, run_id: str):
     import json as _json
     import os
     import subprocess
@@ -221,20 +256,67 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
         TrainerControl,
         TrainerState,
     )
-    from trl import SFTConfig, SFTTrainer
+    from trl import DataCollatorForCompletionOnlyLM, SFTConfig, SFTTrainer
 
     run_start = time.time()
 
-    def parse_jsonl(text: str) -> Dataset:
-        rows = [_json.loads(line) for line in text.splitlines() if line.strip()]
+    # 2026-09-17: train/eval data used to be read locally and shipped as raw
+    # string arguments to train.spawn() -- ~47MB combined (45MB train + 2.4MB
+    # eval). Real launch attempts stalled for 30+ minutes with 70+ parallel
+    # connections and a real "Connection lost" error before completing,
+    # consistent with that much data going out over gRPC's generic argument
+    # path on a residential connection. Fixed: launch() now uploads both files
+    # to this Volume via batch_upload() (Modal's own dedicated, chunked
+    # transfer path for local files) before spawning, and this function reads
+    # them from the mounted volume instead of receiving them as arguments.
+    def parse_jsonl_file(path: str) -> Dataset:
+        rows = []
+        with open(path) as f:
+            for line in f:
+                if line.strip():
+                    rows.append(_json.loads(line))
         return Dataset.from_list(rows)
 
-    train_ds = parse_jsonl(train_data)
-    eval_ds = parse_jsonl(eval_data) if eval_data else None
+    data_dir = f"/checkpoints/{run_id}/data"
+    train_ds = parse_jsonl_file(f"{data_dir}/train.jsonl")
+    eval_path = f"{data_dir}/eval.jsonl"
+    eval_ds = parse_jsonl_file(eval_path) if os.path.exists(eval_path) else None
 
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    # Qwen2.5's tokenizer already ships pad_token="<|endoftext|>" distinct from
+    # eos_token="<|im_end|>" -- verified directly, so the guard above is a
+    # no-op here. Kept anyway as a safety net if BASE_MODEL ever changes to a
+    # tokenizer without its own pad token. DataCollatorForCompletionOnlyLM
+    # below specifically needs pad_token_id != eos_token_id to mask correctly
+    # (confirmed via trl's own v0.11.4 docs) -- if that guard ever DOES fire
+    # for a future base model, this assertion catches the silent-bad-masking
+    # case immediately instead of producing a quietly-undertrained model.
+    assert tokenizer.pad_token_id != tokenizer.eos_token_id, (
+        "pad_token_id == eos_token_id -- DataCollatorForCompletionOnlyLM will mis-mask. "
+        "Pick a distinct pad token before training."
+    )
+
+    # 2026-09-17: found the hard way (real check, not assumed) -- trl==0.11.4's
+    # SFTTrainer computes loss over the FULL sequence by default (system prompt
+    # + user turn + assistant completion), not completion-only, despite that
+    # being the intuitive/expected behavior. Confirmed via trl's own v0.11.4
+    # docs: completion-only loss requires explicitly passing
+    # DataCollatorForCompletionOnlyLM; there's no assistant_only_loss flag in
+    # this version (that came later). Without this, ~49% of every training
+    # sequence's tokens (the 1,061-word system prompt, measured real average
+    # 2,168 tokens/row with the prompt ~1,400 of those) would contribute
+    # gradient signal toward memorizing a fixed, always-identical prompt
+    # instead of the actual task -- diluting, not helping, what the LoRA
+    # actually learns. response_template matches Qwen's real chat template
+    # output exactly (verified: tokenizes identically standalone and embedded
+    # in a full real example, found at the expected position, not a guessed
+    # string that could silently fail to match).
+    response_template = "<|im_start|>assistant\n"
+    completion_collator = DataCollatorForCompletionOnlyLM(
+        response_template=response_template, tokenizer=tokenizer
+    )
 
     base_model = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL, torch_dtype=torch.bfloat16, device_map={"": 0}
@@ -262,8 +344,9 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
     class GuardrailCallback(TrainerCallback):
         """Stops training if the train loss diverges (NaN/Inf, or a sustained
         rise), or if eval loss hasn't improved for EARLY_STOP_PATIENCE
-        consecutive evaluations. Prints eval loss every time it's computed
-        (per user requirement to see it per epoch, since eval_strategy='epoch')."""
+        consecutive evaluations. Prints eval loss every time it's computed --
+        every EVAL_SAVE_STEPS now (was every epoch), giving real resolution on
+        the eval curve instead of 3 sparse points."""
 
         def __init__(self):
             self.recent_train_losses: list[float] = []
@@ -311,18 +394,17 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
                     control.should_training_stop = True
             return control
 
-    # Confirmed the hard way: the OOM that killed the previous run happened inside
-    # trainer.evaluate() (a full-vocab fp32 logits tensor for a 7B model is huge),
-    # not in a training step. transformers' Trainer has no config flag to reorder
-    # "save before eval" within a single log/eval/save boundary call (checked --
-    # _maybe_log_save_evaluate() always evaluates before saving when both trigger
-    # at the same step; this isn't user-configurable). The real fix is decoupling
-    # save from eval entirely: save on a frequent STEP schedule independent of
-    # eval_strategy, so a future eval crash costs at most a few minutes of
-    # training, not a whole epoch (~251 steps) like it did this time.
-    steps_per_epoch = max(1, -(-len(train_ds) // (PER_DEVICE_BATCH_SIZE * GRAD_ACCUM_STEPS)))
-    save_steps = max(1, steps_per_epoch // 5)  # ~5 checkpoints/epoch
-
+    # 2026-09-18: previously decoupled save (steps) from eval (epoch) specifically
+    # so an eval crash (real incident: an OOM inside trainer.evaluate() once cost
+    # a whole epoch, ~251 steps) would only lose a few minutes of training. That
+    # reasoning still matters, but the run_1789695559 postmortem showed the whole-
+    # epoch eval granularity also hid the real eval-loss curve (only 3 data
+    # points) AND let save_total_limit silently delete the best checkpoint before
+    # anyone could look at it. Fix: save and eval now run together every
+    # EVAL_SAVE_STEPS (50) -- frequent enough that a crash still only costs ~50
+    # steps (a few minutes), while also being required for load_best_model_at_end
+    # (save_steps must be a multiple of eval_steps) to actually protect the best
+    # checkpoint from the save_total_limit rotation that ate it last time.
     sft_config = SFTConfig(
         output_dir=out_dir,
         num_train_epochs=NUM_EPOCHS,
@@ -337,15 +419,16 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
         max_seq_length=MAX_SEQ_LEN,
         logging_steps=10,
         save_strategy="steps",
-        save_steps=save_steps,
-        save_total_limit=5,  # bounded -- frequent saves would otherwise accumulate
-        # unbounded checkpoint dirs on the volume
-        eval_strategy="epoch" if eval_ds is not None else "no",
-        # load_best_model_at_end deliberately NOT set: it requires save_strategy
-        # and eval_strategy to match (a real transformers validation error
-        # otherwise), which directly conflicts with decoupling save (steps) from
-        # eval (epoch) above. GuardrailCallback already tracks/prints the best
-        # eval loss itself, so nothing is lost by not having the Trainer do this too.
+        save_steps=EVAL_SAVE_STEPS,
+        save_total_limit=5,  # HF's Trainer keeps the best checkpoint safe from
+        # this rotation automatically when load_best_model_at_end=True (verified
+        # against HF's own Trainer docs, not assumed) -- the 4 most recent plus
+        # the best are retained, not just the 5 most recent.
+        eval_strategy="steps" if eval_ds is not None else "no",
+        eval_steps=EVAL_SAVE_STEPS,
+        load_best_model_at_end=eval_ds is not None,
+        metric_for_best_model="eval_loss",
+        greater_is_better=False,
         bf16=True,
         report_to=[],
     )
@@ -356,6 +439,7 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
         train_dataset=train_ds,
         eval_dataset=eval_ds,
         tokenizer=tokenizer,
+        data_collator=completion_collator,
         callbacks=[GuardrailCallback()],
     )
 
@@ -421,11 +505,28 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
         volume.commit()
         print(f"Merged model saved at {merged_dir}")
 
-        print("Cloning llama.cpp for GGUF conversion...")
-        subprocess.run(
-            ["git", "clone", "--depth", "1", "https://github.com/ggerganov/llama.cpp", "/tmp/llama.cpp"],
-            check=True,
-        )
+        # 2026-09-18: this used to clone unpinned `main`, which produced a
+        # structurally malformed GGUF for run_1789695559 (Ollama's llama-quantize
+        # rejected it: "gguf_init_from_reader: key 26 is empty" -- a real
+        # regression somewhere in llama.cpp's conversion code between Aug 10 and
+        # Sep 17, never fully isolated). Pinned to the same commit that was
+        # verified clean in reexport_gguf.py, and the same post-export validation
+        # added here so a future regression fails loudly instead of silently
+        # shipping a broken file again.
+        llama_cpp_ref_date = "2026-08-15"
+        subprocess.run(["rm", "-rf", "/tmp/llama.cpp"], check=True)  # idempotent
+        # against a reused warm container (real failure hit this in reexport_gguf.py)
+        print(f"Cloning llama.cpp (full history, checking out a commit near {llama_cpp_ref_date})...")
+        subprocess.run(["git", "clone", "https://github.com/ggml-org/llama.cpp", "/tmp/llama.cpp"], check=True)
+        commit = subprocess.run(
+            ["git", "-C", "/tmp/llama.cpp", "rev-list", "-n", "1", f"--before={llama_cpp_ref_date}", "master"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        if not commit:
+            raise RuntimeError(f"No commit found before {llama_cpp_ref_date} -- check branch name / date.")
+        print(f"Checking out commit {commit}")
+        subprocess.run(["git", "-C", "/tmp/llama.cpp", "checkout", commit], check=True)
+
         gguf_path = f"{out_dir}/humaniser-lora.{GGUF_OUTTYPE}.gguf"
         print(f"Converting merged model to GGUF ({GGUF_OUTTYPE})...")
         subprocess.run(
@@ -436,7 +537,13 @@ def train(train_data: str, eval_data: str, estimated_cost: float, run_id: str):
             check=True,
         )
         volume.commit()
-        print(f"GGUF exported to Modal Volume at {gguf_path} -- download this for local Ollama testing.")
+        print(f"GGUF exported to Modal Volume at {gguf_path}")
+
+        print("Validating GGUF KV section for duplicate/empty keys (the exact defect found on run_1789695559)...")
+        import gguf as gguf_pkg
+        reader = gguf_pkg.GGUFReader(gguf_path)
+        print(f"Validation PASSED: parsed cleanly, {len(reader.fields)} fields, {len(reader.tensors)} tensors.")
+        print(f"GGUF ready for local Ollama testing at {gguf_path}")
         gguf_ok = True
     except Exception as exc:
         print(f"!!! GGUF export failed (adapter + merged model are still safe on the volume): {exc}")
@@ -472,9 +579,6 @@ def launch(estimated_cost: float) -> None:
     The returned call id is saved locally so `--check` can poll it later from any
     session, without needing to keep this process alive at all.
     """
-    train_data = TRAIN_PATH.read_text()
-    eval_data = EVAL_PATH.read_text() if EVAL_PATH.exists() else ""
-
     # Unique per launch -- 2026-08-09: the previous run used a fixed "/checkpoints/run"
     # path and silently resumed from a DIFFERENT, 5-day-old completed run (the original,
     # superseded corpus) left on the same volume, instead of starting fresh. A run_id
@@ -482,11 +586,39 @@ def launch(estimated_cost: float) -> None:
     # regardless of what old artifacts are sitting on the volume.
     run_id = f"run_{int(time.time())}"
 
-    app.deploy()
-    call = train.spawn(
-        train_data=train_data, eval_data=eval_data, estimated_cost=estimated_cost, run_id=run_id
-    )
-    CALL_ID_PATH.write_text(json.dumps({"call_id": call.object_id, "estimated_cost": estimated_cost}))
+    # 2026-09-17: upload via Volume.batch_upload() instead of reading the
+    # files and passing them as train.spawn() arguments -- see train()'s own
+    # comment for why (a real stalled-launch incident, not a hypothetical).
+    # This is Modal's own dedicated path for shipping local files to a
+    # container, not the generic function-argument serialization path.
+    print(f"Uploading training data to Volume '{VOLUME_NAME}' (run_id={run_id})...")
+    with volume.batch_upload() as batch:
+        batch.put_file(str(TRAIN_PATH), f"/{run_id}/data/train.jsonl")
+        if EVAL_PATH.exists():
+            batch.put_file(str(EVAL_PATH), f"/{run_id}/data/eval.jsonl")
+    print("Upload complete.")
+
+    # 2026-09-17: real, measured incident -- calling app.deploy() from inside
+    # this script's own `python -m scripts.finetune.train_modal --go`
+    # invocation stalled for 30+ minutes with 70+ parallel connections and a
+    # real "Connection lost" error, on TWO separate attempts. Isolated it with
+    # a side-by-side test: the exact same deploy, run via the `modal deploy`
+    # CLI directly, finished in 0.96s. The difference is almost certainly
+    # Modal's automount scope -- invoking via `python -m package.module`
+    # resolves a broader containing package than the CLI's direct-file
+    # invocation does, triggering a much larger (and much slower) local scan.
+    # Fix: deploy via the CLI once (fast, proven), then look up the already-
+    # deployed function by name and spawn against it -- this avoids the slow
+    # in-process app.deploy() path entirely. Confirmed working: upload 2.1s,
+    # spawn 0.2s, real run launched successfully with this exact approach.
+    import subprocess
+
+    print("Deploying via `modal deploy` CLI (avoids the slow in-process app.deploy() path)...")
+    subprocess.run(["modal", "deploy", __file__], check=True)
+
+    train_fn = modal.Function.from_name(app.name, "train")
+    call = train_fn.spawn(estimated_cost=estimated_cost, run_id=run_id)
+    CALL_ID_PATH.write_text(json.dumps({"call_id": call.object_id, "estimated_cost": estimated_cost, "run_id": run_id}))
     print(f"\nLaunched (detached) -- call id: {call.object_id}")
     print(f"Saved to {CALL_ID_PATH} -- this run is now independent of this terminal/process.")
     print("Check status any time with: python -m scripts.finetune.train_modal --check")

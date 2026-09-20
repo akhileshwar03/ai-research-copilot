@@ -42,7 +42,17 @@ MAX_WORDS = 1200
 # specifically to test that cheaply before committing to a much larger
 # rebuild. Held at 24,000 in round 7 despite dropping billsum/wikipedia --
 # openwebtext's target was raised to cover the gap (see SOURCES below).
-TARGET_TOTAL = 24000
+#
+# 2026-09-16: raised 24000 -> 27000 for the 3B-retrain corpus-expansion round.
+# The DB was already sitting exactly at the old 24,000 ceiling (confirmed via
+# direct query), so nothing would collect without raising this. +3,000 is a
+# deliberately modest first test batch, not the full amount this round wants
+# — the existing 11,043 already-tagged-but-unused openwebtext rows came back
+# 0.018% `normal` style (2 rows), a real, unexplained, much lower yield than
+# the ~50% rate that produced the 8,225 `normal` rows already in the trained
+# corpus. Pulling a moderate batch first and checking the REAL resulting
+# style split before committing to a larger (paid AI-ify) pull.
+TARGET_TOTAL = 27000
 
 # PER-SOURCE HARD CAP, enforced downstream at export time (not here -- this
 # script is additive/resumable). Originally existed to stop one source
@@ -56,7 +66,12 @@ TARGET_TOTAL = 24000
 # ceiling (~4,831) openwebtext doesn't share. Raised to 20,000 so it isn't
 # the thing capping openwebtext's growth; the real ceiling is `target_rows`
 # per source now, not this.
-SOURCE_CAP = 20000
+#
+# 2026-09-16: raised 20000 -> 23000, matching the TARGET_TOTAL bump above —
+# openwebtext was already at 19,268 rows (exported + tagged), within 732 of
+# this cap, which would have silently throttled the new pull almost
+# immediately otherwise.
+SOURCE_CAP = 23000
 
 # Each entry: HF dataset id, license, which fields carry the text/label, and
 # how many qualifying rows to pull from it this run.
@@ -212,13 +227,21 @@ SOURCES = [
         # carry the corpus's volume alone now that billsum/wikipedia are
         # gone -- this dataset has ~8M documents, far more headroom than
         # hackernews' hard pre-2018/150-word ceiling.
+        #
+        # 2026-09-16: raised 19,000 -> 22,000 for the 3B corpus-expansion
+        # round -- a moderate ~3,000-row test pull, not the full amount this
+        # round eventually wants, specifically because the existing unused
+        # tagged pool from earlier collection came back only 0.018% `normal`
+        # style, a real, unexplained mismatch with the ~50% rate that
+        # produced this corpus's actual `normal` rows. Check the real style
+        # split on this batch before raising further or spending on AI-ify.
         "id": "Skylion007/openwebtext",
         "license": "cc0-1.0",
         "text_field": "text",
         "label_field": None,
         "human_value": None,
         "row_filter": lambda row: not is_web_chrome_pattern(row.get("text", "") or ""),
-        "target_rows": 19000,
+        "target_rows": 22000,
         "load_kwargs": {"trust_remote_code": True},
     },
 ]

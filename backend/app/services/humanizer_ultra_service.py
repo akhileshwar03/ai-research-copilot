@@ -26,13 +26,16 @@ import asyncio
 import html
 import logging
 import re
+import time
 
 import httpx
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.services.humanizer import chunking
+from app.services.humanizer.entity_check import check_entity_invariant, strip_fabricated_lines, strip_junk_furniture
 from app.services.humanizer.examples import format_examples
+from app.services.runtime_settings import runtime_settings
 from app.services.humanizer.prompts import (
     BASE_PROMPT,
     DEFAULT_STYLE,
@@ -171,7 +174,15 @@ ULTRA_CHUNK_TARGET_WORDS = 100
 # So the ceiling is now DERIVED from the timeout instead of guessed independently. Whatever
 # humanizer_ultra_timeout_seconds is set to, a single request can never be allowed to ask
 # for more tokens than that timeout can actually deliver.
-_MEASURED_GEN_TOKENS_PER_SECOND = 4.3
+#
+# 2026-09-18: updated for the 7B -> 3B (humaniser-lora-3b-v2) switch -- measured directly
+# against the live Ollama endpoint (3 trials: 9.89, 10.31, 9.97 tok/s), not estimated.
+# Left on the old 4.3 value this constant would just throttle the faster model down to the
+# 7B's conservative token ceiling instead of letting it use its real headroom -- verified
+# this was happening (every chunk capped at num_predict=464) during the 600-word boundary
+# test run before this fix. Kept intentionally conservative (10.0, not the measured ~10.1
+# average) for the same margin-of-safety reasoning as the original 4.3 figure.
+_MEASURED_GEN_TOKENS_PER_SECOND = 10.0
 # Fraction of the timeout generation may consume; the rest absorbs prompt eval (~2-4s),
 # model load on a cold start (measured: a cold run took 113.6s vs 78.2s warm for the same
 # input), and ordinary variance.
@@ -185,15 +196,29 @@ _MIN_NUM_PREDICT = 512
 _MAX_NUM_PREDICT = 2048
 
 
-def _num_predict_for(chunk: str, timeout_seconds: float) -> int:
+def _num_predict_for(
+    chunk: str, timeout_seconds: float, tokens_per_second: float = _MEASURED_GEN_TOKENS_PER_SECOND
+) -> int:
     """Token allowance for one chunk: enough for the expected rewrite, but never more
-    than the per-request timeout can physically generate."""
-    budget_ceiling = max(256, int(timeout_seconds * _MEASURED_GEN_TOKENS_PER_SECOND * _TIMEOUT_UTILISATION))
+    than the per-request timeout can physically generate. `tokens_per_second` defaults
+    to the local (Ollama) rate; the Modal path passes its own real measured rate --
+    the two backends run on different hardware/serving stacks and sizing one path off
+    the other's rate would either throttle Modal needlessly or risk timing out local."""
+    budget_ceiling = max(256, int(timeout_seconds * tokens_per_second * _TIMEOUT_UTILISATION))
     wanted = chunking.word_count(chunk) * _TOKENS_PER_WORD_HEADROOM + 200
     wanted = max(_MIN_NUM_PREDICT, min(_MAX_NUM_PREDICT, wanted))
     # The time budget wins over the length estimate, always -- a truncated chunk is a bad
     # outcome, but a timeout loses the entire run and can't be retried into success.
     return min(wanted, budget_ceiling)
+
+
+# 2026-09-19: single real measurement (warm request, L4 GPU, vLLM, this exact model) --
+# 88 completion tokens in 2.7s = ~32.6 tok/s. Used at a conservative 25 tok/s here since
+# this is one data point under zero concurrent load, not a proper benchmark, and per-
+# request throughput will drop somewhat once multiple users are actually hitting the
+# same container (that's the real concurrency test still to be run before trusting this
+# further). Re-measure under real concurrent load and update this once that's done.
+_MODAL_MEASURED_GEN_TOKENS_PER_SECOND = 25.0
 
 
 # 2026-08-13: the LoRA intermittently abandons rewriting and starts WRITING A NEW ARTICLE.
@@ -212,11 +237,27 @@ def _num_predict_for(chunk: str, timeout_seconds: float) -> int:
 # bad one 3.6x -- so a ratio test separates them cleanly, and one resample usually lands
 # back in the good mode.
 _MAX_EXPANSION_RATIO = 2.5
-_MAX_EXPANSION_RESAMPLES = 2  # bounds the added latency; a resample costs a full chunk round trip
+# Bumped 2 -> 4 (2026-09-20): combined_validation_v3/v4/v5 runs all showed the same failure
+# shape -- a chunk fails entity_clean on every one of its 2 resample attempts and ships with
+# the fabrication intact. Real cases that exhausted the old budget and shipped anyway:
+# "By Andrew Ziegler", "Los Angeles Planning Commissioner Kevin LaBranche", and
+# "Amanda Kelsey Pause". Doubling the budget costs at most 2 more chunk round trips in the
+# worst case (still bounded, still per-chunk not per-document).
+_MAX_EXPANSION_RESAMPLES = 4  # bounds the added latency; a resample costs a full chunk round trip
 
 
 class HumanizerUltraService:
     async def _generate_chunk(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
+        """Dispatches to whichever backend runtime_settings.humanizer_ultra_backend
+        currently selects. The "off" case is checked once up front in generate(), not
+        here -- by the time this runs, the backend is guaranteed to be "local" or
+        "modal"."""
+        backend = runtime_settings.get("humanizer_ultra_backend")
+        if backend == "modal":
+            return await self._generate_chunk_modal(client, settings, system, chunk)
+        return await self._generate_chunk_local(client, settings, system, chunk)
+
+    async def _generate_chunk_local(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
         resp = await client.post(
             f"{settings.humanizer_ultra_ollama_url}/api/chat",
             json={
@@ -242,13 +283,95 @@ class HumanizerUltraService:
         content = _strip_html_artifacts(data.get("message", {}).get("content", ""))
         return _strip_scraped_credit_lines(content, chunk).strip()
 
+    async def _generate_chunk_modal(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
+        """scripts/finetune/serve_ultra_vllm.py, the Modal + vLLM deployment -- built
+        for concurrent multi-user traffic (real researched numbers: ~10-20x Ollama's
+        throughput under concurrent load), unlike the single-user local/Ollama path.
+
+        Two real, verified auth layers (2026-09-19, checked against Modal's own docs
+        before building this, not assumed): Modal's own proxy auth (Modal-Key/
+        Modal-Secret headers) rejects an unauthenticated request at the edge before it
+        can trigger a container cold start or count toward billing; vLLM's own
+        --api-key (Authorization: Bearer) sits underneath as a second, cheap check.
+
+        Sampling params (temperature/top_p/repetition_penalty) must be sent explicitly
+        -- a real bug caught while building this: without them, vLLM's own defaults
+        produced an output that was nearly a verbatim echo of the input, not a genuine
+        rewrite. Values match the ones already proven in the local Ollama Modelfile
+        (temperature 1.0, top_p 0.95, repeat_penalty 1.15), sent here as
+        repetition_penalty -- vLLM's OpenAI-compatible name for the same parameter.
+
+        A 503 here is not a failure -- per Modal's own docs, "no upstreams available"
+        on a cold container is the documented signal that a cold start was just
+        triggered, and the client is expected to retry. Real measured cold start for
+        this exact deployment (2026-09-19): 92s. Retries with a short, fixed backoff
+        until humanizer_ultra_modal_timeout_seconds is exhausted, rather than failing
+        on the very first attempt the way a real error would."""
+        deadline = time.monotonic() + settings.humanizer_ultra_modal_timeout_seconds
+        headers = {
+            "Modal-Key": settings.humanizer_ultra_modal_key,
+            "Modal-Secret": settings.humanizer_ultra_modal_secret,
+            "Authorization": f"Bearer {settings.humanizer_ultra_modal_api_key}",
+        }
+        payload = {
+            "model": "humaniser-lora-3b",
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": chunk},
+            ],
+            "max_tokens": _num_predict_for(
+                chunk, settings.humanizer_ultra_modal_timeout_seconds, _MODAL_MEASURED_GEN_TOKENS_PER_SECOND
+            ),
+            "temperature": 1.0,
+            "top_p": 0.95,
+            "repetition_penalty": 1.15,
+        }
+        resp = await client.post(f"{settings.humanizer_ultra_modal_url}/v1/chat/completions", headers=headers, json=payload)
+        while resp.status_code == 503 and time.monotonic() < deadline:
+            logger.info("humanizer_ultra_modal_cold_start_wait")
+            await asyncio.sleep(5)
+            resp = await client.post(f"{settings.humanizer_ultra_modal_url}/v1/chat/completions", headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        choices = data.get("choices") or []
+        content = choices[0].get("message", {}).get("content", "") if choices else ""
+        if not content:
+            raise AppError(
+                code="ULTRA_ERROR",
+                message="Ultra Human mode failed to generate a response.",
+                status_code=502,
+            )
+        content = _strip_html_artifacts(content)
+        return _strip_scraped_credit_lines(content, chunk).strip()
+
     async def _generate_chunk_checked(
         self, client: httpx.AsyncClient, settings, system: str, chunk: str, expand: bool, budget: list[int]
     ) -> str:
-        """One chunk, with a length-fidelity check. On expand=False a rewrite that balloons
-        past _MAX_EXPANSION_RATIO isn't a rewrite any more, so resample once (if the shared
-        budget allows) and keep whichever attempt lands closest to the source length."""
+        """One chunk, with a length-fidelity check and an entity/citation-invariant check.
+        On expand=False a rewrite that balloons past _MAX_EXPANSION_RATIO isn't a rewrite
+        any more, so resample once (if the shared budget allows) and keep whichever attempt
+        lands closest to the source length. The two checks catch different failure shapes,
+        confirmed empirically while validating the 3B follow-up LoRA (see
+        app/services/humanizer/entity_check.py): expansion ratio and fabricated content are
+        correlated but not the same signal -- a fabricated quote or byline can fit inside a
+        modest, otherwise-unremarkable length increase that the ratio check alone would pass.
+        Both checks share one resample budget so a pathological chunk can't cost more than
+        _MAX_EXPANSION_RESAMPLES round trips total, same as before this check was added."""
         best = await self._generate_chunk(client, settings, system, chunk)
+
+        # 2026-09-19: unconditional and independent of every other check here --
+        # scraped website furniture ("Tags: Library", "Comments ()", a full blog
+        # comment-form footer) asserts no fact at all, so check_entity_invariant
+        # never sees anything to flag, and it's not a length problem either. Runs
+        # before the expand short-circuit below since this junk is never
+        # legitimate output in ANY mode, not just the strict rewrite path.
+        furniture_stripped = strip_junk_furniture(best)
+        if furniture_stripped["removed_lines"]:
+            logger.warning(
+                "humanizer_ultra_junk_furniture_stripped removed=%r", furniture_stripped["removed_lines"]
+            )
+            best = furniture_stripped["output"]
+
         if expand:
             return best  # elaboration is the explicitly requested behaviour here
 
@@ -266,10 +389,49 @@ class HumanizerUltraService:
             candidate = await self._generate_chunk(client, settings, system, chunk)
             if abs(chunking.word_count(candidate) - source_words) < abs(chunking.word_count(best) - source_words):
                 best = candidate
+
+        if check_entity_invariant(chunk, best)["violation"]:
+            # 2026-09-19: try a free, instant fix before spending any resample budget --
+            # real fabrications caught this session (a byline, a photo credit) showed up
+            # as their OWN standalone line, structurally separate from the rest of the
+            # output. Deleting a whole line shaped like a removable tag costs nothing and
+            # is guaranteed, unlike a resample, which costs a full extra generation round
+            # trip and can still exhaust its budget without finding a clean candidate
+            # (confirmed in real testing: a fabricated byline survived all 3 attempts on
+            # one real input). Deliberately narrow -- see strip_fabricated_lines's own
+            # docstring and _is_removable_line_shape for exactly which lines qualify;
+            # anything woven into an ordinary sentence is left untouched and still falls
+            # through to the resample loop below.
+            stripped = strip_fabricated_lines(chunk, best)
+            if stripped["removed_lines"]:
+                logger.warning(
+                    "humanizer_ultra_fabrication_line_stripped removed=%r", stripped["removed_lines"]
+                )
+                best = stripped["output"]
+
+        while check_entity_invariant(chunk, best)["violation"] and budget[0] > 0:
+            budget[0] -= 1
+            new_entities = check_entity_invariant(chunk, best)["new_entities"]
+            logger.warning(
+                "humanizer_ultra_entity_fabrication new_entities=%r; resampling",
+                new_entities,
+            )
+            candidate = await self._generate_chunk(client, settings, system, chunk)
+            if not check_entity_invariant(chunk, candidate)["violation"]:
+                best = candidate  # prefer a clean candidate outright
+            elif len(check_entity_invariant(chunk, candidate)["new_entities"]) < len(new_entities):
+                best = candidate  # otherwise take whichever fabricates less
         return best
 
     async def generate(self, text: str, style: str = "normal", expand: bool = False) -> str:
         settings = get_settings()
+        backend = runtime_settings.get("humanizer_ultra_backend")
+        if backend == "off":
+            raise AppError(
+                code="ULTRA_DISABLED",
+                message="Ultra Human mode is temporarily unavailable. Please try again later, or use the Basic tab.",
+                status_code=503,
+            )
         system = _build_system_prompt(style, expand)
 
         # Ultra's real ceiling is wall clock, not the shared humanize_max_words limit.
@@ -283,9 +445,9 @@ class HumanizerUltraService:
                 code="ULTRA_TEXT_TOO_LONG",
                 message=(
                     f"Ultra Human mode handles up to {max_words:,} words at a time (this is "
-                    f"{words:,}). It runs a full 7B model locally rather than a hosted API, so "
-                    "longer passages take more time than a single request can reasonably hold — "
-                    "split the text and run it in parts, or use the Basic tab for the whole piece."
+                    f"{words:,}). It runs a dedicated fine-tuned model rather than a general-purpose "
+                    "hosted API, so longer passages take more time than a single request can reasonably "
+                    "hold — split the text and run it in parts, or use the Basic tab for the whole piece."
                 ),
                 status_code=413,
             )
@@ -300,12 +462,22 @@ class HumanizerUltraService:
             else [(text, "")]
         )
 
+        # The two backends have different cold-start profiles (local Ollama's
+        # measured ~113s cold vs Modal's measured ~92s cold, plus Modal's own
+        # in-request retry loop above needs the surrounding client timeout to
+        # actually outlast it), so each gets its own configured timeout rather
+        # than sharing one value tuned for only one of them.
+        client_timeout = (
+            settings.humanizer_ultra_modal_timeout_seconds
+            if backend == "modal"
+            else settings.humanizer_ultra_timeout_seconds
+        )
         outputs: list[tuple[str, str]] = []
         # Shared across chunks (mutable so _generate_chunk_checked can decrement it) so one
         # pathological input can't turn a 6-chunk request into 18 round trips.
         resample_budget = [_MAX_EXPANSION_RESAMPLES]
         try:
-            async with httpx.AsyncClient(timeout=settings.humanizer_ultra_timeout_seconds) as client:
+            async with httpx.AsyncClient(timeout=client_timeout) as client:
                 for chunk, separator in chunks:
                     text_out = await self._generate_chunk_checked(
                         client, settings, system, chunk, expand, resample_budget
@@ -313,12 +485,10 @@ class HumanizerUltraService:
                     outputs.append((text_out, separator))
         except httpx.ConnectError as exc:
             logger.warning("humanizer_ultra_unreachable: %s", exc)
+            where = "the locally-hosted fine-tuned model" if backend == "local" else "the hosted fine-tuned model"
             raise AppError(
                 code="ULTRA_UNAVAILABLE",
-                message=(
-                    "Ultra Human mode isn't available right now — it runs on the locally-hosted "
-                    "fine-tuned model, which isn't reachable in this environment."
-                ),
+                message=f"Ultra Human mode isn't available right now — it runs on {where}, which isn't reachable in this environment.",
                 status_code=503,
             ) from exc
         except httpx.TimeoutException as exc:

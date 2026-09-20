@@ -324,7 +324,16 @@ def main() -> None:
         # this resume branch never explicitly reset it the way the "just
         # decided to fall back" branch below does. A resumed run would have
         # silently run 5x slower than intended. Set explicitly here too.
-        global NANO_CONCURRENCY
+        #
+        # 2026-09-16: removed a duplicate `global NANO_CONCURRENCY` that used
+        # to sit on the line above this comment — a second `global` statement
+        # for a name already made global earlier in the same function is a
+        # real Python SyntaxError ("assigned to before global declaration"),
+        # not just redundant, and it broke every import of this module
+        # outright (caught trying to actually run it, not by inspection).
+        # The declaration at the top of the groq_key branch above already
+        # covers the whole function, exactly as this file's own later
+        # comment (search "already makes NANO_CONCURRENCY global") says.
         NANO_CONCURRENCY = FALLBACK_CONCURRENCY
         logger.info(
             "Resuming an in-progress nano fallback (%d rows already done), concurrency=%d.",

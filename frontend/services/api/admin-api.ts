@@ -155,6 +155,7 @@ export interface AdminSetting {
   category: string;
   category_label: string;
   description: string;
+  choices: string[] | null;
 }
 
 export interface AuditEntry {
