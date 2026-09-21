@@ -3,6 +3,12 @@ import Link from "next/link";
 import { NavProfileMenu } from "@/features/auth/components/nav-profile-menu";
 import { GithubNavLink } from "@/features/landing/github-nav-link";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
+import {
+  AICheckerDemoWidget,
+  HumanizerDemoWidget,
+  PaperAnalyzerDemoWidget,
+  RealtimeDemoWidget,
+} from "@/features/landing/product-demo-widgets";
 import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
@@ -409,57 +415,7 @@ export default function LandingPage() {
           </Reveal>
 
           <Reveal delay={120}>
-            <div className="relative mx-auto w-full max-w-[440px]">
-              <div
-                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
-                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[1].glow}, transparent 70%)` }}
-                aria-hidden
-              />
-              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
-                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                  </div>
-                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Humanizer</span>
-                  <span
-                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
-                    style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}
-                  >
-                    Natural
-                  </span>
-                </div>
-                <div className="px-4 py-5">
-                  <p className="text-[11.5px] font-medium uppercase tracking-wide text-zinc-400">Rewritten</p>
-                  <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-700">
-                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
-                      Artificial
-                    </mark>{" "}
-                    intelligence systems have revolutionized numerous industries.{" "}
-                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
-                      They
-                    </mark>{" "}
-                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
-                      also
-                    </mark>{" "}
-                    <mark className="rounded px-0.5" style={{ backgroundColor: PRODUCTS[1].accentSoft, color: PRODUCTS[1].accentText }}>
-                      deliver
-                    </mark>{" "}
-                    significant efficiency gains.
-                  </p>
-                  <div className="mt-4 flex items-center justify-between border-t border-black/[0.05] pt-3">
-                    <span className="text-[11px] text-zinc-400">22 → 13 words</span>
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10.5px] font-semibold text-emerald-600 ring-1 ring-emerald-500/15">
-                      <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      Predicted AI score: 3%
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <HumanizerDemoWidget />
           </Reveal>
         </div>
       </section>
@@ -473,57 +429,7 @@ export default function LandingPage() {
         />
         <div className="grid items-center gap-12 md:grid-cols-2">
           <Reveal className="order-2 md:order-1">
-            <div className="relative mx-auto w-full max-w-[440px]">
-              <div
-                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
-                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[2].glow}, transparent 70%)` }}
-                aria-hidden
-              />
-              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
-                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                  </div>
-                  <span className="ml-1 text-[11px] font-medium text-zinc-500">AI Checker</span>
-                  <span
-                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
-                    style={{ backgroundColor: PRODUCTS[2].accentSoft, color: PRODUCTS[2].accentText }}
-                  >
-                    Advanced Scan
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-3 px-4 py-6">
-                  <svg viewBox="0 0 100 100" className="h-24 w-24 -rotate-90">
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="9" />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke="#e0574f"
-                      strokeWidth="9"
-                      strokeLinecap="round"
-                      strokeDasharray={`${2 * Math.PI * 42 * 0.94} ${2 * Math.PI * 42}`}
-                    />
-                  </svg>
-                  <div className="-mt-16 text-center">
-                    <span className="font-mono text-2xl font-bold text-zinc-900">94%</span>
-                  </div>
-                  <span className="mt-8 rounded-full bg-red-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-red-600 ring-1 ring-red-500/15">
-                    AI-generated
-                  </span>
-                  <div className="mt-2 w-full rounded-xl border border-black/[0.06] bg-zinc-50 p-3 text-[12px] leading-relaxed text-zinc-500">
-                    In today&apos;s rapidly evolving landscape,{" "}
-                    <mark className="rounded bg-red-100 px-0.5 text-red-700">
-                      it is important to note that organizations must leverage cutting-edge solutions
-                    </mark>{" "}
-                    to stay competitive.
-                  </div>
-                </div>
-              </div>
-            </div>
+            <AICheckerDemoWidget />
           </Reveal>
 
           <Reveal delay={120} className="order-1 md:order-2">
@@ -629,49 +535,7 @@ export default function LandingPage() {
           </Reveal>
 
           <Reveal delay={120}>
-            <div className="relative mx-auto w-full max-w-[440px]">
-              <div
-                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
-                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[3].glow}, transparent 70%)` }}
-                aria-hidden
-              />
-              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
-                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                  </div>
-                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Real-time AI</span>
-                  <span className="ml-auto flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-600 ring-1 ring-emerald-500/15">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Live search
-                  </span>
-                </div>
-                <div className="flex flex-col gap-3 px-4 py-5">
-                  <div className="flex justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-zinc-900 px-3.5 py-2 text-[13px] font-medium text-white">
-                      What&apos;s the latest stable Next.js release?
-                    </div>
-                  </div>
-                  <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700">
-                    Next.js 16.2, released this month, with faster Turbopack builds and
-                    improved caching.
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 pl-1">
-                    {["[1] Next.js Blog", "[2] Vercel", "[3] GitHub Releases"].map((src) => (
-                      <span
-                        key={src}
-                        className="rounded-full px-2 py-1 text-[10.5px] font-medium"
-                        style={{ backgroundColor: PRODUCTS[3].accentSoft, color: PRODUCTS[3].accentText }}
-                      >
-                        {src}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RealtimeDemoWidget />
           </Reveal>
         </div>
       </section>
@@ -685,71 +549,7 @@ export default function LandingPage() {
         />
         <div className="grid items-center gap-12 md:grid-cols-2">
           <Reveal className="order-2 md:order-1">
-            <div className="relative mx-auto w-full max-w-[440px]">
-              <div
-                className="pointer-events-none absolute -inset-6 -z-10 rounded-[2rem] blur-2xl"
-                style={{ background: `radial-gradient(60% 55% at 50% 40%, ${PRODUCTS[4].glow}, transparent 70%)` }}
-                aria-hidden
-              />
-              <div className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/95 shadow-[0_30px_70px_-18px_rgba(15,23,42,0.32)] backdrop-blur">
-                <div className="flex items-center gap-2 border-b border-black/[0.05] px-4 py-3">
-                  <div className="flex gap-1.5">
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                    <div className="h-2.5 w-2.5 rounded-full bg-black/10" />
-                  </div>
-                  <span className="ml-1 text-[11px] font-medium text-zinc-500">Paper Analyzer</span>
-                  <span
-                    className="ml-auto rounded-full px-2 py-1 text-[10px] font-semibold"
-                    style={{ backgroundColor: PRODUCTS[4].accentSoft, color: PRODUCTS[4].accentText }}
-                  >
-                    APA
-                  </span>
-                </div>
-                <div className="flex flex-col items-center gap-3 px-4 py-5">
-                  <svg viewBox="0 0 100 100" className="h-20 w-20 -rotate-90">
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="9" />
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="42"
-                      fill="none"
-                      stroke={PRODUCTS[4].accent}
-                      strokeWidth="9"
-                      strokeLinecap="round"
-                      strokeDasharray={`${2 * Math.PI * 42 * 0.91} ${2 * Math.PI * 42}`}
-                    />
-                  </svg>
-                  <div className="-mt-14 text-center">
-                    <span className="font-mono text-xl font-bold text-zinc-900">91</span>
-                  </div>
-                  <div className="mt-2 w-full space-y-1.5">
-                    {[
-                      { label: "Margins", ok: true },
-                      { label: "Line spacing", ok: true },
-                      { label: "Font", ok: true },
-                      { label: "Page numbering", ok: false },
-                    ].map((row) => (
-                      <div
-                        key={row.label}
-                        className="flex items-center justify-between rounded-lg border border-black/[0.05] bg-zinc-50 px-2.5 py-1.5 text-[11px]"
-                      >
-                        <span className="text-zinc-600">{row.label}</span>
-                        <span
-                          className={
-                            row.ok
-                              ? "rounded-full bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-600"
-                              : "rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-600"
-                          }
-                        >
-                          {row.ok ? "Pass" : "Warning"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <PaperAnalyzerDemoWidget />
           </Reveal>
 
           <Reveal delay={120} className="order-1 md:order-2">

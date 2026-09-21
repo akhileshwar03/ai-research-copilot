@@ -660,3 +660,20 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
 .group:hover .msg-timestamp {
   opacity: 1;
 }
+
+/* ── Global bold text (2026-09-20, explicit user request) ────────────────────
+   Every piece of text in the app is bold, deliberately -- headings, labels,
+   body copy, descriptions, placeholders, everything. Components throughout
+   this codebase set their own font-weight via Tailwind utility classes
+   (font-medium, font-semibold, text-[Npx] with no weight class, etc.), so a
+   plain inherited rule wouldn't reach most of them -- only a universal
+   selector with !important actually overrides every one of those without
+   editing every component file individually. Wrapped in @layer utilities
+   (not a bare rule) -- a bare `* {}` block at the end of this file was
+   silently dropped by the Tailwind v4 / Lightning CSS build pipeline;
+   Tailwind's own documented mechanism for a real override is a layer. */
+@layer utilities {
+  * {
+    font-weight: 700 !important;
+  }
+}
