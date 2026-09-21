@@ -26,10 +26,14 @@ function DotsHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 function useReducedMotion() {
   const reduced = useRef(false);
   useEffect(() => {
-    reduced.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    reduced.current = prefersReducedMotion();
   }, []);
   return reduced;
 }
@@ -80,15 +84,12 @@ type HumanizerPhase = "showing" | "rewriting" | "revealed";
 
 export function HumanizerDemoWidget() {
   const [i, setI] = useState(0);
-  const [phase, setPhase] = useState<HumanizerPhase>("showing");
+  const [phase, setPhase] = useState<HumanizerPhase>(() => (prefersReducedMotion() ? "revealed" : "showing"));
   const reduced = useReducedMotion();
   const script = HUMANIZER_SCRIPTS[i];
 
   useEffect(() => {
-    if (reduced.current) {
-      setPhase("revealed");
-      return;
-    }
+    if (reduced.current) return;
     const t =
       phase === "showing"
         ? setTimeout(() => setPhase("rewriting"), 1400)
@@ -128,41 +129,58 @@ export function HumanizerDemoWidget() {
           <p className="text-[11.5px] font-medium uppercase tracking-wide text-zinc-400">
             {phase === "rewriting" ? "Rewriting…" : phase === "revealed" ? "Rewritten" : "Original"}
           </p>
-          <div className="relative mt-2 min-h-[3.6em]">
-            <p
+          {/* Reserved, fixed-height stage: every before/after variant across all
+              scripts is stacked in the same grid cell (invisible ones still
+              contribute to sizing), so the card's own height is set once, to
+              the tallest possible content, and never changes again as the
+              phase or script rotates — no reflow, no scroll jump on mobile. */}
+          <div className="mt-2 grid grid-cols-1">
+            {HUMANIZER_SCRIPTS.map((s, idx) => (
+              <p
+                key={`before-${idx}`}
+                aria-hidden={!(idx === i && phase === "showing")}
+                className={[
+                  "[grid-area:1/1] text-[13.5px] leading-relaxed text-zinc-700 transition-opacity duration-300",
+                  idx === i && phase === "showing" ? "opacity-100" : "pointer-events-none opacity-0",
+                ].join(" ")}
+              >
+                {s.before}
+              </p>
+            ))}
+            {HUMANIZER_SCRIPTS.map((s, idx) => (
+              <p
+                key={`after-${idx}`}
+                aria-hidden={!(idx === i && phase === "revealed")}
+                className={[
+                  "[grid-area:1/1] text-[13.5px] leading-relaxed text-zinc-700 transition-opacity duration-500",
+                  idx === i && phase === "revealed" ? "opacity-100" : "pointer-events-none opacity-0",
+                ].join(" ")}
+              >
+                {s.after.split(/(\s+)/).map((word, wIdx) => {
+                  const isHighlighted = s.afterHighlights.some((h) => h.includes(word.trim()) && word.trim());
+                  return isHighlighted ? (
+                    <mark key={wIdx} className="rounded px-0.5" style={{ backgroundColor: accentSoft, color: accentText }}>
+                      {word}
+                    </mark>
+                  ) : (
+                    <span key={wIdx}>{word}</span>
+                  );
+                })}
+              </p>
+            ))}
+            <div
+              aria-hidden={phase !== "rewriting"}
               className={[
-                "text-[13.5px] leading-relaxed text-zinc-700 transition-opacity duration-300",
-                phase === "showing" ? "opacity-100" : "absolute inset-0 opacity-0",
+                "[grid-area:1/1] flex items-center gap-2 text-[12px] text-zinc-400 transition-opacity duration-200",
+                phase === "rewriting" ? "opacity-100" : "pointer-events-none opacity-0",
               ].join(" ")}
             >
-              {script.before}
-            </p>
-            <p
-              className={[
-                "text-[13.5px] leading-relaxed text-zinc-700 transition-opacity duration-500",
-                phase === "revealed" ? "opacity-100" : "absolute inset-0 opacity-0",
-              ].join(" ")}
-            >
-              {script.after.split(/(\s+)/).map((word, idx) => {
-                const isHighlighted = script.afterHighlights.some((h) => h.includes(word.trim()) && word.trim());
-                return isHighlighted ? (
-                  <mark key={idx} className="rounded px-0.5" style={{ backgroundColor: accentSoft, color: accentText }}>
-                    {word}
-                  </mark>
-                ) : (
-                  <span key={idx}>{word}</span>
-                );
-              })}
-            </p>
-            {phase === "rewriting" && (
-              <div className="absolute inset-0 flex items-center gap-2 text-[12px] text-zinc-400">
-                <span
-                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent"
-                  style={{ borderTopColor: "#b6446a", borderRightColor: "#b6446a" }}
-                />
-                Rewriting, word by word…
-              </div>
-            )}
+              <span
+                className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent"
+                style={{ borderTopColor: "#b6446a", borderRightColor: "#b6446a" }}
+              />
+              Rewriting, word by word…
+            </div>
           </div>
           <div className="mt-4 flex items-center justify-between border-t border-black/[0.05] pt-3">
             <span className="text-[11px] text-zinc-400">
@@ -237,18 +255,14 @@ type CheckerPhase = "scanning" | "revealed";
 
 export function AICheckerDemoWidget() {
   const [i, setI] = useState(0);
-  const [phase, setPhase] = useState<CheckerPhase>("scanning");
-  const [dial, setDial] = useState(0);
+  const [phase, setPhase] = useState<CheckerPhase>(() => (prefersReducedMotion() ? "revealed" : "scanning"));
+  const [dial, setDial] = useState(() => (prefersReducedMotion() ? CHECKER_SCRIPTS[0].percent : 0));
   const reduced = useReducedMotion();
   const script = CHECKER_SCRIPTS[i];
   const colors = TONE_COLORS[script.tone];
 
   useEffect(() => {
-    if (reduced.current) {
-      setPhase("revealed");
-      setDial(script.percent);
-      return;
-    }
+    if (reduced.current) return;
     if (phase === "scanning") {
       const t = setTimeout(() => setPhase("revealed"), 1300);
       return () => clearTimeout(t);
@@ -259,7 +273,6 @@ export function AICheckerDemoWidget() {
       setI((n) => (n + 1) % CHECKER_SCRIPTS.length);
     }, 3200);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, reduced]);
 
   useEffect(() => {
@@ -314,18 +327,33 @@ export function AICheckerDemoWidget() {
           >
             {script.verdict}
           </span>
-          <div className="mt-2 w-full rounded-xl border border-black/[0.06] bg-zinc-50 p-3 text-[12px] leading-relaxed text-zinc-500">
-            {script.flagStart === script.flagEnd ? (
-              script.passage
-            ) : (
-              <>
-                {script.passage.slice(0, script.flagStart)}
-                <mark className={`rounded px-0.5 ${colors.mark}`}>
-                  {script.passage.slice(script.flagStart, script.flagEnd)}
-                </mark>
-                {script.passage.slice(script.flagEnd)}
-              </>
-            )}
+          {/* Fixed-height stage: all 3 passages stacked in one grid cell so the
+              box is sized once, to the tallest passage, and never reflows the
+              page as the verdict cycles. */}
+          <div className="mt-2 grid grid-cols-1 w-full rounded-xl border border-black/[0.06] bg-zinc-50 p-3 text-[12px] leading-relaxed text-zinc-500">
+            {CHECKER_SCRIPTS.map((s, idx) => {
+              const markClass = TONE_COLORS[s.tone].mark;
+              return (
+                <div
+                  key={idx}
+                  aria-hidden={idx !== i}
+                  className={[
+                    "[grid-area:1/1] transition-opacity duration-300",
+                    idx === i ? "opacity-100" : "pointer-events-none opacity-0",
+                  ].join(" ")}
+                >
+                  {s.flagStart === s.flagEnd ? (
+                    s.passage
+                  ) : (
+                    <>
+                      {s.passage.slice(0, s.flagStart)}
+                      <mark className={`rounded px-0.5 ${markClass}`}>{s.passage.slice(s.flagStart, s.flagEnd)}</mark>
+                      {s.passage.slice(s.flagEnd)}
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -363,18 +391,16 @@ type RealtimePhase = "searching" | "answering" | "cited" | "resetting";
 
 export function RealtimeDemoWidget() {
   const [i, setI] = useState(0);
-  const [wordCount, setWordCount] = useState(0);
-  const [phase, setPhase] = useState<RealtimePhase>("searching");
+  const [wordCount, setWordCount] = useState(() =>
+    prefersReducedMotion() ? REALTIME_SCRIPTS[0].answer.split(" ").length : 0,
+  );
+  const [phase, setPhase] = useState<RealtimePhase>(() => (prefersReducedMotion() ? "cited" : "searching"));
   const reduced = useReducedMotion();
   const script = REALTIME_SCRIPTS[i];
   const words = script.answer.split(" ");
 
   useEffect(() => {
-    if (reduced.current) {
-      setWordCount(words.length);
-      setPhase("cited");
-      return;
-    }
+    if (reduced.current) return;
     let t: ReturnType<typeof setTimeout>;
     if (phase === "searching") {
       t = setTimeout(() => {
@@ -400,7 +426,6 @@ export function RealtimeDemoWidget() {
 
   const visibleAnswer = words.slice(0, wordCount).join(" ");
   const isSearching = phase === "searching";
-  const showAnswer = phase === "answering" || phase === "cited" || phase === "resetting";
   const showSources = phase === "cited" || phase === "resetting";
   const accentSoft = "#4457c91f";
   const accentText = "#33409e";
@@ -421,6 +446,11 @@ export function RealtimeDemoWidget() {
           </span>
         </DotsHeader>
         <div className="flex flex-col gap-3 px-4 py-5">
+          {/* Question — a chat bubble that hugs its own content (not
+              reserved-space stacked: it's a shrink-to-fit flex item, and
+              CSS Grid's auto track sizing ignores text wrapping, which was
+              forcing it wide instead of letting it wrap). Length varies only
+              a little across scripts, so the residual reflow is negligible. */}
           <div className="flex justify-end">
             <div
               key={`q-${i}`}
@@ -429,36 +459,69 @@ export function RealtimeDemoWidget() {
               {script.question}
             </div>
           </div>
-          <div
-            className={[
-              "flex justify-start transition-all duration-300",
-              showAnswer ? "opacity-100" : "pointer-events-none h-0 opacity-0",
-            ].join(" ")}
-          >
-            <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700">
-              <p className="min-h-[1.2em]">
-                {visibleAnswer}
-                {phase === "answering" && (
-                  <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-zinc-400" />
-                )}
-              </p>
+
+          {/* Answer bubble — always occupies its dedicated space (no more
+              collapsing to h-0); invisible sizers for all 3 full answers
+              reserve the tallest height so the word-by-word typing animates
+              inside a fixed box instead of growing the page under it. */}
+          <div className="flex justify-start">
+            <div className="relative w-full max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700">
+              <div className="grid grid-cols-1">
+                {REALTIME_SCRIPTS.map((s, idx) => (
+                  <p key={idx} aria-hidden className="invisible [grid-area:1/1]">
+                    {s.answer}
+                  </p>
+                ))}
+                <div className="[grid-area:1/1]">
+                  {isSearching ? (
+                    <span className="flex items-center gap-2 text-[12px] text-zinc-400">
+                      <span
+                        className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent"
+                        style={{ borderTopColor: "#4457c9", borderRightColor: "#4457c9" }}
+                      />
+                      Searching the web…
+                    </span>
+                  ) : (
+                    <p>
+                      {visibleAnswer}
+                      {phase === "answering" && (
+                        <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-zinc-400" />
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-          <div
-            className={[
-              "flex flex-wrap gap-1.5 pl-1 transition-all duration-500",
-              showSources ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0",
-            ].join(" ")}
-          >
-            {script.sources.map((src) => (
-              <span
-                key={src}
-                className="rounded-full px-2 py-1 text-[10.5px] font-medium"
-                style={{ backgroundColor: accentSoft, color: accentText }}
-              >
-                {src}
-              </span>
+
+          {/* Sources row — same reserved-space trick, sized for the widest
+              (3-chip) script so the 2-chip ones don't shrink the card. */}
+          <div className="grid grid-cols-1">
+            {REALTIME_SCRIPTS.map((s, idx) => (
+              <div key={idx} aria-hidden className="invisible [grid-area:1/1] flex flex-wrap gap-1.5 pl-1">
+                {s.sources.map((src) => (
+                  <span key={src} className="rounded-full px-2 py-1 text-[10.5px] font-medium">
+                    {src}
+                  </span>
+                ))}
+              </div>
             ))}
+            <div
+              className={[
+                "[grid-area:1/1] flex flex-wrap gap-1.5 pl-1 transition-all duration-500",
+                showSources ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0",
+              ].join(" ")}
+            >
+              {script.sources.map((src) => (
+                <span
+                  key={src}
+                  className="rounded-full px-2 py-1 text-[10.5px] font-medium"
+                  style={{ backgroundColor: accentSoft, color: accentText }}
+                >
+                  {src}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -511,19 +574,14 @@ type PaperPhase = "scanning" | "checking" | "revealed";
 
 export function PaperAnalyzerDemoWidget() {
   const [i, setI] = useState(0);
-  const [phase, setPhase] = useState<PaperPhase>("scanning");
-  const [dial, setDial] = useState(0);
-  const [rowsShown, setRowsShown] = useState(0);
+  const [phase, setPhase] = useState<PaperPhase>(() => (prefersReducedMotion() ? "revealed" : "scanning"));
+  const [dial, setDial] = useState(() => (prefersReducedMotion() ? PAPER_SCRIPTS[0].score : 0));
+  const [rowsShown, setRowsShown] = useState(() => (prefersReducedMotion() ? PAPER_SCRIPTS[0].rows.length : 0));
   const reduced = useReducedMotion();
   const script = PAPER_SCRIPTS[i];
 
   useEffect(() => {
-    if (reduced.current) {
-      setPhase("revealed");
-      setDial(script.score);
-      setRowsShown(script.rows.length);
-      return;
-    }
+    if (reduced.current) return;
     if (phase === "scanning") {
       const t = setTimeout(() => setPhase("checking"), 900);
       return () => clearTimeout(t);
@@ -601,22 +659,29 @@ export function PaperAnalyzerDemoWidget() {
                   ].join(" ")}
                 >
                   <span className="text-zinc-600">{row.label}</span>
-                  {shown && !checking ? (
-                    <span
-                      className={
-                        row.ok
-                          ? "rounded-full bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-600"
-                          : "rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-600"
-                      }
-                    >
-                      {row.ok ? "Pass" : "Warning"}
-                    </span>
-                  ) : (
-                    <span
-                      className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-transparent"
-                      style={{ borderTopColor: accent, borderRightColor: accent }}
-                    />
-                  )}
+                  {/* Fixed-size status slot: the spinner and the Pass/Warning
+                      badge have different natural heights, which was making
+                      each row (and the whole card) grow a few pixels as it
+                      resolved — pin both to the same box so the row's height
+                      never changes. */}
+                  <span className="flex h-[19px] items-center">
+                    {shown && !checking ? (
+                      <span
+                        className={
+                          row.ok
+                            ? "rounded-full bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-600"
+                            : "rounded-full bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-600"
+                        }
+                      >
+                        {row.ok ? "Pass" : "Warning"}
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-transparent"
+                        style={{ borderTopColor: accent, borderRightColor: accent }}
+                      />
+                    )}
+                  </span>
                 </div>
               );
             })}

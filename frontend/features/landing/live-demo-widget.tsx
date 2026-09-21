@@ -164,7 +164,11 @@ export function LiveDemoWidget() {
 
         {/* Body */}
         <div className="flex flex-col gap-3 px-4 py-5">
-          {/* Question */}
+          {/* Question — a chat bubble that hugs its own content (not
+              reserved-space stacked: it's a shrink-to-fit flex item, and
+              CSS Grid's auto track sizing ignores text wrapping, which was
+              forcing it wide instead). Length varies only a little across
+              scripts, so the residual reflow here is negligible. */}
           <div className="flex justify-end">
             <div
               key={`q-${scriptIndex}`}
@@ -174,87 +178,123 @@ export function LiveDemoWidget() {
             </div>
           </div>
 
-          {/* Retrieval status row */}
-          <div className="flex items-center gap-2 text-[11.5px] font-medium">
-            {isRetrieving ? (
-              <>
-                <span
-                  className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-transparent"
-                  style={{ borderTopColor: "var(--marketing-accent)", borderRightColor: "var(--marketing-accent)" }}
-                />
-                <span className="text-zinc-500">Searching {script.document}…</span>
-              </>
-            ) : (
-              <>
-                <span
-                  className="flex h-3.5 w-3.5 items-center justify-center rounded-full"
-                  style={{ backgroundColor: "var(--marketing-accent)" }}
-                >
-                  <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-                <span style={{ color: "var(--marketing-accent-text)" }}>
-                  Matched passage · page {script.page}
-                </span>
-              </>
-            )}
-          </div>
-
-          {/* Matched source snippet — the "it really read my document" moment */}
-          <div
-            className={[
-              "overflow-hidden transition-all duration-500",
-              showSource ? "max-h-40 opacity-100" : "max-h-0 opacity-0",
-            ].join(" ")}
-          >
-            <div className="relative rounded-xl border border-black/[0.06] bg-zinc-50 p-3">
-              {/* scan line while retrieving is conceptually "reading" this region */}
-              <div
-                className="relative rounded-lg border border-dashed border-black/[0.07] bg-white p-2.5 pl-3"
-                style={{ borderLeft: "3px solid var(--marketing-accent)" }}
-              >
-                <p className="text-[11.5px] leading-relaxed text-zinc-500">
-                  {script.snippetBefore}
-                  <mark
-                    className="rounded px-0.5"
-                    style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+          {/* Retrieval status row — both label variants (searching / matched)
+              for all 3 scripts are stacked to reserve the tallest wrap, since
+              filenames differ in length and can wrap at narrow widths. */}
+          <div className="grid grid-cols-1 text-[11.5px] font-medium">
+            {SCRIPTS.map((s, idx) => (
+              <p key={`retrieving-${idx}`} aria-hidden className="invisible [grid-area:1/1] flex items-center gap-2">
+                <span className="h-3.5 w-3.5 shrink-0" />
+                Searching {s.document}…
+              </p>
+            ))}
+            {SCRIPTS.map((s, idx) => (
+              <p key={`matched-${idx}`} aria-hidden className="invisible [grid-area:1/1] flex items-center gap-2">
+                <span className="h-3.5 w-3.5 shrink-0" />
+                Matched passage · page {s.page}
+              </p>
+            ))}
+            <div className="[grid-area:1/1] flex items-center gap-2">
+              {isRetrieving ? (
+                <>
+                  <span
+                    className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-transparent"
+                    style={{ borderTopColor: "var(--marketing-accent)", borderRightColor: "var(--marketing-accent)" }}
+                  />
+                  <span className="text-zinc-500">Searching {script.document}…</span>
+                </>
+              ) : (
+                <>
+                  <span
+                    className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: "var(--marketing-accent)" }}
                   >
-                    {script.snippetHighlight}
-                  </mark>
-                  {script.snippetAfter}
-                </p>
-              </div>
-              <div className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-400">
-                <DocIcon className="h-2.5 w-2.5" />
-                {script.document} · page {script.page}
-              </div>
+                    <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                  <span style={{ color: "var(--marketing-accent-text)" }}>
+                    Matched passage · page {script.page}
+                  </span>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Answer */}
-          <div
-            className={[
-              "flex justify-start transition-all duration-300",
-              showAnswer ? "opacity-100" : "pointer-events-none h-0 opacity-0",
-            ].join(" ")}
-          >
-            <div className="max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700">
-              <p className="min-h-[1.2em]">
-                {visibleAnswer}
-                {phase === "answering" && (
-                  <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-zinc-400" />
-                )}
-              </p>
+          {/* Matched source snippet — the "it really read my document" moment.
+              Fixed-height stage: all 3 scripts' snippets stacked in one grid
+              cell so the box is sized once, to the tallest, and never
+              reflows the page as it fades in/out or the script rotates. */}
+          <div className="grid grid-cols-1 transition-opacity duration-500" style={{ opacity: showSource ? 1 : 0 }}>
+            {SCRIPTS.map((s, idx) => (
               <div
+                key={idx}
+                aria-hidden={idx !== scriptIndex}
                 className={[
-                  "mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-medium transition-all duration-500",
-                  showCitation ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0",
+                  "[grid-area:1/1] relative rounded-xl border border-black/[0.06] bg-zinc-50 p-3 transition-opacity duration-300",
+                  idx === scriptIndex ? "opacity-100" : "pointer-events-none opacity-0",
                 ].join(" ")}
-                style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
               >
-                <DocIcon className="h-2.5 w-2.5" />
-                Page {script.page}
+                <div
+                  className="relative rounded-lg border border-dashed border-black/[0.07] bg-white p-2.5 pl-3"
+                  style={{ borderLeft: "3px solid var(--marketing-accent)" }}
+                >
+                  <p className="text-[11.5px] leading-relaxed text-zinc-500">
+                    {s.snippetBefore}
+                    <mark
+                      className="rounded px-0.5"
+                      style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+                    >
+                      {s.snippetHighlight}
+                    </mark>
+                    {s.snippetAfter}
+                  </p>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[10px] text-zinc-400">
+                  <DocIcon className="h-2.5 w-2.5" />
+                  {s.document} · page {s.page}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Answer — always occupies its dedicated space; invisible sizers
+              for all 3 full answers reserve the tallest height so the
+              word-by-word typing animates inside a fixed box instead of
+              growing the page under it. */}
+          <div className="flex justify-start">
+            <div
+              className="relative w-full max-w-[92%] rounded-2xl rounded-tl-sm bg-zinc-100 px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-700 transition-opacity duration-300"
+              style={{ opacity: showAnswer ? 1 : 0 }}
+            >
+              <div className="grid grid-cols-1">
+                {SCRIPTS.map((s, idx) => (
+                  <div key={idx} aria-hidden className="invisible [grid-area:1/1]">
+                    <p>{s.answer}</p>
+                    <div className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-medium">
+                      <DocIcon className="h-2.5 w-2.5" />
+                      Page {s.page}
+                    </div>
+                  </div>
+                ))}
+                <div className="[grid-area:1/1]">
+                  <p>
+                    {visibleAnswer}
+                    {phase === "answering" && (
+                      <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-[2px] animate-pulse bg-zinc-400" />
+                    )}
+                  </p>
+                  <div
+                    className={[
+                      "mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10.5px] font-medium transition-all duration-500",
+                      showCitation ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-1 opacity-0",
+                    ].join(" ")}
+                    style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+                  >
+                    <DocIcon className="h-2.5 w-2.5" />
+                    Page {script.page}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

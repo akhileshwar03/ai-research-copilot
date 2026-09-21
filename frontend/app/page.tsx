@@ -131,7 +131,7 @@ export default function LandingPage() {
             fixed behind the whole scroll. */}
         <div className="hero-grid-floor pointer-events-none absolute inset-x-[-10%] bottom-0 h-[65%]" aria-hidden />
 
-        <div className="relative mx-auto grid max-w-7xl gap-14 px-6 pb-28 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
+        <div className="relative mx-auto grid grid-cols-1 max-w-7xl gap-14 px-6 pb-28 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
           {/* Left: headline + CTA */}
           <div>
             <Reveal>
@@ -225,7 +225,7 @@ export default function LandingPage() {
               </div>
 
               {/* The demo itself, tilting toward the cursor */}
-              <Tilt3D className="relative z-10">
+              <Tilt3D className="relative z-10 w-full max-w-[440px]">
                 <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-zinc-400 lg:text-right">
                   Research Copilot, live preview
                 </p>
@@ -368,7 +368,7 @@ export default function LandingPage() {
           style={{ background: `radial-gradient(55% 90% at 85% 50%, ${PRODUCTS[1].glow}, transparent 70%)` }}
           aria-hidden
         />
-        <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
           <Reveal>
             <div>
               <p
@@ -427,7 +427,7 @@ export default function LandingPage() {
           style={{ background: `radial-gradient(55% 90% at 15% 50%, ${PRODUCTS[2].glow}, transparent 70%)` }}
           aria-hidden
         />
-        <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
           <Reveal className="order-2 md:order-1">
             <AICheckerDemoWidget />
           </Reveal>
@@ -487,7 +487,7 @@ export default function LandingPage() {
           style={{ background: `radial-gradient(55% 90% at 85% 50%, ${PRODUCTS[3].glow}, transparent 70%)` }}
           aria-hidden
         />
-        <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
           <Reveal>
             <div>
               <p
@@ -547,7 +547,7 @@ export default function LandingPage() {
           style={{ background: `radial-gradient(55% 90% at 15% 50%, ${PRODUCTS[4].glow}, transparent 70%)` }}
           aria-hidden
         />
-        <div className="grid items-center gap-12 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
           <Reveal className="order-2 md:order-1">
             <PaperAnalyzerDemoWidget />
           </Reveal>
