@@ -101,10 +101,26 @@ def fake_bg_storage(monkeypatch, tmp_path):
     `get_storage_service` directly (`from ... import get_storage_service`),
     so each module's own reference has to be patched individually; patching
     only the origin module (as test_retention.py does for a module that
-    calls it qualified) would silently miss these two."""
+    calls it qualified) would silently miss these two.
+
+    Real bug this fixture used to have, caught by CI (2026-09-20): the
+    storage-usage endpoint's own "is R2 configured" check reads
+    settings.r2_account_id etc. directly, which this fixture never touched --
+    it passed locally only because a real backend/.env with real R2
+    credentials happens to sit on that one machine, and failed on CI, which
+    has none. A test must not depend on which machine's real environment
+    happens to run it; explicitly setting these here makes the "configured"
+    check pass deterministically everywhere, not by accident on just one box."""
+    from app.core.config import get_settings
     from app.services.storage_service import LocalStorageService
     import app.api.routes.admin as admin_module
     import app.api.routes.app_config as app_config_module
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "r2_account_id", "test-account")
+    monkeypatch.setattr(settings, "r2_access_key_id", "test-key")
+    monkeypatch.setattr(settings, "r2_secret_access_key", "test-secret")
+    monkeypatch.setattr(settings, "r2_bucket_name", "test-bucket")
 
     fake_storage = LocalStorageService(base_dir=str(tmp_path))
     monkeypatch.setattr(admin_module, "get_storage_service", lambda: fake_storage)
