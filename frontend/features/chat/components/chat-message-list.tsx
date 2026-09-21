@@ -447,7 +447,16 @@ export function ChatMessageList({
   const visibleMessages = visibleChatMessages(messages);
 
   return (
-    <div ref={containerRef} className="relative flex-1 overflow-y-auto bg-[var(--app-bg)] scrollbar-thin">
+    // 2026-09-20: real, reported issue — this was bg-[var(--app-bg)], a fully
+    // opaque solid fill, unlike every other piece of chat chrome around it
+    // (ChatHeader, ChatInput, the message bubbles themselves all use the
+    // translucent .glass-bar/.glass-card classes built for exactly this).
+    // That made the entire central scroll area — including the "Start your
+    // research" empty state living inside it — a solid block hiding the
+    // page's background (dynamic or an admin-uploaded static image) even
+    // though it bled through everywhere else on the page. Dropped the fill
+    // entirely so it matches the rest of the chat surface.
+    <div ref={containerRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
       <div className="mx-auto max-w-3xl space-y-6 px-4 py-6">
 
         {/* Welcome / empty state */}

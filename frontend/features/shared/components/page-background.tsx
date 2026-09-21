@@ -40,14 +40,20 @@ export function PageBackground({ page, dynamic }: { page: BackgroundPage; dynami
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${buildApiUrl(bg.image_url)})`, filter: "blur(1.25px) saturate(0.88)" }}
+          style={{ backgroundImage: `url(${buildApiUrl(bg.image_url)})`, filter: "blur(0.75px) saturate(0.94)" }}
         />
         {overlay ? (
           <div className="absolute inset-0" style={{ background: overlay }} />
         ) : (
-          <div className="absolute inset-0 opacity-45" style={{ backgroundColor: "var(--app-bg)" }} />
+          // 2026-09-20: real, reported issue, twice — 45% then 25% were BOTH still
+          // too strong; a real side-by-side against a dynamic AtmosphereBackground
+          // page (visibly rich and colorful) showed the static image reduced to a
+          // near-white ghost. The flat wash plus the strong vignette below were
+          // compounding on top of each other. Cut hard this time instead of
+          // creeping down again.
+          <div className="absolute inset-0 opacity-10" style={{ backgroundColor: "var(--app-bg)" }} />
         )}
-        <div className="atmosphere-vignette-strong absolute inset-0" />
+        <div className="atmosphere-vignette absolute inset-0" />
       </div>
     );
   }
