@@ -92,6 +92,37 @@ def test_github_link_toggle_round_trips_to_public_config(client, admin_headers):
         _set("github_repo_url", "https://github.com/akhileshwar03/ai-research-copilot")
 
 
+def test_legal_and_contact_settings_default_empty_and_round_trip(client, admin_headers):
+    body = client.get("/api/v1/app/config").json()
+    assert body["support_email"] == ""
+    assert body["legal_entity_name"] == "Querex"
+    assert client.get("/api/v1/app/legal/privacy").json() == {"content": ""}
+    assert client.get("/api/v1/app/legal/terms").json() == {"content": ""}
+
+    resp = client.put(
+        "/api/v1/admin/settings",
+        headers=admin_headers,
+        json={"settings": {
+            "support_email": "hello@querex.app",
+            "legal_entity_name": "Querex Labs, Inc.",
+            "privacy_policy_content": "We collect only what we need.",
+            "terms_of_service_content": "Use this responsibly.",
+        }},
+    )
+    assert resp.status_code == 200
+    try:
+        body = client.get("/api/v1/app/config").json()
+        assert body["support_email"] == "hello@querex.app"
+        assert body["legal_entity_name"] == "Querex Labs, Inc."
+        assert client.get("/api/v1/app/legal/privacy").json() == {"content": "We collect only what we need."}
+        assert client.get("/api/v1/app/legal/terms").json() == {"content": "Use this responsibly."}
+    finally:
+        _set("support_email", "")
+        _set("legal_entity_name", "Querex")
+        _set("privacy_policy_content", "")
+        _set("terms_of_service_content", "")
+
+
 # ── Per-page background images ───────────────────────────────────────────────────
 
 @pytest.fixture

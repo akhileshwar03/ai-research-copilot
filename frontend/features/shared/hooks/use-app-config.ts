@@ -30,6 +30,8 @@ export interface PublicAppConfig {
   checker_max_chars: number;
   github_link_enabled: boolean;
   github_repo_url: string;
+  support_email: string;
+  legal_entity_name: string;
   backgrounds: Record<BackgroundPage, BackgroundConfig>;
 }
 
@@ -63,6 +65,8 @@ const FALLBACK: PublicAppConfig = {
   // have since turned off.
   github_link_enabled: false,
   github_repo_url: "",
+  support_email: "",
+  legal_entity_name: "Querex",
   // Falls back to every page's built-in animated scene — never to a static
   // image URL that might not resolve, so a transient config-fetch failure
   // degrades to "the background that always worked," not a broken one.

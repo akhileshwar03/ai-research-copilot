@@ -46,10 +46,44 @@ const spaceMono = Space_Mono({
   weight: ["400", "700"],
 });
 
+// 2026-09-21: real, reported issue — Google's search snippet was showing
+// "Vercel" as the site name and the raw *.vercel.app deploy URL instead of
+// "Querex", with Vercel's own triangle logo as the favicon. Root cause: no
+// favicon anywhere in the app (fixed by app/icon.svg, picked up by Next's
+// file convention) and no metadataBase/openGraph/site-name here, so crawlers
+// fell back to the hosting platform's own defaults. 2026-09-21: querex.app
+// is now live on Vercel (querex.app 307-redirects to www.querex.app, which
+// is Production) — that's the real canonical domain now, not a fallback.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.querex.app";
+const SITE_TITLE = "Querex — AI Tools for Research & Writing";
+const SITE_DESCRIPTION =
+  "Ask your documents with page-cited answers, rewrite AI-sounding text, detect AI-generated content, and search the live web — four AI tools, one account.";
+
 export const metadata: Metadata = {
-  title: "Querex — AI Tools for Research & Writing",
-  description:
-    "Ask your documents with page-cited answers, rewrite AI-sounding text, detect AI-generated content, and search the live web — four AI tools, one account.",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: "%s",
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: "Querex",
+  robots: { index: true, follow: true },
+  // 2026-09-21: without this, Google has no signal that querex.app (not the
+  // ai-research-copilot-kappa.vercel.app it's already indexed) is the URL to
+  // treat as authoritative — metadataBase alone doesn't emit a canonical tag.
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "Querex",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 // Inline script: applies the theme BEFORE first paint, preventing FOUC.

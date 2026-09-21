@@ -57,7 +57,16 @@ const SETTING_LABELS: Record<string, string> = {
   extract_rate_limit_per_hour: "Rate limit (requests/hour per IP)",
   paper_analyzer_max_pages: "Max PDF pages per request",
   paper_analyzer_rate_limit_per_hour: "Rate limit (requests/hour per IP)",
+  support_email: "Support email (footer Contact link)",
+  legal_entity_name: "Legal entity name",
+  privacy_policy_content: "Privacy Policy page body",
+  terms_of_service_content: "Terms of Service page body",
 };
+
+// Long-form text settings get a multi-line textarea instead of the default
+// single-line input — everything else (a URL, an email, a short banner) is
+// fine on one line.
+const LONG_TEXT_KEYS = new Set(["privacy_policy_content", "terms_of_service_content"]);
 
 const DANGEROUS_KEYS = new Set(["maintenance_mode"]);
 
@@ -186,6 +195,17 @@ function SettingRow({
         ))}
       </select>
     );
+  } else if (setting.type === "str" && LONG_TEXT_KEYS.has(setting.key)) {
+    control = (
+      <textarea
+        value={String(current)}
+        maxLength={setting.max}
+        placeholder="Empty = page shows a “not yet published” notice"
+        onChange={(e) => onChange(e.target.value)}
+        rows={6}
+        className={`${INPUT_CLASS} w-full resize-y`}
+      />
+    );
   } else if (setting.type === "str") {
     control = (
       <input
@@ -211,32 +231,48 @@ function SettingRow({
     );
   }
 
+  const isLongText = LONG_TEXT_KEYS.has(setting.key);
+  const header = (
+    <div className="min-w-0">
+      <p className="text-[13px] font-medium text-zinc-200">
+        {label}
+        {DANGEROUS_KEYS.has(setting.key) && Boolean(current) && (
+          <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">on</span>
+        )}
+      </p>
+      <p className="text-[12px] text-zinc-500">
+        {setting.description}
+        {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
+        {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
+        {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
+      </p>
+    </div>
+  );
+  const resetButton = !atDefault && (
+    <Button variant="ghost" onClick={() => onChange(setting.default)} title="Reset to default">
+      Reset
+    </Button>
+  );
+
   return (
     <div className={`rounded-lg px-2 py-2 ${dirty ? "bg-[var(--surface-1)]" : ""}`}>
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-zinc-200">
-            {label}
-            {DANGEROUS_KEYS.has(setting.key) && Boolean(current) && (
-              <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">on</span>
-            )}
-          </p>
-          <p className="text-[12px] text-zinc-500">
-            {setting.description}
-            {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
-            {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
-            {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!atDefault && (
-            <Button variant="ghost" onClick={() => onChange(setting.default)} title="Reset to default">
-              Reset
-            </Button>
-          )}
+      {isLongText ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            {header}
+            {resetButton}
+          </div>
           {control}
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between gap-4">
+          {header}
+          <div className="flex shrink-0 items-center gap-2">
+            {resetButton}
+            {control}
+          </div>
+        </div>
+      )}
       {backgroundPage && current === "static" && <BackgroundImageControl page={backgroundPage} />}
     </div>
   );

@@ -41,7 +41,13 @@ class PublicAppConfig(BaseModel):
     checker_max_chars: int
     github_link_enabled: bool
     github_repo_url: str
+    support_email: str
+    legal_entity_name: str
     backgrounds: dict[str, BackgroundConfig]
+
+
+class LegalContent(BaseModel):
+    content: str
 
 
 @router.get("/config", response_model=PublicAppConfig)
@@ -81,8 +87,20 @@ def public_app_config(db: Session = Depends(get_db)):
         checker_max_chars=int(runtime_settings.get("checker_max_chars")),
         github_link_enabled=bool(runtime_settings.get("github_link_enabled")),
         github_repo_url=str(runtime_settings.get("github_repo_url") or ""),
+        support_email=str(runtime_settings.get("support_email") or ""),
+        legal_entity_name=str(runtime_settings.get("legal_entity_name") or "Querex"),
         backgrounds=backgrounds,
     )
+
+
+@router.get("/legal/privacy", response_model=LegalContent)
+def public_privacy_policy():
+    return LegalContent(content=str(runtime_settings.get("privacy_policy_content") or ""))
+
+
+@router.get("/legal/terms", response_model=LegalContent)
+def public_terms_of_service():
+    return LegalContent(content=str(runtime_settings.get("terms_of_service_content") or ""))
 
 
 @router.get("/background/{page}")

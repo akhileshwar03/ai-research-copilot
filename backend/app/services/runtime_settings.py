@@ -215,6 +215,29 @@ def _defs() -> dict[str, SettingDef]:
         "paper_analyzer_rate_limit_per_hour": SettingDef(
             int, 1, 1000, "Paper Analyzer requests allowed per IP per hour", "paper_analyzer"
         ),
+        # ── Legal & contact ─────────────────────────────────────────────────
+        # 2026-09-21: the public footer needs a real Contact address and working
+        # Privacy Policy / Terms of Service pages, but the actual support inbox,
+        # legal entity name, and document text are all facts only the site owner
+        # has — none of that belongs hardcoded or invented in the codebase. These
+        # ship with obvious placeholder values (visible as placeholders, not
+        # presented as real policy) so the footer/legal pages render something
+        # coherent immediately, and an admin fills in the real text here without
+        # a code change. GET /app/config (support_email, legal_entity_name) and
+        # GET /app/legal/{privacy,terms} (the two content fields) serve these to
+        # signed-out visitors — see app_config.py.
+        "support_email": SettingDef(
+            str, 0, 200, "Contact address shown in the public footer (mailto link)", "legal"
+        ),
+        "legal_entity_name": SettingDef(
+            str, 0, 200, "Legal entity name shown in the footer copyright line and legal pages", "legal"
+        ),
+        "privacy_policy_content": SettingDef(
+            str, 0, 20000, "Privacy Policy page body (plain text, paragraphs separated by blank lines)", "legal"
+        ),
+        "terms_of_service_content": SettingDef(
+            str, 0, 20000, "Terms of Service page body (plain text, paragraphs separated by blank lines)", "legal"
+        ),
     }
 
 
@@ -229,6 +252,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "realtime": "Real-time AI",
     "extract": "Text extraction",
     "paper_analyzer": "Paper Analyzer",
+    "legal": "Legal & contact",
 }
 
 
@@ -271,6 +295,13 @@ def _env_defaults() -> dict[str, SettingValue]:
         "extract_rate_limit_per_hour": 20,
         "paper_analyzer_max_pages": 60,
         "paper_analyzer_rate_limit_per_hour": 20,
+        # Empty by default, same pattern as github_repo_url: the footer/legal
+        # pages render nothing (Contact link) or a "not yet published" notice
+        # (Privacy/Terms) rather than a fabricated address or policy text.
+        "support_email": "",
+        "legal_entity_name": "Querex",
+        "privacy_policy_content": "",
+        "terms_of_service_content": "",
     }
 
 

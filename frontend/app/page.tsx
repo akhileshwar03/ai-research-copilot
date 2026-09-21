@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { NavProfileMenu } from "@/features/auth/components/nav-profile-menu";
 import { GithubNavLink } from "@/features/landing/github-nav-link";
+import { FooterCopyright, SupportEmailLink } from "@/features/landing/footer-dynamic";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import {
   AICheckerDemoWidget,
@@ -641,16 +642,110 @@ export default function LandingPage() {
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <footer className="glass-bar border-t">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-8 text-[13px] text-zinc-500 md:flex-row">
-          <div className="flex items-center gap-2">
-            <SparkIcon className="h-3.5 w-3.5" />
-            <span>Querex — AI tools for research &amp; writing</span>
+        <div className="mx-auto max-w-7xl px-6 pt-14">
+          <div className="grid grid-cols-1 gap-12 pb-12 sm:grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.9fr]">
+            {/* Brand */}
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-lg shadow-md"
+                  style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
+                >
+                  <SparkIcon className="h-4 w-4" />
+                </div>
+                <span className="font-headline text-[15px] font-bold tracking-tight text-zinc-900">Querex</span>
+              </div>
+              <p className="mt-4 max-w-xs text-[13.5px] leading-6 text-zinc-500">
+                One account, five AI tools for research and writing — grounded answers,
+                honest detection, and formatting you can verify, not just trust.
+              </p>
+              <div className="mt-5 flex items-center gap-3">
+                <GithubNavLink className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12.5px] font-medium text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900" />
+                <SupportEmailLink className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12.5px] font-medium text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900" />
+              </div>
+            </div>
+
+            {/* Products */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Products</p>
+              <ul className="mt-4 space-y-2.5">
+                {PRODUCTS.map((product) => (
+                  <li key={product.name}>
+                    <Link
+                      href={product.href}
+                      className="group flex items-center gap-2 text-[13.5px] text-zinc-600 transition hover:text-zinc-900"
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-full opacity-70 transition group-hover:opacity-100"
+                        style={{ backgroundColor: product.accent }}
+                      />
+                      {product.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Account */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Account</p>
+              <ul className="mt-4 space-y-2.5 text-[13.5px] text-zinc-600">
+                <li>
+                  <Link href="/chat" className="transition hover:text-zinc-900">
+                    Open workspace
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/register" className="transition hover:text-zinc-900">
+                    Create account
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/login" className="transition hover:text-zinc-900">
+                    Sign in
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Legal</p>
+              <ul className="mt-4 space-y-2.5 text-[13.5px] text-zinc-600">
+                <li>
+                  <Link href="/privacy" className="transition hover:text-zinc-900">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/terms" className="transition hover:text-zinc-900">
+                    Terms of Service
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Status */}
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Status</p>
+              <ul className="mt-4 space-y-2.5">
+                {PRODUCTS.map((product) => (
+                  <li key={product.name} className="flex items-center gap-2 text-[13.5px] text-zinc-600">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                    <span className="truncate">{product.name}</span>
+                    <span className="ml-auto shrink-0 text-[11px] text-zinc-400">Live</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <div className="flex items-center gap-5">
-            <GithubNavLink className="transition hover:text-zinc-800" />
-            <Link href="/login" className="transition hover:text-zinc-800">
-              Sign in
-            </Link>
+
+          <div className="flex flex-col items-center justify-between gap-4 border-t border-zinc-200/70 py-6 text-[12.5px] text-zinc-500 md:flex-row">
+            <FooterCopyright />
+            <span className="flex items-center gap-1.5 text-zinc-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              All systems operational
+            </span>
           </div>
         </div>
       </footer>
