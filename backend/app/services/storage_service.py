@@ -31,6 +31,12 @@ class StorageService(Protocol):
         (the caller should fall back to streaming bytes through the backend instead)."""
         ...
 
+    def usage_summary(self) -> dict:
+        """Real, live total size/object count, broken down by top-level key
+        prefix (e.g. "branding/" background images vs. bare document uploads).
+        For the admin storage-usage panel -- see app/api/routes/admin.py."""
+        ...
+
 
 class LocalStorageService:
     """Stores files on the local disk under settings.uploads_dir."""
@@ -60,6 +66,23 @@ class LocalStorageService:
 
     def presigned_url(self, stored_filename: str, filename: str, expires_in: int = 300) -> str | None:
         return None
+
+    def usage_summary(self) -> dict:
+        # _path() always strips any "folder/" prefix off stored_filename via
+        # os.path.basename -- this backend is genuinely flat on disk, so there's
+        # no meaningful prefix to group by the way R2's real key structure has.
+        total_bytes = 0
+        count = 0
+        for name in os.listdir(self.base_dir):
+            path = os.path.join(self.base_dir, name)
+            if os.path.isfile(path):
+                total_bytes += os.path.getsize(path)
+                count += 1
+        return {
+            "used_bytes": total_bytes,
+            "object_count": count,
+            "by_prefix": [{"prefix": "(all)", "bytes": total_bytes, "count": count}] if count else [],
+        }
 
 
 class R2StorageService:
@@ -113,6 +136,30 @@ class R2StorageService:
             },
             ExpiresIn=expires_in,
         )
+
+    def usage_summary(self) -> dict:
+        """Real totals from a full bucket listing (paginated -- a bucket can
+        exceed list_objects_v2's 1,000-key-per-call cap), grouped by the first
+        "/"-separated key segment (e.g. "branding" for background images;
+        bare document uploads have no "/" and group under "(root)")."""
+        total_bytes = 0
+        count = 0
+        by_prefix: dict[str, dict] = {}
+        paginator = self.client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=self.bucket_name):
+            for obj in page.get("Contents", []):
+                size = obj["Size"]
+                prefix = obj["Key"].split("/", 1)[0] if "/" in obj["Key"] else "(root)"
+                total_bytes += size
+                count += 1
+                entry = by_prefix.setdefault(prefix, {"prefix": prefix, "bytes": 0, "count": 0})
+                entry["bytes"] += size
+                entry["count"] += 1
+        return {
+            "used_bytes": total_bytes,
+            "object_count": count,
+            "by_prefix": sorted(by_prefix.values(), key=lambda e: -e["bytes"]),
+        }
 
 
 _storage_service: StorageService | None = None

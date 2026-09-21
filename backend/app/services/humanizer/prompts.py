@@ -155,6 +155,21 @@ AGGRESSIVE_BANNED_VOCABULARY = [
 # regardless of which prompt built the candidate.
 ALL_BANNED_VOCABULARY = list(dict.fromkeys(BANNED_VOCABULARY + AGGRESSIVE_BANNED_VOCABULARY))
 
+# 2026-09-20: real production case -- a mindfulness essay about houseplants came back as
+# a wholesale unrelated story (divorced parents; separately, in a follow-up A/B round, a
+# fabricated dinner party with a neighbor's crying baby and "my friend Jane"). Traced to a
+# real internal contradiction in this exact technique list, below: "feel free to make [an
+# analogy] a more specific, concrete one instead" sat right next to the separate hard rule
+# (see STRICT_HARD_RULES) forbidding new scenes/anecdotes -- explicitly inviting invention
+# a few sentences from where invention is explicitly banned. Tested for real, not assumed:
+# removed the clause, kept everything else (including prompt length/shape -- this is still
+# the same prompt export.py bakes into training, minus one contradictory sentence) and reran
+# the exact failing input 3x on live Modal. All 3 stayed on-topic (no invented scene/people)
+# -- a real improvement over both the untouched prompt (1/3 faithful in the same round of
+# testing) and a from-scratch "simpler" prompt tried first (0/3, one catastrophic fabrication
+# of an entire unrelated dinner-party scene) -- confirming the simpler-prompt theory was
+# wrong (this model was fine-tuned on THIS prompt's shape; a shorter unfamiliar one pushed
+# it further out of distribution, not closer to control) while the contradiction theory held.
 _TECHNIQUES = """Techniques to apply:
 - Structural rewrite mandate: do not keep the original sentence skeleton. Merge sentences, split \
 them, reorder clauses, change where sentences start. Synonym-swapping alone is failure.
@@ -188,10 +203,7 @@ transition word bank — a short aside, a direct address, an informal pivot — 
 unnamed authority ("studies show", "experts agree") — make the point directly and specifically \
 instead. Using either once, where it genuinely fits, is fine; the tell is repetition, not the \
 construction itself.
-- Prefer concrete, specific words over vague abstractions, and plain verbs over nominalizations. \
-Where the source uses a generic example or analogy, feel free to make it a more specific, \
-concrete one instead (a real-world comparison rather than an abstract description) as long as it \
-doesn't change what's being claimed.
+- Prefer concrete, specific words over vague abstractions, and plain verbs over nominalizations.
 - Commit to statements the way a person would, instead of hedging every clause. Real writing is \
 also inconsistent in small, human ways — a touch of restraint in one place, more directness in \
 another, an occasional aside — rather than holding one uniform register end to end. Don't \

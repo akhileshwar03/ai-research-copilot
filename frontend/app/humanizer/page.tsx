@@ -12,6 +12,7 @@ import { DEFAULT_WAIT_STAGES, ULTRA_WAIT_STAGES, WaitingExperience } from "@/fea
 import { humanizerApi, type HumanizeRun, type HumanizeStyle } from "@/services/api/humanizer-api";
 import { ImportControls } from "@/features/shared/components/import-controls";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { PageBackground } from "@/features/shared/components/page-background";
 import { CursorSpotlight, Glare } from "@/features/shared/motion/motion";
 import MainLayout from "@/components/layout/main-layout";
 import { takeHumanizerPrefill } from "@/shared/lib/humanizer-handoff";
@@ -327,7 +328,7 @@ export default function HumanizerPage() {
     <MainLayout
       background={
         <>
-          <AtmosphereBackground variant="soft" />
+          <PageBackground page="humanizer" dynamic={<AtmosphereBackground variant="soft" />} />
           <CursorSpotlight color="138,90,110" />
         </>
       }

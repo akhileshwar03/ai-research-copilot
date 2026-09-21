@@ -15,6 +15,7 @@ import { SignalBar } from "@/features/checker/components/signal-bar";
 import { WritingFeedbackPanel } from "@/features/checker/components/writing-feedback-panel";
 import { ImportControls } from "@/features/shared/components/import-controls";
 import { CheckerBackground } from "@/features/checker/components/checker-background";
+import { PageBackground } from "@/features/shared/components/page-background";
 import { CursorSpotlight, Glare, Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { TrustSection } from "@/features/checker/components/trust-section";
 import MainLayout from "@/components/layout/main-layout";
@@ -263,7 +264,7 @@ export default function CheckerPage() {
     <MainLayout
       background={
         <>
-          <CheckerBackground />
+          <PageBackground page="checker" dynamic={<CheckerBackground />} />
           <CursorSpotlight color="138,90,110" />
         </>
       }

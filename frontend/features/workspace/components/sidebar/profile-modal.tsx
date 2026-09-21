@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { adminApi } from "@/services/api/admin-api";
 import { authApi } from "@/services/api/auth-api";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { notifyDisplayNameUpdated } from "@/features/shared/hooks/use-display-name";
 import { useSessionStore } from "@/stores/session-store";
 
 
@@ -113,15 +114,26 @@ function TextInput({
 function ProfileSection({ email }: { email: string | null }) {
   const [firstName, setFirstName] = useState(() => ls("pf_firstname"));
   const [lastName, setLastName] = useState(() => ls("pf_lastname"));
+  // What's actually persisted right now — separate from the (possibly
+  // mid-edit) firstName/lastName state above, so the button can tell "typed
+  // but not saved yet" apart from "nothing to save". Previously there was no
+  // such tracking at all: the button looked identically "ready" whether the
+  // fields were untouched, already saved, or mid-edit.
+  const [savedFirstName, setSavedFirstName] = useState(() => ls("pf_firstname"));
+  const [savedLastName, setSavedLastName] = useState(() => ls("pf_lastname"));
   const [saved, setSaved] = useState(false);
 
   const initial = email ? email[0].toUpperCase() : "?";
   const displayName =
     firstName || lastName ? `${firstName} ${lastName}`.trim() : email?.split("@")[0] ?? "User";
+  const dirty = firstName !== savedFirstName || lastName !== savedLastName;
 
   const handleSave = () => {
     saveLs("pf_firstname", firstName);
     saveLs("pf_lastname", lastName);
+    setSavedFirstName(firstName);
+    setSavedLastName(lastName);
+    notifyDisplayNameUpdated(); // live-updates the top-bar account button/menu, see use-display-name.ts
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
   };
@@ -158,11 +170,14 @@ function ProfileSection({ email }: { email: string | null }) {
         <div className="pt-2">
           <button
             onClick={handleSave}
+            disabled={!dirty && !saved}
             className={[
               "flex items-center gap-2 rounded-xl px-5 py-2.5 text-[13px] font-medium transition",
               saved
                 ? "bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30"
-                : "bg-[var(--text-primary)] text-[var(--app-bg)] hover:opacity-90",
+                : dirty
+                  ? "bg-[var(--text-primary)] text-[var(--app-bg)] hover:opacity-90"
+                  : "cursor-not-allowed bg-[var(--surface-2)] text-zinc-600",
             ].join(" ")}
           >
             {saved ? (

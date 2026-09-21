@@ -6,6 +6,20 @@ import { apiRequest } from "@/services/api/client";
 
 export type ToolKey = "research_copilot" | "humanizer" | "checker" | "realtime" | "paper_analyzer" | "extract";
 
+/** The 6 pages with their own background: the 5 tool pages (same keys as
+ *  ToolKey, minus "extract" which has no standalone page) plus "landing"
+ *  for the public marketing page. Matches backend BACKGROUND_PAGES exactly —
+ *  keep in sync if a page is ever added or removed on either side. */
+export type BackgroundPage = "landing" | "research_copilot" | "humanizer" | "checker" | "realtime" | "paper_analyzer";
+export const BACKGROUND_PAGES: BackgroundPage[] = [
+  "landing", "research_copilot", "humanizer", "checker", "realtime", "paper_analyzer",
+];
+
+export interface BackgroundConfig {
+  mode: "dynamic" | "static";
+  image_url: string | null;
+}
+
 export interface PublicAppConfig {
   tools: Record<ToolKey, boolean>;
   signups_enabled: boolean;
@@ -14,6 +28,9 @@ export interface PublicAppConfig {
   chat_max_chars: number;
   humanize_max_words: number;
   checker_max_chars: number;
+  github_link_enabled: boolean;
+  github_repo_url: string;
+  backgrounds: Record<BackgroundPage, BackgroundConfig>;
 }
 
 /** Which tool each product route belongs to — drives nav state and the
@@ -41,6 +58,17 @@ const FALLBACK: PublicAppConfig = {
   chat_max_chars: 4000,
   humanize_max_words: 3000,
   checker_max_chars: 20000,
+  // Falls back to hidden, not to a hardcoded repo URL — if the config request fails,
+  // showing nothing is the safe default, not silently exposing a repo an admin may
+  // have since turned off.
+  github_link_enabled: false,
+  github_repo_url: "",
+  // Falls back to every page's built-in animated scene — never to a static
+  // image URL that might not resolve, so a transient config-fetch failure
+  // degrades to "the background that always worked," not a broken one.
+  backgrounds: Object.fromEntries(
+    BACKGROUND_PAGES.map((page) => [page, { mode: "dynamic", image_url: null }])
+  ) as Record<BackgroundPage, BackgroundConfig>,
 };
 
 /** Public runtime config (no auth). Cached for a minute; failure falls back

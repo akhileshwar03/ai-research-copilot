@@ -25,6 +25,20 @@ logger = logging.getLogger(__name__)
 
 SettingValue = int | float | bool | str
 
+# The 6 pages that get their own background: the 5 tool pages, keyed exactly
+# like app.api.dependencies.tools.TOOL_SETTING_KEYS / the frontend's
+# ROUTE_TOOL (same canonical tool-key set, reused rather than inventing a
+# second naming scheme), plus "landing" for the public marketing page, which
+# has no tool key of its own.
+BACKGROUND_PAGES: tuple[str, ...] = (
+    "landing",
+    "research_copilot",
+    "humanizer",
+    "checker",
+    "realtime",
+    "paper_analyzer",
+)
+
 
 @dataclass(frozen=True)
 class SettingDef:
@@ -60,6 +74,40 @@ def _defs() -> dict[str, SettingDef]:
         "announcement_text": SettingDef(
             str, 0, 300, "Banner shown to every signed-in user at the top of the workspace (empty = hidden)", "platform"
         ),
+        # 2026-09-20: whether the marketing landing page links out to the source repo,
+        # and where. Off by default's not right either -- open source is a legitimate
+        # choice -- but it shouldn't be a silent, unremovable default: an admin should
+        # be able to turn it off (e.g. before the repo is public, or if it's ever made
+        # private) or repoint it (a different/renamed repo) without a code deploy.
+        "github_link_enabled": _bool_setting(
+            "Show a GitHub link on the public landing page, pointing at github_repo_url below.",
+            "platform",
+        ),
+        "github_repo_url": SettingDef(
+            str, 0, 300, "Repo URL the landing page's GitHub link points to (only shown when the toggle above is on)", "platform"
+        ),
+        # ── Appearance (per-page background) ──────────────────────────────────
+        # 2026-09-20: each of the 6 pages (landing + 5 tools) has its own animated
+        # background (SiteBackground / AtmosphereBackground) -- "dynamic" here,
+        # the only option that ever existed before this. "static" swaps it for an
+        # admin-uploaded image, served from app.api.routes.background (image bytes
+        # live in object storage via StorageService, not in this string setting --
+        # this only records the mode). Deliberately NOT auto-applied the instant an
+        # admin picks "static" in the dropdown: the frontend gates the actual save
+        # on an image having been uploaded first, so a page can never go live in
+        # "static" mode with nothing to show -- see BackgroundSection in
+        # settings-tab.tsx and POST /admin/background/{page}.
+        **{
+            f"bg_mode_{page}": SettingDef(
+                str,
+                0,
+                10,
+                f"Background for the {page.replace('_', ' ')} page: the built-in animated scene, or an uploaded static image.",
+                "appearance",
+                choices=frozenset({"dynamic", "static"}),
+            )
+            for page in BACKGROUND_PAGES
+        },
         # ── Feature switches ────────────────────────────────────────────────
         "tool_research_copilot_enabled": _bool_setting("Research Copilot (document chat) is available", "features"),
         "tool_humanizer_enabled": _bool_setting("Humanizer is available", "features"),
@@ -172,6 +220,7 @@ def _defs() -> dict[str, SettingDef]:
 
 CATEGORY_LABELS: dict[str, str] = {
     "platform": "Platform",
+    "appearance": "Appearance",
     "features": "Feature switches",
     "uploads": "Uploads & retention",
     "research_copilot": "Research Copilot",
@@ -189,6 +238,9 @@ def _env_defaults() -> dict[str, SettingValue]:
         "maintenance_mode": False,
         "signups_enabled": True,
         "announcement_text": "",
+        "github_link_enabled": True,
+        "github_repo_url": "https://github.com/akhileshwar03/ai-research-copilot",
+        **{f"bg_mode_{page}": "dynamic" for page in BACKGROUND_PAGES},
         "tool_research_copilot_enabled": True,
         "tool_humanizer_enabled": True,
         "tool_checker_enabled": True,

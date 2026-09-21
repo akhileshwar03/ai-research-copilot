@@ -10,15 +10,18 @@ here. Every state-changing action is written to admin_audit_log.
 import csv
 import io
 import logging
+import os
 import platform
 import sys
 import time
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
+from PIL import Image
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import case, func, text
@@ -47,7 +50,7 @@ from app.services.ai_service import AIService
 from app.services.auth_service import AuthService
 from app.services.document_service import DocumentService
 from app.services.retention_service import run_cleanup
-from app.services.runtime_settings import CATEGORY_LABELS, describe_settings, runtime_settings
+from app.services.runtime_settings import BACKGROUND_PAGES, CATEGORY_LABELS, describe_settings, runtime_settings
 from app.services.storage_service import get_storage_service
 from app.services.usage_tracking import TOOL_LABELS
 
@@ -859,6 +862,18 @@ def update_runtime_settings(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
+    # A page can never be saved into "static" mode with nothing to show --
+    # enforced here, not just left to the admin UI's own upload-before-save
+    # gating, so a direct API call can't create the broken state either.
+    for key, value in body.settings.items():
+        if key.startswith("bg_mode_") and value == "static":
+            page = key[len("bg_mode_"):]
+            if db.get(AppSetting, f"{_BG_IMAGE_KEY_PREFIX}{page}") is None:
+                raise AppError(
+                    code="NO_BACKGROUND_IMAGE",
+                    message=f"Upload an image for {page.replace('_', ' ')} before switching it to static.",
+                    status_code=400,
+                )
     for key, value in body.settings.items():
         runtime_settings.set(db, key, value)
     record_admin_action(db, admin_email=admin.email, action="settings.update", details=dict(body.settings))
@@ -868,6 +883,141 @@ def update_runtime_settings(
 @router.get("/settings/categories")
 def get_setting_categories(admin: User = Depends(require_admin)):
     return [{"key": key, "label": label} for key, label in CATEGORY_LABELS.items()]
+
+
+# ── Per-page background images ──────────────────────────────────────────────────
+# 2026-09-20: the image bytes live in object storage (StorageService — R2 in
+# prod), never in this DB row and never in a publicly-readable bucket (that
+# bucket is deliberately private, per the July security audit). This just
+# tracks WHICH stored object is current for each page, as a plain AppSetting
+# row keyed "_bg_image_<page>" -- written here directly rather than through
+# the typed runtime_settings/_defs() system, specifically so it never shows
+# up as an editable field in the generic admin Settings UI (it's bookkeeping,
+# not a setting a human should hand-type). GET /app/background/{page} (see
+# app_config.py) is the one place that reads it back, to stream the bytes to
+# a public, unauthenticated request without the storage backend itself ever
+# being public.
+_BG_IMAGE_KEY_PREFIX = "_bg_image_"
+_BG_MAX_BYTES = 8 * 1024 * 1024
+_BG_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# 2026-09-20: background images are full-viewport, fixed, and loaded on
+# every single page view -- an admin uploading a straight-off-a-phone 4-6MB
+# photo would make every visitor pay that download on first paint for a
+# purely decorative element. Compressed server-side before it ever reaches
+# object storage, not left to the admin to pre-shrink themselves.
+_BG_TARGET_MAX_BYTES = 100 * 1024
+_BG_MAX_DIMENSION = 2000  # px, longest side -- these render as a page backdrop, never viewed at native size
+
+
+def _compress_background_image(content: bytes) -> bytes:
+    """Resizes/recompresses to _BG_TARGET_MAX_BYTES. Always re-encodes to
+    WebP regardless of the input format -- WebP's lossy mode reliably hits a
+    much smaller size than PNG at a given visual quality, and one consistent
+    output format keeps this simple (no per-format branching downstream:
+    serving, content-type, extension). Bounded, real iteration rather than
+    guessing one right quality setting: downscale first (dimensions matter
+    far more than quality percentage at any acceptable quality), then step
+    quality down; if even the floor quality is still over budget on an
+    unusually large/detailed source, one more aggressive downscale pass
+    rather than looping indefinitely chasing a target quality alone can't reach.
+    Raises AppError if the bytes aren't a real image the declared content-type
+    claimed them to be (Pillow can't open them)."""
+    try:
+        image = Image.open(io.BytesIO(content)).convert("RGB")
+    except Exception as exc:
+        raise AppError(code="INVALID_FILE_TYPE", message="File is not a valid image", status_code=400) from exc
+
+    if max(image.size) > _BG_MAX_DIMENSION:
+        image.thumbnail((_BG_MAX_DIMENSION, _BG_MAX_DIMENSION), Image.LANCZOS)
+
+    for quality in (85, 75, 65, 55, 45, 35, 25, 18, 12):
+        buf = io.BytesIO()
+        image.save(buf, format="WEBP", quality=quality, method=6)
+        data = buf.getvalue()
+        if len(data) <= _BG_TARGET_MAX_BYTES:
+            return data
+
+    image.thumbnail((1200, 1200), Image.LANCZOS)
+    buf = io.BytesIO()
+    image.save(buf, format="WEBP", quality=12, method=6)
+    return buf.getvalue()
+
+
+@router.post("/background/{page}")
+async def upload_background_image(
+    page: str,
+    file: UploadFile = File(...),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if page not in BACKGROUND_PAGES:
+        raise AppError(code="UNKNOWN_PAGE", message=f"Unknown page: {page}", status_code=400)
+    if (file.content_type or "") not in _BG_ALLOWED_CONTENT_TYPES:
+        raise AppError(
+            code="INVALID_FILE_TYPE", message="Only JPEG, PNG, or WebP images are allowed", status_code=400
+        )
+    content = await file.read()
+    if len(content) > _BG_MAX_BYTES:
+        raise AppError(code="FILE_TOO_LARGE", message="Image exceeds the 8 MB limit", status_code=413)
+
+    content = _compress_background_image(content)
+
+    storage = get_storage_service()
+    settings_key = f"{_BG_IMAGE_KEY_PREFIX}{page}"
+    row = db.get(AppSetting, settings_key)
+    previous_stored_key = row.value if row else None
+
+    # Always .webp -- _compress_background_image always re-encodes to it
+    # regardless of the uploaded format.
+    stored_key = f"branding/background-{page}-{uuid.uuid4()}.webp"
+    storage.save(stored_key, content)
+
+    if row:
+        row.value = stored_key
+    else:
+        db.add(AppSetting(key=settings_key, value=stored_key))
+    db.commit()
+
+    # Best-effort: an old image left behind if this fails costs storage, not
+    # correctness (the new one is already live) -- not worth failing the
+    # request over.
+    if previous_stored_key:
+        try:
+            storage.delete(previous_stored_key)
+        except Exception:
+            logger.warning("background_image_cleanup_failed page=%s key=%s", page, previous_stored_key, exc_info=True)
+
+    record_admin_action(db, admin_email=admin.email, action="background.upload", target=page)
+    # Same versioning scheme as GET /app/config's backgrounds[page].image_url
+    # (see app_config.py) -- the path never changes between uploads, so the
+    # version query param is what actually busts the 1-hour browser cache on
+    # a re-upload. rsplit on "/" not "-": stored_key's own uuid4 segment
+    # contains hyphens, splitting on those would truncate it.
+    return {"page": page, "image_url": f"/app/background/{page}?v={stored_key.rsplit('/', 1)[-1]}"}
+
+
+@router.delete("/background/{page}")
+def delete_background_image(page: str, admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if page not in BACKGROUND_PAGES:
+        raise AppError(code="UNKNOWN_PAGE", message=f"Unknown page: {page}", status_code=400)
+    settings_key = f"{_BG_IMAGE_KEY_PREFIX}{page}"
+    row = db.get(AppSetting, settings_key)
+    if not row:
+        raise AppError(code="NOT_FOUND", message="No image uploaded for this page", status_code=404)
+
+    storage = get_storage_service()
+    try:
+        storage.delete(row.value)
+    except Exception:
+        logger.warning("background_image_delete_failed page=%s key=%s", page, row.value, exc_info=True)
+    db.delete(row)
+    # A page can't stay in "static" mode with nothing to show -- fall back to
+    # dynamic automatically rather than leaving a broken image reference live.
+    if runtime_settings.get(f"bg_mode_{page}") == "static":
+        runtime_settings.set(db, f"bg_mode_{page}", "dynamic")
+    db.commit()
+    record_admin_action(db, admin_email=admin.email, action="background.delete", target=page)
+    return MessageResponse(message=f"Background image removed for {page}")
 
 
 # ── Audit log & usage events ───────────────────────────────────────────────────
@@ -944,6 +1094,62 @@ def get_usage_events(
 
 # ── System ─────────────────────────────────────────────────────────────────────
 
+# 2026-09-20: real limits, fetched live from each provider's own pricing page
+# (not estimated) -- Neon's free plan: "0.5 GB/project" storage, hard cap that
+# blocks writes once exceeded (confirmed this account is on the free plan, not
+# assumed). Cloudflare R2 free tier: "10 GB-month / month" storage. Both are
+# storage limits specifically -- compute-hours/request-count limits exist too
+# but aren't shown here since this panel only answers "how much storage is
+# left", the question this was built for.
+_NEON_FREE_STORAGE_BYTES = 512 * 1024 * 1024
+_R2_FREE_STORAGE_BYTES = 10 * 1024 * 1024 * 1024
+_TOP_TABLES_LIMIT = 10
+
+
+@router.get("/system/storage")
+def get_storage_usage(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Real, live storage usage for the two backing stores -- Postgres (Neon)
+    and object storage (R2) -- against their real free-tier limits. Answers
+    "how much are we using, how much is left" with actual numbers, not
+    estimates. Neon's per-table breakdown only works on the real Postgres
+    dialect (pg_database_size/pg_stat_user_tables); on local SQLite dev this
+    section comes back null rather than erroring."""
+    neon: dict | None = None
+    if engine.dialect.name == "postgresql":
+        total_bytes = db.execute(text("SELECT pg_database_size(current_database())")).scalar() or 0
+        rows = db.execute(
+            text(
+                """
+                SELECT relname, n_live_tup, pg_total_relation_size(relid)
+                FROM pg_stat_user_tables
+                ORDER BY pg_total_relation_size(relid) DESC
+                LIMIT :limit
+                """
+            ),
+            {"limit": _TOP_TABLES_LIMIT},
+        ).fetchall()
+        neon = {
+            "used_bytes": int(total_bytes),
+            "limit_bytes": _NEON_FREE_STORAGE_BYTES,
+            "percent_used": round(100 * int(total_bytes) / _NEON_FREE_STORAGE_BYTES, 1),
+            "top_tables": [{"name": r[0], "row_count": int(r[1]), "bytes": int(r[2])} for r in rows],
+        }
+
+    r2: dict | None = None
+    settings = get_settings()
+    if all([settings.r2_account_id, settings.r2_access_key_id, settings.r2_secret_access_key, settings.r2_bucket_name]):
+        summary = get_storage_service().usage_summary()
+        r2 = {
+            "used_bytes": summary["used_bytes"],
+            "limit_bytes": _R2_FREE_STORAGE_BYTES,
+            "percent_used": round(100 * summary["used_bytes"] / _R2_FREE_STORAGE_BYTES, 2),
+            "object_count": summary["object_count"],
+            "by_prefix": summary["by_prefix"],
+        }
+
+    return {"neon": neon, "r2": r2}
+
+
 @router.get("/system")
 def get_system_info(
     probe: bool = Query(default=False, description="Also ping OpenAI and Ollama (slower)"),
@@ -998,6 +1204,95 @@ def get_system_info(
     else:
         email_provider = "dev-echo"
 
+    # 2026-09-20: every real external service this project uses, one list --
+    # not just the ones with a usage number we can pull live. Neon/R2 are
+    # tracked directly (GET /admin/system/storage), so they point back at
+    # that instead of an external link; everything else can only be checked
+    # on the provider's own dashboard -- no self-serve usage API exists for
+    # most of these without a separate, higher-privilege key we don't hold
+    # (e.g. OpenAI's usage endpoint needs an org admin key, not a regular
+    # secret key). Google/Groq/Anthropic are read straight from the
+    # environment, not app.core.config.Settings -- real, not a guess: these
+    # three are only ever used by the offline finetune tooling
+    # (scripts/finetune/aiify_api.py, tag.py), never by the live app itself.
+    #
+    # load_dotenv() first is required here, not optional -- pydantic-settings
+    # reads backend/.env into its own Settings object but never exports it to
+    # the real process os.environ, so a bare os.environ.get() below would
+    # silently read as unconfigured even with a real key present in .env.
+    # This exact bug already bit this project once (see aiify_api.py's own
+    # 2026-08-07 comment: "GROQ_API_KEY silently invisible to os.environ.get,
+    # causing a fallback to a paid API instead of free Groq") -- avoiding a
+    # repeat of it here, not assuming this would otherwise just work.
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    external_apis = [
+        {
+            "name": "OpenAI",
+            "category": "Live app (chat, checker, humanizer)",
+            "configured": bool(settings.openai_api_key),
+            "tracked_here": False,
+            "dashboard_url": "https://platform.openai.com/usage",
+        },
+        {
+            "name": "Modal (Ultra Human GPU hosting)",
+            "category": "Live app",
+            "configured": bool(settings.humanizer_ultra_modal_key),
+            "tracked_here": False,
+            "dashboard_url": "https://modal.com/apps",
+        },
+        {
+            "name": "Tavily",
+            "category": "Live app (Real-time AI web search)",
+            "configured": bool(settings.tavily_api_key),
+            "tracked_here": False,
+            "dashboard_url": "https://app.tavily.com",
+        },
+        {
+            "name": "Resend",
+            "category": "Live app (transactional email)",
+            "configured": bool(settings.resend_api_key),
+            "tracked_here": False,
+            "dashboard_url": "https://resend.com/emails",
+        },
+        {
+            "name": "Neon (Postgres)",
+            "category": "Live app (database)",
+            "configured": True,
+            "tracked_here": True,
+            "dashboard_url": "https://console.neon.tech",
+        },
+        {
+            "name": "Cloudflare R2",
+            "category": "Live app (object storage)",
+            "configured": r2_configured,
+            "tracked_here": True,
+            "dashboard_url": "https://dash.cloudflare.com",
+        },
+        {
+            "name": "Google AI (Gemini)",
+            "category": "Finetune tooling only, not the live app",
+            "configured": bool(os.environ.get("GOOGLE_API_KEY")),
+            "tracked_here": False,
+            "dashboard_url": "https://aistudio.google.com/usage",
+        },
+        {
+            "name": "Groq",
+            "category": "Finetune tooling only, not the live app",
+            "configured": bool(os.environ.get("GROQ_API_KEY")),
+            "tracked_here": False,
+            "dashboard_url": "https://console.groq.com/settings/billing",
+        },
+        {
+            "name": "Anthropic",
+            "category": "Finetune tooling only, not the live app",
+            "configured": bool(os.environ.get("ANTHROPIC_API_KEY")),
+            "tracked_here": False,
+            "dashboard_url": "https://console.anthropic.com/settings/billing",
+        },
+    ]
+
     return {
         "app_name": settings.app_name,
         "environment": settings.environment,
@@ -1029,6 +1324,7 @@ def get_system_info(
             "days": int(runtime_settings.get("retention_days")),
             "last_run_at": retention_row.value if retention_row else None,
         },
+        "external_apis": external_apis,
     }
 
 

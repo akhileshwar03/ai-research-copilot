@@ -217,6 +217,31 @@ export interface SystemInfo {
   oauth: { google: boolean; github: boolean };
   admin_bootstrap_emails: number;
   retention: { days: number; last_run_at: string | null };
+  external_apis: ExternalApiInfo[];
+}
+
+export interface ExternalApiInfo {
+  name: string;
+  category: string;
+  configured: boolean;
+  tracked_here: boolean;
+  dashboard_url: string;
+}
+
+export interface StorageUsage {
+  neon: {
+    used_bytes: number;
+    limit_bytes: number;
+    percent_used: number;
+    top_tables: { name: string; row_count: number; bytes: number }[];
+  } | null;
+  r2: {
+    used_bytes: number;
+    limit_bytes: number;
+    percent_used: number;
+    object_count: number;
+    by_prefix: { prefix: string; bytes: number; count: number }[];
+  } | null;
 }
 
 function qs(params: Record<string, string | number | boolean | undefined>): string {
@@ -287,6 +312,18 @@ export const adminApi = {
       body: JSON.stringify({ settings }),
     }),
 
+  uploadBackgroundImage: (page: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<{ page: string; image_url: string }>(`/admin/background/${encodeURIComponent(page)}`, {
+      method: "POST",
+      body,
+    });
+  },
+
+  deleteBackgroundImage: (page: string) =>
+    apiRequest<{ message: string }>(`/admin/background/${encodeURIComponent(page)}`, { method: "DELETE" }),
+
   auditLog: (params: { skip?: number; limit?: number; action?: string } = {}) =>
     apiRequest<AuditLogResponse>(`/admin/audit-log${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, action: params.action })}`),
 
@@ -296,6 +333,8 @@ export const adminApi = {
     ),
 
   system: (probe = false) => apiRequest<SystemInfo>(`/admin/system${probe ? "?probe=true" : ""}`),
+
+  storageUsage: () => apiRequest<StorageUsage>("/admin/system/storage"),
 
   runRetention: () =>
     apiRequest<{ message: string; summary: Record<string, number> }>("/admin/retention/run", { method: "POST" }),

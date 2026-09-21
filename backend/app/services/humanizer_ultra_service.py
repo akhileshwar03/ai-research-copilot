@@ -247,17 +247,23 @@ _MAX_EXPANSION_RESAMPLES = 4  # bounds the added latency; a resample costs a ful
 
 
 class HumanizerUltraService:
-    async def _generate_chunk(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
+    async def _generate_chunk(
+        self, client: httpx.AsyncClient, settings, system: str, chunk: str, temperature: float = 1.0
+    ) -> str:
         """Dispatches to whichever backend runtime_settings.humanizer_ultra_backend
         currently selects. The "off" case is checked once up front in generate(), not
         here -- by the time this runs, the backend is guaranteed to be "local" or
-        "modal"."""
+        "modal". `temperature` defaults to 1.0 (the long-proven value both Modelfiles
+        were tuned against); a resample can pass a lower value -- see
+        _generate_chunk_checked's cooling schedule."""
         backend = runtime_settings.get("humanizer_ultra_backend")
         if backend == "modal":
-            return await self._generate_chunk_modal(client, settings, system, chunk)
-        return await self._generate_chunk_local(client, settings, system, chunk)
+            return await self._generate_chunk_modal(client, settings, system, chunk, temperature)
+        return await self._generate_chunk_local(client, settings, system, chunk, temperature)
 
-    async def _generate_chunk_local(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
+    async def _generate_chunk_local(
+        self, client: httpx.AsyncClient, settings, system: str, chunk: str, temperature: float = 1.0
+    ) -> str:
         resp = await client.post(
             f"{settings.humanizer_ultra_ollama_url}/api/chat",
             json={
@@ -267,7 +273,15 @@ class HumanizerUltraService:
                     {"role": "user", "content": chunk},
                 ],
                 "stream": False,
-                "options": {"num_predict": _num_predict_for(chunk, settings.humanizer_ultra_timeout_seconds)},
+                # temperature explicit (not left to the Modelfile's own baked-in default)
+                # so a resample can ask for a more conservative sample -- see
+                # _generate_chunk_checked's cooling schedule. 1.0 here matches that
+                # Modelfile default exactly, so a first attempt (no resample yet)
+                # behaves identically to before this parameter existed.
+                "options": {
+                    "num_predict": _num_predict_for(chunk, settings.humanizer_ultra_timeout_seconds),
+                    "temperature": temperature,
+                },
             },
         )
         resp.raise_for_status()
@@ -283,7 +297,9 @@ class HumanizerUltraService:
         content = _strip_html_artifacts(data.get("message", {}).get("content", ""))
         return _strip_scraped_credit_lines(content, chunk).strip()
 
-    async def _generate_chunk_modal(self, client: httpx.AsyncClient, settings, system: str, chunk: str) -> str:
+    async def _generate_chunk_modal(
+        self, client: httpx.AsyncClient, settings, system: str, chunk: str, temperature: float = 1.0
+    ) -> str:
         """scripts/finetune/serve_ultra_vllm.py, the Modal + vLLM deployment -- built
         for concurrent multi-user traffic (real researched numbers: ~10-20x Ollama's
         throughput under concurrent load), unlike the single-user local/Ollama path.
@@ -322,7 +338,7 @@ class HumanizerUltraService:
             "max_tokens": _num_predict_for(
                 chunk, settings.humanizer_ultra_modal_timeout_seconds, _MODAL_MEASURED_GEN_TOKENS_PER_SECOND
             ),
-            "temperature": 1.0,
+            "temperature": temperature,
             "top_p": 0.95,
             "repetition_penalty": 1.15,
         }
@@ -379,14 +395,36 @@ class HumanizerUltraService:
         if not source_words:
             return best
 
+        # 2026-09-20: real, confirmed production case -- a mindfulness essay about
+        # houseplants came back as an unrelated first-person story about divorced
+        # parents, on every one of 4 resamples, each inventing a DIFFERENT fake name
+        # (so entity_check kept firing) but the SAME underlying hijacked narrative.
+        # Every prior resample attempt in this loop was fired at the identical
+        # temperature=1.0 that produced the problem in the first place -- nothing
+        # about "try again" made the model any less likely to go off-topic again.
+        # Cooling the temperature on each successive resample is a real, different
+        # lever from everything tried earlier this session (all of which were
+        # POST-HOC detectors: embedding/NLI similarity, an LLM judge, entity
+        # regexes) -- this instead makes the generation itself more conservative
+        # each time it's asked to try again, on the reasoning that high temperature
+        # is what lets the model wander into inventing a scene at all. Shared
+        # across both resample loops below (one running counter) so the schedule
+        # keeps cooling across a chunk's *entire* retry sequence, not per-loop.
+        resamples_used = 0
+
+        def _cooled_temperature() -> float:
+            return max(0.3, 1.0 - 0.2 * resamples_used)
+
         while chunking.word_count(best) > source_words * _MAX_EXPANSION_RATIO and budget[0] > 0:
             budget[0] -= 1
+            resamples_used += 1
             logger.warning(
-                "humanizer_ultra_runaway_expansion source_words=%d output_words=%d; resampling",
+                "humanizer_ultra_runaway_expansion source_words=%d output_words=%d; resampling temperature=%.1f",
                 source_words,
                 chunking.word_count(best),
+                _cooled_temperature(),
             )
-            candidate = await self._generate_chunk(client, settings, system, chunk)
+            candidate = await self._generate_chunk(client, settings, system, chunk, _cooled_temperature())
             if abs(chunking.word_count(candidate) - source_words) < abs(chunking.word_count(best) - source_words):
                 best = candidate
 
@@ -411,16 +449,46 @@ class HumanizerUltraService:
 
         while check_entity_invariant(chunk, best)["violation"] and budget[0] > 0:
             budget[0] -= 1
+            resamples_used += 1
             new_entities = check_entity_invariant(chunk, best)["new_entities"]
             logger.warning(
-                "humanizer_ultra_entity_fabrication new_entities=%r; resampling",
+                "humanizer_ultra_entity_fabrication new_entities=%r; resampling temperature=%.1f",
                 new_entities,
+                _cooled_temperature(),
             )
-            candidate = await self._generate_chunk(client, settings, system, chunk)
+            candidate = await self._generate_chunk(client, settings, system, chunk, _cooled_temperature())
             if not check_entity_invariant(chunk, candidate)["violation"]:
                 best = candidate  # prefer a clean candidate outright
             elif len(check_entity_invariant(chunk, candidate)["new_entities"]) < len(new_entities):
                 best = candidate  # otherwise take whichever fabricates less
+
+        final = check_entity_invariant(chunk, best)
+        if final["violation"]:
+            # 2026-09-20: real, confirmed production case -- a 152-word mindfulness
+            # essay about houseplants came back as a ~370-word first-person story
+            # about divorced parents and a dead pet, on EVERY one of 4 resamples
+            # (different fake names each time, same hijacked narrative). The
+            # expansion-ratio guard above missed it (2.46x, just under the 2.5x
+            # trigger) because the fabrication wasn't primarily a length problem.
+            # Previously this branch didn't exist -- exhausting the resample
+            # budget just shipped whichever attempt fabricated least, which for
+            # a genuinely stuck input is still a fabricated wholesale rewrite,
+            # not a merely-imperfect one. That's the wrong tradeoff for a product
+            # that promises meaning/facts are preserved: a loud, honest failure
+            # here is strictly better than silently shipping an unrelated story.
+            logger.warning(
+                "humanizer_ultra_fabrication_unresolved new_entities=%r; refusing to ship",
+                final["new_entities"],
+            )
+            raise AppError(
+                code="ULTRA_FABRICATION_UNRESOLVED",
+                message=(
+                    "Ultra Human couldn't produce a faithful rewrite of this text after "
+                    "several attempts — it kept introducing content not in the original. "
+                    "Try again, or use the Basic tab instead."
+                ),
+                status_code=502,
+            )
         return best
 
     async def generate(self, text: str, style: str = "normal", expand: bool = False) -> str:

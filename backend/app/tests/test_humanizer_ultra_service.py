@@ -467,6 +467,45 @@ def test_fabricated_named_entity_is_resampled(monkeypatch):
     assert "Andreessen" not in result
 
 
+def test_refuses_rather_than_ships_when_every_resample_still_fabricates(monkeypatch):
+    """Real, confirmed production case (2026-09-20): a 152-word mindfulness essay
+    about houseplants came back as an unrelated ~370-word personal story about
+    divorced parents, on every one of 4 real resamples -- a different fake named
+    entity each time, but the same hijacked narrative underneath. The expansion-
+    ratio guard alone missed it (2.46x, under the 2.5x trigger). Once the shared
+    resample budget is exhausted and the best candidate still fabricates, the
+    service must refuse (a clear error) rather than silently ship whichever
+    attempt fabricated the least -- for a product that promises facts/meaning
+    are preserved, an honest failure beats a wholesale-fabricated rewrite."""
+    source = "The company announced a new product line this quarter."
+    # Every attempt fabricates a different entity -- never converges to clean,
+    # exactly like the real case (a different invented name each resample).
+    replies = iter(
+        [
+            "The company, per Marc Andreessen, announced a new line this quarter.",
+            "The company announced a new line, according to Jane Okafor.",
+            "The company's new line was praised by industry analyst Tom Reyes.",
+            "The company revealed its new line at a keynote by Priya Chandrasekhar.",
+            "The company's launch was covered by reporter Lucia Fernandez-Ortiz.",
+        ]
+    )
+
+    client = _patch_client(monkeypatch, lambda payload: _FakeResponse({"message": {"content": next(replies)}}))
+    with pytest.raises(AppError) as exc_info:
+        asyncio.run(HumanizerUltraService().generate(source))
+
+    assert exc_info.value.code == "ULTRA_FABRICATION_UNRESOLVED"
+    assert len(client.calls) == 5, "initial attempt + all 4 resamples, budget fully spent trying to converge"
+
+    # 2026-09-20 fix: each resample asks for a more conservative sample than the
+    # last, on the theory that the same high temperature that produced the
+    # fabrication in the first place shouldn't be fired again unchanged and
+    # just hoped to land differently. The very first call is unaffected (no
+    # resample has happened yet); each one after that cools by 0.2, floored.
+    temperatures = [round(c["options"]["temperature"], 2) for c in client.calls]
+    assert temperatures == [1.0, 0.8, 0.6, 0.4, 0.3]
+
+
 def test_standalone_fabricated_byline_is_stripped_without_spending_a_resample(monkeypatch):
     """Real fix (2026-09-19): when a fabrication shows up as its own standalone line
     (a byline, a photo credit) rather than woven into a real sentence, it should be

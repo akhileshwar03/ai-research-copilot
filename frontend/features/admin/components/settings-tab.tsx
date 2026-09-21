@@ -1,16 +1,32 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { adminApi, type AdminSetting, type SettingValue } from "@/services/api/admin-api";
 import { Button, INPUT_CLASS, SectionCard, Toggle } from "@/features/admin/components/shared";
+import { buildApiUrl } from "@/constants/config";
+import { type BackgroundPage, useAppConfig } from "@/features/shared/hooks/use-app-config";
+
+const BACKGROUND_PAGE_LABELS: Record<BackgroundPage, string> = {
+  landing: "Landing page",
+  research_copilot: "Research Copilot",
+  humanizer: "Humanizer",
+  checker: "AI Checker",
+  realtime: "Real-time AI",
+  paper_analyzer: "Paper Analyzer",
+};
 
 const SETTING_LABELS: Record<string, string> = {
   maintenance_mode: "Maintenance mode",
   signups_enabled: "Allow new sign-ups",
   announcement_text: "Announcement banner",
+  github_link_enabled: "Show GitHub link on landing page",
+  github_repo_url: "GitHub repo URL",
+  ...Object.fromEntries(
+    Object.entries(BACKGROUND_PAGE_LABELS).map(([page, label]) => [`bg_mode_${page}`, `${label} background`])
+  ),
   tool_research_copilot_enabled: "Research Copilot",
   tool_humanizer_enabled: "Humanizer",
   tool_checker_enabled: "AI Checker & Writing Feedback",
@@ -49,6 +65,90 @@ function valuesEqual(a: SettingValue, b: SettingValue): boolean {
   return String(a) === String(b);
 }
 
+/**
+ * Inline upload/replace/remove control shown under a bg_mode_<page> row
+ * whenever that row's pending value is "static" — the backend independently
+ * refuses to save "static" without an image already uploaded (see admin.py's
+ * update_runtime_settings), so this exists to make that obvious up front
+ * rather than as a save-time error, and to let the image be replaced or
+ * removed once static is already live.
+ */
+function BackgroundImageControl({ page }: { page: BackgroundPage }) {
+  const { config } = useAppConfig();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageUrl = config.backgrounds[page]?.image_url;
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["app-config"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+  };
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => adminApi.uploadBackgroundImage(page, file),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Image uploaded — click Save above to switch this page to static");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Upload failed"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => adminApi.deleteBackgroundImage(page),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Image removed — reverted to the dynamic background");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Remove failed"),
+  });
+
+  const handleFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Only JPEG, PNG, or WebP images are allowed");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Image exceeds the 8 MB limit");
+      return;
+    }
+    uploadMutation.mutate(file);
+  };
+
+  return (
+    <div className="ml-1 mt-2 flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5">
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary uploaded file, not a Next-optimizable static asset
+        <img src={buildApiUrl(imageUrl)} alt="" className="h-12 w-20 shrink-0 rounded-md object-cover ring-1 ring-[var(--border-medium)]" />
+      ) : (
+        <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-md bg-[var(--surface-2)] text-[10px] text-zinc-600 ring-1 ring-[var(--border-medium)]">
+          No image
+        </div>
+      )}
+      <div className="min-w-0 flex-1 text-[11px] text-zinc-500">
+        {imageUrl
+          ? "Uploaded image, live once saved."
+          : "Required before this page can be saved as static — JPEG/PNG/WebP, up to 8 MB."}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+      />
+      <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
+        {uploadMutation.isPending ? "Uploading…" : imageUrl ? "Replace" : "Upload"}
+      </Button>
+      {imageUrl && (
+        <Button variant="ghost" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+          Remove
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function SettingRow({
   setting,
   draft,
@@ -62,6 +162,9 @@ function SettingRow({
   const dirty = draft !== undefined && !valuesEqual(draft, setting.value);
   const atDefault = valuesEqual(current, setting.default);
   const label = SETTING_LABELS[setting.key] ?? setting.key;
+  const backgroundPage = setting.key.startsWith("bg_mode_")
+    ? (setting.key.slice("bg_mode_".length) as BackgroundPage)
+    : null;
 
   let control: React.ReactNode;
   if (setting.type === "bool") {
@@ -109,29 +212,32 @@ function SettingRow({
   }
 
   return (
-    <div className={`flex items-center justify-between gap-4 rounded-lg px-2 py-2 ${dirty ? "bg-[var(--surface-1)]" : ""}`}>
-      <div className="min-w-0">
-        <p className="text-[13px] font-medium text-zinc-200">
-          {label}
-          {DANGEROUS_KEYS.has(setting.key) && Boolean(current) && (
-            <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">on</span>
+    <div className={`rounded-lg px-2 py-2 ${dirty ? "bg-[var(--surface-1)]" : ""}`}>
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[13px] font-medium text-zinc-200">
+            {label}
+            {DANGEROUS_KEYS.has(setting.key) && Boolean(current) && (
+              <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">on</span>
+            )}
+          </p>
+          <p className="text-[12px] text-zinc-500">
+            {setting.description}
+            {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
+            {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
+            {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {!atDefault && (
+            <Button variant="ghost" onClick={() => onChange(setting.default)} title="Reset to default">
+              Reset
+            </Button>
           )}
-        </p>
-        <p className="text-[12px] text-zinc-500">
-          {setting.description}
-          {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
-          {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
-          {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
-        </p>
+          {control}
+        </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {!atDefault && (
-          <Button variant="ghost" onClick={() => onChange(setting.default)} title="Reset to default">
-            Reset
-          </Button>
-        )}
-        {control}
-      </div>
+      {backgroundPage && current === "static" && <BackgroundImageControl page={backgroundPage} />}
     </div>
   );
 }
@@ -140,6 +246,11 @@ export function SettingsTab() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({ queryKey: ["admin-settings"], queryFn: () => adminApi.settings() });
   const [draft, setDraft] = useState<Record<string, SettingValue>>({});
+  // Collapsed by default — 9 categories stacked always-open was the actual
+  // complaint ("very unorganised"). Explicit per-category state (not just
+  // each SectionCard's own internal toggle) so "Expand all" and
+  // auto-expanding a category with an unsaved change both work.
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   const saveMutation = useMutation({
     mutationFn: (changed: Record<string, SettingValue>) => adminApi.updateSettings(changed),
@@ -176,6 +287,19 @@ export function SettingsTab() {
     return out;
   }, [draft, settings]);
 
+  // A category with an unsaved change auto-expands — the point of collapsing
+  // by default is decluttering, not hiding a change you're mid-way through.
+  const dirtyCategories = useMemo(() => {
+    const cats = new Set<string>();
+    for (const key of Object.keys(changed)) {
+      const setting = settings?.find((s) => s.key === key);
+      if (setting) cats.add(setting.category);
+    }
+    return cats;
+  }, [changed, settings]);
+
+  const allOpen = groups.length > 0 && groups.every(([category]) => openCategories[category] ?? dirtyCategories.has(category));
+
   const handleSave = () => {
     for (const [key, value] of Object.entries(changed)) {
       if (typeof value === "number" && Number.isNaN(value)) {
@@ -200,6 +324,16 @@ export function SettingsTab() {
       <div className="flex items-center justify-between">
         <h2 className="font-headline text-[15px] font-bold text-zinc-200">Runtime settings</h2>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              const next: Record<string, boolean> = {};
+              for (const [category] of groups) next[category] = !allOpen;
+              setOpenCategories(next);
+            }}
+          >
+            {allOpen ? "Collapse all" : "Expand all"}
+          </Button>
           {dirtyCount > 0 && (
             <Button variant="ghost" onClick={() => setDraft({})}>Discard {dirtyCount} change{dirtyCount === 1 ? "" : "s"}</Button>
           )}
@@ -212,20 +346,40 @@ export function SettingsTab() {
       {isLoading ? (
         <p className="py-6 text-center text-[13px] text-zinc-500">Loading settings…</p>
       ) : (
-        groups.map(([category, group]) => (
-          <SectionCard key={category} title={group.label}>
-            <div className="space-y-1">
-              {group.items.map((setting) => (
-                <SettingRow
-                  key={setting.key}
-                  setting={setting}
-                  draft={draft[setting.key]}
-                  onChange={(value) => setDraft((d) => ({ ...d, [setting.key]: value }))}
-                />
-              ))}
-            </div>
-          </SectionCard>
-        ))
+        groups.map(([category, group]) => {
+          const dirtyInCategory = group.items.filter((s) => s.key in changed).length;
+          const isOpen = openCategories[category] ?? dirtyCategories.has(category);
+          return (
+            <SectionCard
+              key={category}
+              title={group.label}
+              collapsible
+              open={isOpen}
+              onOpenChange={(next) => setOpenCategories((o) => ({ ...o, [category]: next }))}
+              action={
+                <div className="flex items-center gap-2">
+                  {dirtyInCategory > 0 && (
+                    <span className="rounded-full bg-[var(--marketing-accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--marketing-accent-text)]">
+                      {dirtyInCategory} unsaved
+                    </span>
+                  )}
+                  <span className="text-[11px] text-zinc-600">{group.items.length}</span>
+                </div>
+              }
+            >
+              <div className="space-y-1">
+                {group.items.map((setting) => (
+                  <SettingRow
+                    key={setting.key}
+                    setting={setting}
+                    draft={draft[setting.key]}
+                    onChange={(value) => setDraft((d) => ({ ...d, [setting.key]: value }))}
+                  />
+                ))}
+              </div>
+            </SectionCard>
+          );
+        })
       )}
     </section>
   );

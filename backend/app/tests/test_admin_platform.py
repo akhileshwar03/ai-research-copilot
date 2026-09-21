@@ -13,6 +13,7 @@
 """
 
 import asyncio
+import io
 import json
 from unittest.mock import MagicMock
 
@@ -26,7 +27,7 @@ from app.db.models.humanizer_run import HumanizerRun
 from app.db.models.usage_event import UsageEvent
 from app.db.models.user import User
 from app.services.chat_service import RESEARCH_ACTIONS, ChatService
-from app.services.runtime_settings import runtime_settings
+from app.services.runtime_settings import BACKGROUND_PAGES, runtime_settings
 from app.tests.conftest import TestingSessionLocal
 from app.tests.test_admin_and_security import _make_admin, _register_and_login
 import app.api.middleware.request_context as request_context_module
@@ -67,8 +68,243 @@ def test_public_app_config_is_unauthenticated_and_minimal(client):
     assert body["signups_enabled"] is True
     assert body["maintenance_mode"] is False
     assert body["announcement"] == ""
+    assert body["github_link_enabled"] is True
+    assert body["github_repo_url"] == "https://github.com/akhileshwar03/ai-research-copilot"
+    assert set(body["backgrounds"]) == set(BACKGROUND_PAGES)
+    assert all(bg["mode"] == "dynamic" and bg["image_url"] is None for bg in body["backgrounds"].values())
     # Nothing that only an admin should see leaks out.
     assert "rag_similarity_threshold" not in json.dumps(body)
+
+
+def test_github_link_toggle_round_trips_to_public_config(client, admin_headers):
+    resp = client.put(
+        "/api/v1/admin/settings",
+        headers=admin_headers,
+        json={"settings": {"github_link_enabled": False, "github_repo_url": "https://github.com/someorg/somerepo"}},
+    )
+    assert resp.status_code == 200
+    try:
+        body = client.get("/api/v1/app/config").json()
+        assert body["github_link_enabled"] is False
+        assert body["github_repo_url"] == "https://github.com/someorg/somerepo"
+    finally:
+        _set("github_link_enabled", True)
+        _set("github_repo_url", "https://github.com/akhileshwar03/ai-research-copilot")
+
+
+# ── Per-page background images ───────────────────────────────────────────────────
+
+@pytest.fixture
+def fake_bg_storage(monkeypatch, tmp_path):
+    """Routes the background-image upload/serve routes at a throwaway local
+    directory instead of real R2 -- both admin.py and app_config.py bind
+    `get_storage_service` directly (`from ... import get_storage_service`),
+    so each module's own reference has to be patched individually; patching
+    only the origin module (as test_retention.py does for a module that
+    calls it qualified) would silently miss these two."""
+    from app.services.storage_service import LocalStorageService
+    import app.api.routes.admin as admin_module
+    import app.api.routes.app_config as app_config_module
+
+    fake_storage = LocalStorageService(base_dir=str(tmp_path))
+    monkeypatch.setattr(admin_module, "get_storage_service", lambda: fake_storage)
+    monkeypatch.setattr(app_config_module, "get_storage_service", lambda: fake_storage)
+    return fake_storage
+
+
+def _test_png(color=(220, 30, 30), size=(300, 300)) -> bytes:
+    """A real, fully decodable PNG (not hand-rolled bytes) -- needed now that
+    uploads are actually opened and re-encoded by Pillow, not just stored
+    and served back verbatim. 300x300 solid color is enough to exercise real
+    compression (still trivially small pre-compression, but a genuine image
+    Pillow can decode, resize, and re-encode without erroring)."""
+    from PIL import Image as _Image
+
+    buf = io.BytesIO()
+    _Image.new("RGB", size, color).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _tiny_png() -> bytes:
+    return _test_png()
+
+
+def test_upload_background_image_round_trips_to_public_config(client, admin_headers, fake_bg_storage):
+    resp = client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=admin_headers,
+        files={"file": ("bg.png", _tiny_png(), "image/png")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["image_url"].startswith("/app/background/humanizer")
+
+    # Uploading alone does NOT flip the mode -- the frontend gates the
+    # save on this, and the backend independently doesn't assume it either.
+    body = client.get("/api/v1/app/config").json()
+    assert body["backgrounds"]["humanizer"]["mode"] == "dynamic"
+    # Versioned query param, not the bare path -- verifies the real fix for a
+    # real bug (a re-upload left the old image showing because the path alone
+    # never changed and the response is cached for an hour).
+    assert body["backgrounds"]["humanizer"]["image_url"].startswith("/app/background/humanizer?v=")
+
+    img = client.get("/api/v1/app/background/humanizer")
+    assert img.status_code == 200
+    # Always re-encoded to WebP and compressed under the size budget --
+    # real, not just declared: decode it back and check its actual size.
+    assert img.headers["content-type"] == "image/webp"
+    assert len(img.content) <= 100 * 1024
+    from PIL import Image as _Image
+    decoded = _Image.open(io.BytesIO(img.content))
+    decoded.load()  # forces full decode, not just the header
+    assert decoded.format == "WEBP"
+
+    resp = client.put(
+        "/api/v1/admin/settings", headers=admin_headers, json={"settings": {"bg_mode_humanizer": "static"}}
+    )
+    assert resp.status_code == 200
+    assert client.get("/api/v1/app/config").json()["backgrounds"]["humanizer"]["mode"] == "static"
+
+    _set("bg_mode_humanizer", "dynamic")
+
+
+def test_upload_rejects_a_file_that_claims_to_be_an_image_but_isnt(client, admin_headers, fake_bg_storage):
+    resp = client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=admin_headers,
+        files={"file": ("bg.png", b"not actually a png", "image/png")},
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "INVALID_FILE_TYPE"
+
+
+def test_background_upload_rejects_bad_type_size_and_page(client, admin_headers, fake_bg_storage):
+    assert client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=admin_headers,
+        files={"file": ("bg.txt", b"not an image", "text/plain")},
+    ).status_code == 400
+
+    assert client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=admin_headers,
+        files={"file": ("bg.png", b"\x00" * (8 * 1024 * 1024 + 1), "image/png")},
+    ).status_code == 413
+
+    assert client.post(
+        "/api/v1/admin/background/not_a_real_page",
+        headers=admin_headers,
+        files={"file": ("bg.png", _tiny_png(), "image/png")},
+    ).status_code == 400
+
+
+def test_reupload_changes_the_public_config_image_url(client, admin_headers, fake_bg_storage):
+    """Real bug, found live: the image URL's PATH never changes between
+    uploads, and the serving route sets a 1-hour Cache-Control -- without a
+    version query param that changes per upload, a browser that already
+    fetched the first image never asks again, and a re-upload appears to
+    have no effect. The fix is this query param; this test is what would
+    have caught the regression before it shipped."""
+    client.post(
+        "/api/v1/admin/background/realtime",
+        headers=admin_headers,
+        files={"file": ("first.png", _tiny_png(), "image/png")},
+    )
+    first_url = client.get("/api/v1/app/config").json()["backgrounds"]["realtime"]["image_url"]
+
+    client.post(
+        "/api/v1/admin/background/realtime",
+        headers=admin_headers,
+        files={"file": ("second.png", _tiny_png(), "image/png")},
+    )
+    second_url = client.get("/api/v1/app/config").json()["backgrounds"]["realtime"]["image_url"]
+
+    assert first_url != second_url
+    assert first_url.split("?")[0] == second_url.split("?")[0] == "/app/background/realtime"
+
+    # Tests share one in-memory DB for the whole run -- leaving this behind
+    # would make a later test see an image that "shouldn't" be there yet.
+    client.delete("/api/v1/admin/background/realtime", headers=admin_headers)
+
+
+def test_reupload_replaces_and_delete_falls_back_to_dynamic(client, admin_headers, fake_bg_storage):
+    client.post(
+        "/api/v1/admin/background/checker",
+        headers=admin_headers,
+        files={"file": ("first.png", _test_png(color=(220, 30, 30)), "image/png")},
+    )
+    old_bytes = client.get("/api/v1/app/background/checker").content
+
+    client.post(
+        "/api/v1/admin/background/checker",
+        headers=admin_headers,
+        files={"file": ("second.png", _test_png(color=(30, 120, 220)), "image/png")},
+    )
+    new_bytes = client.get("/api/v1/app/background/checker").content
+    assert old_bytes != new_bytes  # the old object is gone, not just shadowed
+
+    client.put("/api/v1/admin/settings", headers=admin_headers, json={"settings": {"bg_mode_checker": "static"}})
+    assert client.get("/api/v1/app/config").json()["backgrounds"]["checker"]["mode"] == "static"
+
+    del_resp = client.delete("/api/v1/admin/background/checker", headers=admin_headers)
+    assert del_resp.status_code == 200
+    body = client.get("/api/v1/app/config").json()
+    # Deleting the only image a "static" page has falls back to dynamic
+    # automatically -- a page can never be stuck in "static" with nothing to show.
+    assert body["backgrounds"]["checker"]["mode"] == "dynamic"
+    assert body["backgrounds"]["checker"]["image_url"] is None
+    assert client.get("/api/v1/app/background/checker").status_code == 404
+
+
+def test_cannot_save_static_mode_without_an_uploaded_image(client, admin_headers):
+    resp = client.put(
+        "/api/v1/admin/settings", headers=admin_headers, json={"settings": {"bg_mode_realtime": "static"}}
+    )
+    assert resp.status_code == 400
+    assert resp.json()["error"]["code"] == "NO_BACKGROUND_IMAGE"
+    # Rejected as a whole -- no other setting in the same request silently applied.
+    assert runtime_settings.get("bg_mode_realtime") == "dynamic"
+
+
+def test_background_routes_require_admin(client, auth_headers, fake_bg_storage):
+    resp = client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=auth_headers,
+        files={"file": ("bg.png", _tiny_png(), "image/png")},
+    )
+    assert resp.status_code == 403
+
+
+# ── Storage usage (2026-09-20) ───────────────────────────────────────────────────
+
+def test_storage_usage_requires_admin(client, auth_headers):
+    assert client.get("/api/v1/admin/system/storage", headers=auth_headers).status_code == 403
+
+
+def test_storage_usage_neon_is_null_on_sqlite_dev(client, admin_headers):
+    """Tests run against SQLite (see conftest.py) -- pg_database_size/
+    pg_stat_user_tables don't exist there, so this must degrade to null
+    rather than error, exactly like production would on a non-Postgres dev
+    setup."""
+    body = client.get("/api/v1/admin/system/storage", headers=admin_headers).json()
+    assert body["neon"] is None
+
+
+def test_storage_usage_reports_real_r2_totals(client, admin_headers, fake_bg_storage):
+    client.post(
+        "/api/v1/admin/background/humanizer",
+        headers=admin_headers,
+        files={"file": ("bg.png", _tiny_png(), "image/png")},
+    )
+    body = client.get("/api/v1/admin/system/storage", headers=admin_headers).json()
+    r2 = body["r2"]
+    assert r2 is not None
+    assert r2["object_count"] == 1
+    assert r2["used_bytes"] > 0
+    assert r2["limit_bytes"] == 10 * 1024 * 1024 * 1024
+    # fake_bg_storage swaps in LocalStorageService for the test (never hits real
+    # R2) -- that backend is genuinely flat on disk (see its own usage_summary),
+    # so it reports one "(all)" bucket rather than R2's real "/"-prefix grouping.
+    assert r2["by_prefix"] == [{"prefix": "(all)", "bytes": r2["used_bytes"], "count": 1}]
 
 
 # ── Settings: typed values ─────────────────────────────────────────────────────
@@ -263,6 +499,14 @@ def test_usage_events_and_system_info(client, admin_headers, auth_headers, track
     assert body["storage"]["backend"] in {"local", "r2"}
     assert body["openai"]["ok"] is None  # no probe requested, no network call made
     assert "api_key" not in json.dumps(body).lower()
+
+    external = {e["name"]: e for e in body["external_apis"]}
+    assert external["OpenAI"]["configured"] is True  # OPENAI_API_KEY set by conftest.py
+    assert external["Neon (Postgres)"]["tracked_here"] is True
+    assert external["Modal (Ultra Human GPU hosting)"]["tracked_here"] is False
+    assert external["Modal (Ultra Human GPU hosting)"]["dashboard_url"].startswith("https://")
+    # Never expose a real key value, only whether one is set.
+    assert "sk-test-placeholder" not in json.dumps(body)
 
 
 def test_users_filters_export_revoke_and_activity(client, admin_headers, unique_email):

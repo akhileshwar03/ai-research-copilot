@@ -215,6 +215,38 @@ def test_strips_dangling_source_and_credit_line():
     )
 
 
+def test_strips_share_this_story_and_read_full_story():
+    """Real cases from the post-prompt-fix production validation round (2026-09-20):
+    an otherwise-faithful noise-cancelling-headphones rewrite ended with a trailing
+    'Share This Story' line, and a separate Airbnb/short-term-rentals rewrite ended
+    with 'Read Full Story' -- near-misses of the existing 'share to:'/'read more
+    articles like this' patterns, same scraped-article-chrome family, different
+    exact wording."""
+    output1 = (
+        "A combination of soundwave inversion and physical insulation help noise "
+        "cancelling headphones offer crystal clear sound.\n\nShare This Story"
+    )
+    result1 = strip_junk_furniture(output1)
+    assert result1["removed_lines"] == ["Share This Story"]
+    assert "Share This Story" not in result1["output"]
+
+    output2 = (
+        "It seems like these government officials finally caught onto the fact "
+        "that keeping rent-stressed homeowners in their neighborhoods trumps "
+        "bringing in tourists willing to pay top dollar.\n\nRead Full Story"
+    )
+    result2 = strip_junk_furniture(output2)
+    assert result2["removed_lines"] == ["Read Full Story"]
+    assert "Read Full Story" not in result2["output"]
+
+
+def test_does_not_strip_a_legitimate_use_of_story_or_share():
+    """False-positive check: 'story'/'share' are ordinary words that show up in
+    genuine prose -- only the exact standalone furniture phrasing should trigger."""
+    text = "Every neighborhood has its own story, and people are eager to share what they know."
+    assert strip_junk_furniture(text) == {"output": text, "removed_lines": []}
+
+
 # ── Sign-off fabrication, spanning multiple lines (2026-09-19) ───────────────
 
 
@@ -301,6 +333,20 @@ def test_catches_fabricated_single_word_location_attribution():
     assert "out of Denver" in result["new_entities"]
 
 
+def test_catches_fabricated_single_word_publication_attribution():
+    """Real case traced from a production validation run (2026-09-20): one
+    chunk's rewrite fabricated a full standalone sentence -- "The article was
+    originally published on Citylab" -- with nothing in the source ever
+    mentioning that or any other publication. "Citylab" alone is a single
+    capitalized word, below _PROPER_NOUN_RUN_RE's 2+-word threshold, so this
+    needed its own attribution trigger the same way "according to NPR" did."""
+    source = "Cities are cracking down on short-term rentals due to rising rents."
+    output = "The article was originally published on Citylab, which covers cities are cracking down on short-term rentals due to rising rents."
+    result = check_entity_invariant(source, output)
+    assert result["violation"] is True
+    assert "originally published on Citylab" in result["new_entities"]
+
+
 def test_does_not_flag_a_genuinely_unrelated_use_of_a_trigger_word():
     """The trigger words (via, according to, out of, credit, image/photo source)
     are deliberately narrow and specific -- confirm a plain, unrelated sentence
@@ -308,6 +354,35 @@ def test_does_not_flag_a_genuinely_unrelated_use_of_a_trigger_word():
     spurious entity at all."""
     source = "Plants convert light into energy via a process called photosynthesis."
     output = "Plants turn light into energy via a process called photosynthesis."
+    result = check_entity_invariant(source, output)
+    assert result == {"violation": False, "new_entities": []}
+
+
+def test_catches_fake_citation_leadin_previously_hidden_by_heading_exemption():
+    """Real, serious bug found in production validation (2026-09-20): a rewrite
+    about short-term rentals shipped as entity_clean=True with a trailing
+    "From Slate:" line introducing an entire fabricated paragraph attributed to
+    a real-sounding publication never mentioned in the source. Root cause: the
+    short/no-terminal-punctuation heading exemption (built for legitimate blog
+    subheadings) was hiding "From Slate:" from entity-checking entirely, so the
+    fabricated block under it was never inspected at all."""
+    source = "Cities are cracking down on short-term rentals due to rising rents."
+    output = (
+        "Cities are cracking down on short-term rentals as rents keep climbing.\n\n"
+        "From Slate:\n\n"
+        "In many parts of America, home-sharing sites can help foster greater diversity among renters."
+    )
+    result = check_entity_invariant(source, output)
+    assert result["violation"] is True
+    assert "From Slate:" in result["new_entities"]
+
+
+def test_does_not_flag_an_ordinary_sentence_using_from_mid_sentence():
+    """The citation-lead-in trigger requires a colon immediately after the
+    name -- ordinary prose like "from New York to California" never has that,
+    so it should never fire on it."""
+    source = "Prices vary widely from New York to California."
+    output = "Prices swing a lot, from New York to California."
     result = check_entity_invariant(source, output)
     assert result == {"violation": False, "new_entities": []}
 

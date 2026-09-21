@@ -80,8 +80,10 @@ export function TopNav({ onOpenPalette }: TopNavProps) {
   return (
     <>
       <header className="glass-bar relative z-20 flex h-14 shrink-0 items-center gap-4 border-b px-4">
-        {/* Brand */}
-        <Link href="/chat" className="flex shrink-0 items-center gap-2.5">
+        {/* Brand — links to the public marketing/landing page, not back into the app;
+            that's a deliberate, separate destination from the product-switcher tabs
+            below, so it gets its own hover affordance like every other control here. */}
+        <Link href="/" className="hover-surface flex shrink-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition">
           <div
             className="flex h-7 w-7 items-center justify-center rounded-lg ring-1 ring-[var(--border-medium)]"
             style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
@@ -131,6 +133,7 @@ export function TopNav({ onOpenPalette }: TopNavProps) {
         <button
           onClick={() => setToolsSearchOpen(true)}
           title="Search tools"
+          aria-label="Search tools"
           className="hover-surface flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] px-2.5 py-1.5 text-[12px] text-zinc-500 transition"
         >
           <SearchIcon />
@@ -141,7 +144,7 @@ export function TopNav({ onOpenPalette }: TopNavProps) {
         </button>
 
         {/* Account */}
-        <WorkspaceProfileFooter variant="topbar" />
+        <WorkspaceProfileFooter />
       </header>
 
       <CommandPalette open={toolsSearchOpen} onClose={() => setToolsSearchOpen(false)} />

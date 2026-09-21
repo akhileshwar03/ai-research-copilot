@@ -10,6 +10,7 @@ import { StylePicker } from "@/features/paper-analyzer/components/style-picker";
 import { CheckRow } from "@/features/paper-analyzer/components/check-row";
 import { ScanningPanel } from "@/features/paper-analyzer/components/scanning-panel";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { PageBackground } from "@/features/shared/components/page-background";
 import { CursorSpotlight, Glare, Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { ProbabilityGauge } from "@/features/checker/components/probability-gauge";
 import MainLayout from "@/components/layout/main-layout";
@@ -99,7 +100,7 @@ export default function PaperAnalyzerPage() {
     <MainLayout
       background={
         <>
-          <AtmosphereBackground variant="calm" />
+          <PageBackground page="paper_analyzer" dynamic={<AtmosphereBackground variant="calm" />} />
           <CursorSpotlight color="138,90,110" />
         </>
       }

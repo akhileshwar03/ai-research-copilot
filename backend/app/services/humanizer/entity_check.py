@@ -108,8 +108,21 @@ _BYLINE_RE = re.compile(r"\b(?i:by)\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?")
 # same shape as one. Case-insensitivity scoped to the trigger phrase only,
 # same (?i:...) pattern as _BYLINE_RE, for the same already-documented reason
 # -- a bare (?i) flag would make [A-Z] match lowercase too.
+#
+# 2026-09-20: real miss, traced from a production validation run -- one chunk's
+# rewrite fabricated a full standalone sentence, "The article was originally
+# published on Citylab", entirely on its own initiative. "Citylab" alone is a
+# single capitalized word (below _PROPER_NOUN_RUN_RE's 2+-word threshold), and
+# it only LOOKED like a 2-word "Citylab While" fabrication in the final joined
+# document because the next chunk's separately-faithful output happened to
+# start with another capitalized word ("While...") right after it -- a
+# coincidental join-boundary artifact, not the real signal. The real, fixable
+# gap was that "published on"/"originally published on" weren't in this
+# trigger list yet, despite being the exact same single-word-attribution shape
+# as "according to"/"via" above.
 _ATTRIBUTION_SOURCE_RE = re.compile(
-    r"\b(?i:according to|via|out of|image source|photo source|photo credit|credit)\s*:?\s+[A-Z][A-Za-z]+\b"
+    r"\b(?i:according to|via|out of|image source|photo source|photo credit|credit"
+    r"|originally published on|published on)\s*:?\s+[A-Z][A-Za-z]+\b"
 )
 
 # 2026-09-19: real miss -- a rewrite ended with a fully fabricated personal
@@ -125,6 +138,21 @@ _ATTRIBUTION_SOURCE_RE = re.compile(
 # personal voice, so a genuine informal interjection like that is ambiguous
 # in a way "Thanks," followed by an isolated name is not.
 _SIGNOFF_RE = re.compile(r"\b(?i:thanks|regards|sincerely|best regards|warm regards|yours truly)\s*,\s+[A-Z][A-Za-z]+\b")
+
+# 2026-09-20: real, serious miss -- a rewrite shipped (entity_clean=True) with a
+# trailing "From Slate:" line introducing an entire fabricated paragraph attributed
+# to a real-sounding publication never mentioned in the source. _is_structural_
+# heading_line's short-line/no-terminal-punctuation heuristic (built for legitimate
+# blog subheadings) exempted the "From Slate:" line from entity-checking entirely,
+# so the fabricated block under it was never even inspected. _ATTRIBUTION_SOURCE_RE
+# above deliberately excludes a bare "from" as too generic for a mid-sentence
+# trigger -- but "From <Name>:" immediately followed by a colon is a materially
+# different, much narrower signal: real prose essentially never writes "From X:"
+# as its own line outside of a citation lead-in ("From Slate:", "From the AP:").
+# Given the override, not just an extra extraction trigger -- like _BYLINE_RE and
+# _DATE_STAMP_RE above, this must ALSO defeat the heading exemption in
+# _is_structural_heading_line, since the whole bug was that exemption hiding it.
+_CITATION_LEADIN_RE = re.compile(r"\b(?i:from)\s+[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){0,2}\s*:")
 _MONTHS = "January|February|March|April|May|June|July|August|September|October|November|December"
 _DATE_STAMP_RE = re.compile(rf"\b(?:{_MONTHS})\s+\d{{1,2}}(?:th|st|nd|rd)?,?\s+\d{{4}}\b")
 
@@ -149,13 +177,13 @@ def _strip_header_prefix(line: str) -> str:
 def _is_structural_heading_line(line: str) -> bool:
     """A line is treated as a stylistic heading (not a factual claim worth
     checking) if it's markdown-style, or short with no terminal punctuation
-    -- UNLESS it also matches the byline/date-stamp override, which always
-    wins regardless of how header-like the line looks."""
+    -- UNLESS it also matches the byline/date-stamp/citation-lead-in override,
+    which always wins regardless of how header-like the line looks."""
     stripped = line.strip()
     if not stripped:
         return False
-    if _BYLINE_RE.search(stripped) or _DATE_STAMP_RE.search(stripped):
-        return False  # override: never exempt a byline/date-stamp line
+    if _BYLINE_RE.search(stripped) or _DATE_STAMP_RE.search(stripped) or _CITATION_LEADIN_RE.search(stripped):
+        return False  # override: never exempt a byline/date-stamp/citation-lead-in line
     if _MARKDOWN_HEADER_RE.match(stripped):
         return True
     word_count = len(stripped.split())
@@ -194,6 +222,8 @@ def extract_entities(text: str) -> set[str]:
         found.add(m.group().strip())
     for m in _SIGNOFF_RE.finditer(text):
         found.add(re.sub(r"\s+", " ", m.group().strip()))
+    for m in _CITATION_LEADIN_RE.finditer(text):
+        found.add(m.group().strip())
     for m in _DATE_STAMP_RE.finditer(text):
         found.add(m.group().strip())
     return found
@@ -408,6 +438,15 @@ _JUNK_FURNITURE_RE = re.compile(
             # scraped-attribution-furniture family as the byline/photo-credit
             # patterns above but with no name to anchor _ATTRIBUTION_SOURCE_RE.
             "source and credit:",
+            # 2026-09-20: two more real near-misses of the existing "read more
+            # articles like this" / "share to:" patterns above, caught in the
+            # same production validation round that shipped the prompt-
+            # contradiction fix -- "Share This Story" and "Read Full Story"
+            # both appeared as trailing standalone lines on otherwise-faithful
+            # rewrites, close enough to the existing patterns to be the same
+            # class of scraped-article chrome, just different exact wording.
+            "share this story",
+            "read full story",
         )
     ),
     re.IGNORECASE,

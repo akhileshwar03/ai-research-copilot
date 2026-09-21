@@ -1,11 +1,11 @@
 import Link from "next/link";
 
 import { NavProfileMenu } from "@/features/auth/components/nav-profile-menu";
+import { GithubNavLink } from "@/features/landing/github-nav-link";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { SiteBackground } from "@/features/landing/site-background";
-
-const GITHUB_REPO_URL = "https://github.com/akhileshwar03/ai-research-copilot";
+import { PageBackground } from "@/features/shared/components/page-background";
 
 function SparkIcon({ className }: { className?: string }) {
   return (
@@ -81,7 +81,7 @@ export default function LandingPage() {
   return (
     <main className="marketing-light relative min-h-screen text-zinc-900">
       {/* Persistent 3D atmosphere — fixed, spans the entire scroll, not just the hero */}
-      <SiteBackground />
+      <PageBackground page="landing" dynamic={<SiteBackground />} />
 
       <div className="relative z-10">
       {/* ── Navigation: sticky, frosted ────────────────────────────────────── */}
@@ -112,14 +112,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg px-3.5 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900"
-            >
-              GitHub
-            </a>
+            <GithubNavLink className="rounded-lg px-3.5 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900" />
             <NavProfileMenu />
           </div>
         </div>
@@ -810,7 +803,14 @@ export default function LandingPage() {
       {/* ── Closing CTA ────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-7xl px-6 pb-28">
         <Reveal>
-          <div className="relative overflow-hidden rounded-3xl bg-zinc-900 px-8 py-14 text-center shadow-[0_28px_60px_-18px_rgba(15,23,42,0.45)] md:px-12">
+          {/* 2026-09-20: was a fully opaque bg-zinc-900 -- a flat black block
+              regardless of what the admin set the page background to (the
+              dynamic scene, or an uploaded image), which read as hardcoded
+              and disconnected from the rest of the page. Translucent instead,
+              so whatever's actually behind the page shows through here too;
+              still dark enough (75% opacity) that the white heading/body text
+              stays comfortably legible over either background. */}
+          <div className="relative overflow-hidden rounded-3xl bg-zinc-900/75 px-8 py-14 text-center shadow-[0_28px_60px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm md:px-12">
             <div
               className="pointer-events-none absolute inset-0"
               style={{
@@ -847,14 +847,7 @@ export default function LandingPage() {
             <span>Querex — AI tools for research &amp; writing</span>
           </div>
           <div className="flex items-center gap-5">
-            <a
-              href={GITHUB_REPO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="transition hover:text-zinc-800"
-            >
-              GitHub
-            </a>
+            <GithubNavLink className="transition hover:text-zinc-800" />
             <Link href="/login" className="transition hover:text-zinc-800">
               Sign in
             </Link>

@@ -2,25 +2,20 @@
 
 import Link from "next/link";
 
+import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
 import { useAuth } from "@/features/auth/hooks/use-auth";
-import {
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRoot,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-const PRODUCTS = [
-  { href: "/chat", label: "Research Copilot" },
-  { href: "/humanizer", label: "Humaniser" },
-  { href: "/checker", label: "AI Checker" },
-  { href: "/realtime", label: "Real-time AI" },
-];
-
+/**
+ * The landing page's own account control — previously a separate, bespoke
+ * dropdown (a "Products" list + Sign out) that looked and behaved nothing
+ * like the one signed-in users see everywhere else in the app. Now just
+ * delegates to the same WorkspaceProfileFooter the tool pages use once
+ * authenticated, so there's exactly one account-menu design in the product,
+ * not two that can drift apart. The "not ready" / "not authenticated" cases
+ * stay here since WorkspaceProfileFooter assumes an authenticated user.
+ */
 export function NavProfileMenu() {
-  const { isReady, isAuthenticated, email, logout } = useAuth();
+  const { isReady, isAuthenticated } = useAuth();
 
   if (!isReady) {
     // Reserve the same footprint as the "Sign in" button to avoid layout shift.
@@ -38,30 +33,5 @@ export function NavProfileMenu() {
     );
   }
 
-  const initial = email ? email[0].toUpperCase() : "?";
-
-  return (
-    <DropdownMenuRoot>
-      <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-lg border border-black/[0.08] bg-white px-2.5 py-1.5 text-[13px] font-medium text-zinc-800 shadow-sm transition hover:border-black/[0.14]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-[11px] font-semibold text-white">
-            {initial}
-          </span>
-          <span className="hidden max-w-[140px] truncate sm:inline">{email}</span>
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuLabel>Products</DropdownMenuLabel>
-        {PRODUCTS.map((product) => (
-          <DropdownMenuItem key={product.href} asChild>
-            <Link href={product.href}>{product.label}</Link>
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem destructive onClick={logout}>
-          Sign out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenuRoot>
-  );
+  return <WorkspaceProfileFooter />;
 }

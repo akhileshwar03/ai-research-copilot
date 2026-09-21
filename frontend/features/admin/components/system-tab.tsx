@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
-import { adminApi } from "@/services/api/admin-api";
-import { Badge, Button, SectionCard, formatDate, formatUptime } from "@/features/admin/components/shared";
+import { adminApi, type ExternalApiInfo, type StorageUsage } from "@/services/api/admin-api";
+import { Badge, Button, HBar, SectionCard, formatBytes, formatDate, formatUptime } from "@/features/admin/components/shared";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -23,6 +23,161 @@ function OkBadge({ ok, unknownLabel = "not probed" }: { ok: boolean | null | und
 
 function ConfiguredBadge({ on, onLabel = "configured", offLabel = "not configured" }: { on: boolean; onLabel?: string; offLabel?: string }) {
   return <Badge tone={on ? "good" : "warn"}>{on ? onLabel : offLabel}</Badge>;
+}
+
+/** Green under 50%, amber 50-80%, red above -- so a glance at the bar's color
+ *  alone says whether this needs attention, not just the exact percentage. */
+function usageColor(pct: number): string {
+  if (pct >= 80) return "#dc4c4c";
+  if (pct >= 50) return "#c9a227";
+  return "var(--marketing-accent)";
+}
+
+function StorageMeter({
+  label, usedBytes, limitBytes, percent,
+}: { label: string; usedBytes: number; limitBytes: number; percent: number }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p className="text-[12.5px] font-medium text-zinc-300">{label}</p>
+        <p className="text-[12.5px] text-zinc-500">
+          <span className="font-semibold text-zinc-200">{formatBytes(usedBytes)}</span> / {formatBytes(limitBytes)}
+          <span className="ml-1.5 text-zinc-600">({percent}%)</span>
+        </p>
+      </div>
+      <div className="mt-1.5">
+        <HBar value={usedBytes} max={limitBytes} color={usageColor(percent)} />
+      </div>
+    </div>
+  );
+}
+
+function StorageUsageSection() {
+  const { data, isLoading, isFetching, dataUpdatedAt, refetch } = useQuery({
+    queryKey: ["admin-storage-usage"],
+    queryFn: () => adminApi.storageUsage(),
+    staleTime: 30_000,
+    // "Real time" here means auto-refreshing on a short interval while this tab
+    // is open, not a websocket push -- a full bucket listing + DB size query
+    // isn't cheap enough to poll every second, but 60s keeps it visibly live
+    // without hammering either backend on every render.
+    refetchInterval: 60_000,
+  });
+
+  if (isLoading || !data) {
+    return (
+      <SectionCard title="Storage usage">
+        <p className="py-4 text-center text-[13px] text-zinc-500">Loading storage usage…</p>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard
+      title="Storage usage"
+      action={
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-zinc-600">
+            updated {dataUpdatedAt ? new Date(dataUpdatedAt).toLocaleTimeString() : "—"}
+          </span>
+          <Button variant="ghost" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="grid gap-5 md:grid-cols-2">
+        <NeonUsagePanel neon={data.neon} />
+        <R2UsagePanel r2={data.r2} />
+      </div>
+    </SectionCard>
+  );
+}
+
+function NeonUsagePanel({ neon }: { neon: StorageUsage["neon"] }) {
+  if (!neon) {
+    return (
+      <div>
+        <p className="text-[12.5px] font-medium text-zinc-300">Neon (Postgres)</p>
+        <p className="mt-2 text-[12px] text-zinc-500">Not available — this server isn&apos;t connected to Postgres.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <StorageMeter label="Neon (Postgres) · free plan, 0.5 GB" usedBytes={neon.used_bytes} limitBytes={neon.limit_bytes} percent={neon.percent_used} />
+      <div className="mt-3 space-y-1">
+        {neon.top_tables.map((t) => (
+          <div key={t.name} className="flex items-center justify-between gap-3 text-[11.5px]">
+            <span className="truncate font-mono text-zinc-500" title={t.name}>{t.name}</span>
+            <span className="shrink-0 text-zinc-400">{formatBytes(t.bytes)} <span className="text-zinc-600">· {t.row_count.toLocaleString()} rows</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function R2UsagePanel({ r2 }: { r2: StorageUsage["r2"] }) {
+  if (!r2) {
+    return (
+      <div>
+        <p className="text-[12.5px] font-medium text-zinc-300">Cloudflare R2</p>
+        <p className="mt-2 text-[12px] text-zinc-500">Not configured — file uploads fall back to local disk.</p>
+      </div>
+    );
+  }
+  return (
+    <div>
+      <StorageMeter label="Cloudflare R2 · free tier, 10 GB" usedBytes={r2.used_bytes} limitBytes={r2.limit_bytes} percent={r2.percent_used} />
+      <p className="mt-2 text-[11px] text-zinc-600">{r2.object_count.toLocaleString()} object{r2.object_count === 1 ? "" : "s"} total</p>
+      <div className="mt-3 space-y-1">
+        {r2.by_prefix.map((p) => (
+          <div key={p.prefix} className="flex items-center justify-between gap-3 text-[11.5px]">
+            <span className="truncate font-mono text-zinc-500" title={p.prefix}>{p.prefix}/</span>
+            <span className="shrink-0 text-zinc-400">{formatBytes(p.bytes)} <span className="text-zinc-600">· {p.count.toLocaleString()} object{p.count === 1 ? "" : "s"}</span></span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Every real external service the project uses, one list -- Neon/R2 point
+ *  back up at the Storage usage card above (real numbers, tracked directly);
+ *  everything else links out to that provider's own usage/billing dashboard,
+ *  since no self-serve usage API exists for most of these without a
+ *  separate, higher-privilege credential this app doesn't hold. */
+function ExternalApisSection({ apis }: { apis: ExternalApiInfo[] }) {
+  return (
+    <SectionCard title="External services & billing">
+      <div className="divide-y divide-[var(--border-subtle)]">
+        {apis.map((api) => (
+          <div key={api.name} className="flex items-center justify-between gap-4 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-medium text-zinc-200">{api.name}</p>
+              <p className="truncate text-[11px] text-zinc-500">{api.category}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-3">
+              <ConfiguredBadge on={api.configured} />
+              {api.tracked_here ? (
+                <span className="text-[11.5px] text-zinc-600">Tracked above ↑</span>
+              ) : (
+                <a
+                  href={api.dashboard_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11.5px] font-medium text-[var(--marketing-accent-text)] hover:underline"
+                >
+                  Track usage here →
+                </a>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
 }
 
 export function SystemTab() {
@@ -65,9 +220,13 @@ export function SystemTab() {
         </div>
       </div>
 
+      <StorageUsageSection />
+
       {isLoading || !info ? (
         <p className="py-6 text-center text-[13px] text-zinc-500">Loading system info…</p>
       ) : (
+        <>
+        <ExternalApisSection apis={info.external_apis} />
         <div className="grid gap-4 lg:grid-cols-2">
           <SectionCard title="Runtime">
             <Row label="Environment" value={<Badge tone={info.environment === "production" ? "info" : "warn"}>{info.environment}</Badge>} />
@@ -109,6 +268,7 @@ export function SystemTab() {
             <Row label="GitHub sign-in" value={<ConfiguredBadge on={info.oauth.github} />} />
           </SectionCard>
         </div>
+        </>
       )}
     </div>
   );

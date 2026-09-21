@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
@@ -73,14 +73,66 @@ export function StatCard({
   );
 }
 
-export function SectionCard({ title, action, children, className = "" }: { title: string; action?: ReactNode; children: ReactNode; className?: string }) {
+export function SectionCard({
+  title,
+  action,
+  children,
+  className = "",
+  collapsible = false,
+  defaultOpen = true,
+  open: openProp,
+  onOpenChange,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  /** Opt-in — every existing caller keeps today's always-expanded behavior
+   *  unless it explicitly asks for this. Used by the Settings tab, where
+   *  ~9 categories stacked always-open made the page unnavigable. */
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  /** Controlled open state, for a caller that needs to drive it (e.g. an
+   *  "Expand all" button, or auto-expanding a section with unsaved changes).
+   *  Omit both to fall back to internal state. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}) {
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = (next: boolean) => {
+    if (isControlled) onOpenChange?.(next);
+    else setInternalOpen(next);
+  };
+  const isOpen = !collapsible || open;
+
   return (
     <section className={`glass-card rounded-xl ${className}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
-        <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</h3>
+      <div
+        className={[
+          "flex items-center justify-between gap-3 px-4 py-3",
+          isOpen ? "border-b border-[var(--border-subtle)]" : "",
+          collapsible ? "cursor-pointer select-none" : "",
+        ].join(" ")}
+        onClick={collapsible ? () => setOpen(!open) : undefined}
+        role={collapsible ? "button" : undefined}
+        aria-expanded={collapsible ? isOpen : undefined}
+      >
+        <div className="flex items-center gap-2">
+          {collapsible && (
+            <svg
+              className={`h-3.5 w-3.5 shrink-0 text-zinc-600 transition-transform ${isOpen ? "rotate-90" : ""}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          )}
+          <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</h3>
+        </div>
         {action}
       </div>
-      <div className="p-4">{children}</div>
+      {isOpen && <div className="p-4">{children}</div>}
     </section>
   );
 }

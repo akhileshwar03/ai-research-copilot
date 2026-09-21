@@ -9,6 +9,7 @@ import { useRealtimeSessions } from "@/features/realtime/hooks/use-realtime-sess
 import { RealtimeSidebar } from "@/features/realtime/components/realtime-sidebar";
 import type { RealtimeMessage, RealtimeSessionSummary } from "@/services/api/realtime-api";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { PageBackground } from "@/features/shared/components/page-background";
 import { Glare } from "@/features/shared/motion/motion";
 import { CopyButton } from "@/features/shared/components/copy-button";
 import MainLayout from "@/components/layout/main-layout";
@@ -153,7 +154,7 @@ export default function RealtimePage() {
 
   return (
     <MainLayout
-      background={<AtmosphereBackground variant="photo" />}
+      background={<PageBackground page="realtime" dynamic={<AtmosphereBackground variant="photo" />} />}
       sidebar={
         <RealtimeSidebar
           sessions={sessions as RealtimeSessionSummary[]}

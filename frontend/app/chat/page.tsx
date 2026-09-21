@@ -10,6 +10,7 @@ import { useDocumentStore } from "@/stores/document-store";
 import { useSessionStore } from "@/stores/session-store";
 import MainLayout from "@/components/layout/main-layout";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { PageBackground } from "@/features/shared/components/page-background";
 import { CursorSpotlight } from "@/features/shared/motion/motion";
 import Sidebar from "@/features/workspace/components/sidebar/sidebar";
 import { CommandPalette } from "@/components/ui/command-palette";
@@ -111,7 +112,7 @@ export default function ChatPage() {
         sidebarCollapsed={!sidebarOpen}
         background={
           <>
-            <AtmosphereBackground variant="vivid" />
+            <PageBackground page="research_copilot" dynamic={<AtmosphereBackground variant="vivid" />} />
             <CursorSpotlight color="138,90,110" />
           </>
         }
