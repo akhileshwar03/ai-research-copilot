@@ -203,7 +203,7 @@ class Settings(BaseSettings):
     # Email — Resend (primary, recommended) or SMTP (fallback)
     # Sign up at resend.com → get an API key → set RESEND_API_KEY
     resend_api_key: str = ""
-    email_from: str = "Querex <noreply@resend.dev>"  # change to your domain after verifying on Resend
+    email_from: str = "Querex <noreply@querex.app>"  # querex.app is verified on Resend (2026-09-22)
 
     # SMTP fallback (only used if RESEND_API_KEY is not set)
     smtp_host: str = ""
