@@ -158,6 +158,87 @@ function BackgroundImageControl({ page }: { page: BackgroundPage }) {
   );
 }
 
+/**
+ * The brand logo, admin-uploadable, global (not per-page like backgrounds).
+ * Not a typed runtime_setting — same reasoning as _bg_image_<page>, it's a
+ * bookkeeping row, not a value a human hand-types — so it lives in its own
+ * always-visible SectionCard instead of inside the generated category list.
+ * Swapping it updates every placement at once via BrandMark (landing nav +
+ * footer, legal pages nav, the app's top nav, the login page).
+ */
+function LogoUploadControl() {
+  const { config } = useAppConfig();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const logoUrl = config.logo_url;
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["app-config"] });
+
+  const uploadMutation = useMutation({
+    mutationFn: (file: File) => adminApi.uploadLogo(file),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Logo updated everywhere it's shown");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Upload failed"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => adminApi.deleteLogo(),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Logo removed — the default mark is shown again");
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Remove failed"),
+  });
+
+  const handleFile = (file: File | undefined) => {
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Only JPEG, PNG, or WebP images are allowed");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error("Image exceeds the 4 MB limit");
+      return;
+    }
+    uploadMutation.mutate(file);
+  };
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5">
+      {logoUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary uploaded file, not a Next-optimizable static asset
+        <img src={buildApiUrl(logoUrl)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain ring-1 ring-[var(--border-medium)]" />
+      ) : (
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[10px] text-zinc-600 ring-1 ring-[var(--border-medium)]">
+          Default
+        </div>
+      )}
+      <div className="min-w-0 flex-1 text-[11px] text-zinc-500">
+        {logoUrl
+          ? "Uploaded logo, live now, everywhere the mark appears."
+          : "Showing the default spark mark. Upload a logo — JPEG/PNG/WebP, up to 4 MB, transparency preserved."}
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+      />
+      <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
+        {uploadMutation.isPending ? "Uploading…" : logoUrl ? "Replace" : "Upload"}
+      </Button>
+      {logoUrl && (
+        <Button variant="ghost" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
+          Remove
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function SettingRow({
   setting,
   draft,
@@ -378,6 +459,10 @@ export function SettingsTab() {
           </Button>
         </div>
       </div>
+
+      <SectionCard title="Branding">
+        <LogoUploadControl />
+      </SectionCard>
 
       {isLoading ? (
         <p className="py-6 text-center text-[13px] text-zinc-500">Loading settings…</p>

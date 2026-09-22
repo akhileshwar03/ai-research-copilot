@@ -53,6 +53,12 @@ jobs:
       - name: Type-check
         run: npx tsc --noEmit
 
+      - name: Lint
+        run: npx eslint app features components services shared stores
+
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: npm run build
         env:

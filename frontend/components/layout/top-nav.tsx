@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ROUTE_TOOL, useAppConfig } from "@/features/shared/hooks/use-app-config";
 import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
+import { BrandMark } from "@/features/shared/components/brand-mark";
 
 interface NavItem {
   href: string;
@@ -84,14 +85,7 @@ export function TopNav({ onOpenPalette }: TopNavProps) {
             that's a deliberate, separate destination from the product-switcher tabs
             below, so it gets its own hover affordance like every other control here. */}
         <Link href="/" className="hover-surface flex shrink-0 items-center gap-2.5 rounded-lg px-1.5 py-1 transition">
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-lg ring-1 ring-[var(--border-medium)]"
-            style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
+          <BrandMark boxClassName="h-7 w-7 rounded-lg ring-1 ring-[var(--border-medium)]" />
           <p className="font-headline hidden text-[13px] font-bold text-[var(--text-primary)] sm:block">Querex</p>
         </Link>
 

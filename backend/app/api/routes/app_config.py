@@ -24,6 +24,7 @@ from app.services.storage_service import get_storage_service
 router = APIRouter(prefix="/app", tags=["app"])
 
 _BG_IMAGE_KEY_PREFIX = "_bg_image_"
+_LOGO_IMAGE_KEY = "_logo_image_"
 
 
 class BackgroundConfig(BaseModel):
@@ -43,6 +44,7 @@ class PublicAppConfig(BaseModel):
     github_repo_url: str
     support_email: str
     legal_entity_name: str
+    logo_url: str | None
     backgrounds: dict[str, BackgroundConfig]
 
 
@@ -77,6 +79,9 @@ def public_app_config(db: Session = Depends(get_db)):
             image_url = f"/app/background/{page}?v={version}"
         backgrounds[page] = BackgroundConfig(mode=mode, image_url=image_url)
 
+    logo_row = db.get(AppSetting, _LOGO_IMAGE_KEY)
+    logo_url = f"/app/logo?v={logo_row.value.rsplit('/', 1)[-1]}" if logo_row else None
+
     return PublicAppConfig(
         tools={tool: bool(runtime_settings.get(key)) for tool, key in TOOL_SETTING_KEYS.items()},
         signups_enabled=bool(runtime_settings.get("signups_enabled")),
@@ -89,6 +94,7 @@ def public_app_config(db: Session = Depends(get_db)):
         github_repo_url=str(runtime_settings.get("github_repo_url") or ""),
         support_email=str(runtime_settings.get("support_email") or ""),
         legal_entity_name=str(runtime_settings.get("legal_entity_name") or "Querex"),
+        logo_url=logo_url,
         backgrounds=backgrounds,
     )
 
@@ -118,6 +124,19 @@ def public_background_image(page: str, db: Session = Depends(get_db)):
     row = db.get(AppSetting, f"{_BG_IMAGE_KEY_PREFIX}{page}")
     if not row:
         raise AppError(code="NOT_FOUND", message="No background image set for this page", status_code=404)
+
+    content = get_storage_service().read(row.value)
+    content_type = mimetypes.guess_type(row.value)[0] or "application/octet-stream"
+    return Response(content=content, media_type=content_type, headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.get("/logo")
+def public_logo(db: Session = Depends(get_db)):
+    """Streams the admin-uploaded brand logo, same pattern as
+    public_background_image above."""
+    row = db.get(AppSetting, _LOGO_IMAGE_KEY)
+    if not row:
+        raise AppError(code="NOT_FOUND", message="No logo has been uploaded", status_code=404)
 
     content = get_storage_service().read(row.value)
     content_type = mimetypes.guess_type(row.value)[0] or "application/octet-stream"

@@ -93,11 +93,14 @@ def test_github_link_toggle_round_trips_to_public_config(client, admin_headers):
 
 
 def test_legal_and_contact_settings_default_empty_and_round_trip(client, admin_headers):
+    from app.services.runtime_settings import _DEFAULT_PRIVACY_POLICY, _DEFAULT_TERMS_OF_SERVICE
+
     body = client.get("/api/v1/app/config").json()
-    assert body["support_email"] == ""
+    assert body["support_email"] == ""  # only support_email starts genuinely empty
     assert body["legal_entity_name"] == "Querex"
-    assert client.get("/api/v1/app/legal/privacy").json() == {"content": ""}
-    assert client.get("/api/v1/app/legal/terms").json() == {"content": ""}
+    # Privacy/Terms ship with real starting text, not blank — see runtime_settings.py.
+    assert client.get("/api/v1/app/legal/privacy").json() == {"content": _DEFAULT_PRIVACY_POLICY}
+    assert client.get("/api/v1/app/legal/terms").json() == {"content": _DEFAULT_TERMS_OF_SERVICE}
 
     resp = client.put(
         "/api/v1/admin/settings",
@@ -119,8 +122,8 @@ def test_legal_and_contact_settings_default_empty_and_round_trip(client, admin_h
     finally:
         _set("support_email", "")
         _set("legal_entity_name", "Querex")
-        _set("privacy_policy_content", "")
-        _set("terms_of_service_content", "")
+        _set("privacy_policy_content", _DEFAULT_PRIVACY_POLICY)
+        _set("terms_of_service_content", _DEFAULT_TERMS_OF_SERVICE)
 
 
 # ── Per-page background images ───────────────────────────────────────────────────
@@ -317,6 +320,117 @@ def test_background_routes_require_admin(client, auth_headers, fake_bg_storage):
         "/api/v1/admin/background/humanizer",
         headers=auth_headers,
         files={"file": ("bg.png", _tiny_png(), "image/png")},
+    )
+    assert resp.status_code == 403
+
+
+# ── Brand logo (2026-09-21) ───────────────────────────────────────────────────────
+
+def test_logo_upload_round_trips_to_public_config_and_serves(client, admin_headers, fake_bg_storage):
+    assert client.get("/api/v1/app/config").json()["logo_url"] is None
+    assert client.get("/api/v1/app/logo").status_code == 404
+
+    resp = client.post(
+        "/api/v1/admin/logo", headers=admin_headers, files={"file": ("logo.png", _tiny_png(), "image/png")}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["logo_url"].startswith("/app/logo?v=")
+
+    try:
+        body = client.get("/api/v1/app/config").json()
+        assert body["logo_url"].startswith("/app/logo?v=")
+
+        img = client.get("/api/v1/app/logo")
+        assert img.status_code == 200
+        assert img.headers["content-type"] == "image/webp"
+        assert len(img.content) <= 60 * 1024
+        from PIL import Image as _Image
+
+        decoded = _Image.open(io.BytesIO(img.content))
+        decoded.load()
+        assert decoded.format == "WEBP"
+        # RGBA in, but WebP's encoder legitimately drops a fully-opaque alpha
+        # channel to save bytes (this test PNG has no real transparency) --
+        # either mode confirms the RGBA conversion didn't error or discard
+        # color data, which is what actually matters here.
+        assert decoded.mode in ("RGB", "RGBA")
+    finally:
+        client.delete("/api/v1/admin/logo", headers=admin_headers)
+
+
+def test_logo_upload_preserves_real_transparency(client, admin_headers, fake_bg_storage):
+    """The background compressor deliberately converts to RGB, flattening
+    transparency (fine for a full-bleed photo backdrop). A logo is composited
+    over whatever's behind it in each placement, so this must keep a genuinely
+    transparent region intact, not just not-error on one."""
+    from PIL import Image as _Image
+
+    buf = io.BytesIO()
+    img = _Image.new("RGBA", (200, 200), (220, 30, 30, 255))
+    # Punch an actually-transparent hole in one corner.
+    for x in range(50):
+        for y in range(50):
+            img.putpixel((x, y), (0, 0, 0, 0))
+    img.save(buf, format="PNG")
+
+    client.post("/api/v1/admin/logo", headers=admin_headers, files={"file": ("logo.png", buf.getvalue(), "image/png")})
+    try:
+        resp = client.get("/api/v1/app/logo")
+        decoded = _Image.open(io.BytesIO(resp.content)).convert("RGBA")
+        # The transparent corner should still read near-zero alpha after the
+        # resize/recompress round trip (lossy WebP won't hit exactly 0).
+        assert decoded.getpixel((5, 5))[3] < 20
+        # An opaque region should stay opaque.
+        assert decoded.getpixel((150, 150))[3] > 235
+    finally:
+        client.delete("/api/v1/admin/logo", headers=admin_headers)
+
+
+def test_logo_reupload_replaces_and_delete_reverts_to_default(client, admin_headers, fake_bg_storage):
+    client.post(
+        "/api/v1/admin/logo",
+        headers=admin_headers,
+        files={"file": ("first.png", _test_png(color=(220, 30, 30)), "image/png")},
+    )
+    first_url = client.get("/api/v1/app/config").json()["logo_url"]
+    old_bytes = client.get("/api/v1/app/logo").content
+
+    client.post(
+        "/api/v1/admin/logo",
+        headers=admin_headers,
+        files={"file": ("second.png", _test_png(color=(30, 120, 220)), "image/png")},
+    )
+    second_url = client.get("/api/v1/app/config").json()["logo_url"]
+    new_bytes = client.get("/api/v1/app/logo").content
+
+    assert first_url != second_url  # version param changed
+    assert old_bytes != new_bytes  # the old object is gone, not just shadowed
+
+    del_resp = client.delete("/api/v1/admin/logo", headers=admin_headers)
+    assert del_resp.status_code == 200
+    assert client.get("/api/v1/app/config").json()["logo_url"] is None
+    assert client.get("/api/v1/app/logo").status_code == 404
+
+
+def test_logo_upload_rejects_bad_type_and_size(client, admin_headers, fake_bg_storage):
+    assert client.post(
+        "/api/v1/admin/logo", headers=admin_headers, files={"file": ("logo.txt", b"not an image", "text/plain")}
+    ).status_code == 400
+
+    assert client.post(
+        "/api/v1/admin/logo",
+        headers=admin_headers,
+        files={"file": ("logo.png", b"\x00" * (4 * 1024 * 1024 + 1), "image/png")},
+    ).status_code == 413
+
+
+def test_logo_delete_without_upload_is_404(client, admin_headers):
+    assert client.delete("/api/v1/admin/logo", headers=admin_headers).status_code == 404
+
+
+def test_logo_routes_require_admin(client, auth_headers, fake_bg_storage):
+    resp = client.post(
+        "/api/v1/admin/logo", headers=auth_headers, files={"file": ("logo.png", _tiny_png(), "image/png")}
     )
     assert resp.status_code == 403
 

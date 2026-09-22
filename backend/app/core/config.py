@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
 
+    # Empty = disabled. Sign up at sentry.io -> create a Python/FastAPI
+    # project -> paste its DSN here. No-op without it (sentry_sdk.init is
+    # simply never called), so this is safe to leave blank indefinitely.
+    sentry_dsn: str = ""
+
     frontend_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 
     database_url: str = "sqlite:///./app.db"

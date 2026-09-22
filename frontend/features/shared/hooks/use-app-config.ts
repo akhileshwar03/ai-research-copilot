@@ -32,6 +32,7 @@ export interface PublicAppConfig {
   github_repo_url: string;
   support_email: string;
   legal_entity_name: string;
+  logo_url: string | null;
   backgrounds: Record<BackgroundPage, BackgroundConfig>;
 }
 
@@ -67,6 +68,9 @@ const FALLBACK: PublicAppConfig = {
   github_repo_url: "",
   support_email: "",
   legal_entity_name: "Querex",
+  // Falls back to null (the default sparkle mark), never a stale/broken
+  // image URL from a failed config fetch.
+  logo_url: null,
   // Falls back to every page's built-in animated scene — never to a static
   // image URL that might not resolve, so a transient config-fetch failure
   // degrades to "the background that always worked," not a broken one.

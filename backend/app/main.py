@@ -38,6 +38,26 @@ settings = get_settings()
 configure_logging()
 logger = logging.getLogger(__name__)
 
+# 2026-09-22: no-op when sentry_dsn is unset (the SDK's own documented
+# behavior — every sentry_sdk call becomes a cheap no-op), so this is safe to
+# ship even before anyone creates a Sentry account. Initialized this early
+# (before the FastAPI app exists) so it can also catch import-time/startup
+# failures, not just request-handling exceptions.
+if settings.sentry_dsn:
+    import sentry_sdk
+    from sentry_sdk.integrations.fastapi import FastApiIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        # Full error capture; a modest trace sample so performance data doesn't
+        # dominate the (free-tier) event quota on a low-traffic app.
+        traces_sample_rate=0.1,
+        integrations=[FastApiIntegration(), LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)],
+    )
+    logger.info("sentry_initialized environment=%s", settings.environment)
+
 
 def _run_startup_migrations() -> None:
     """Apply any pending schema changes that Alembic may have missed.

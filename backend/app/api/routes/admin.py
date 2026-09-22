@@ -1020,6 +1020,105 @@ def delete_background_image(page: str, admin: User = Depends(require_admin), db:
     return MessageResponse(message=f"Background image removed for {page}")
 
 
+# ── Brand logo ───────────────────────────────────────────────────────────────────
+# 2026-09-21: same bookkeeping-row pattern as the per-page background images
+# above (a single global one, not per-page) -- an admin-uploaded mark that
+# replaces the built-in sparkle glyph everywhere it's shown (landing nav +
+# footer, legal pages nav, the logged-in app's top nav, and the login page).
+# GET /app/logo (app_config.py) streams it back publicly, unauthenticated,
+# same as the background route.
+_LOGO_IMAGE_KEY = "_logo_image_"
+_LOGO_MAX_BYTES = 4 * 1024 * 1024
+_LOGO_ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+# Small and typically viewed at ~32-40px, but rendered at up to 2x for retina
+# -- 512px is generous headroom without bloating storage/transfer for
+# something shown on every single page load, everywhere.
+_LOGO_TARGET_MAX_BYTES = 60 * 1024
+_LOGO_MAX_DIMENSION = 512
+
+
+def _compress_logo_image(content: bytes) -> bytes:
+    """Same bounded resize/recompress loop as _compress_background_image, but
+    keeps the alpha channel (RGBA, not RGB) -- a logo is composited over
+    whatever accent color sits behind it in each placement, so transparency
+    actually matters here, unlike a full-bleed page background."""
+    try:
+        image = Image.open(io.BytesIO(content)).convert("RGBA")
+    except Exception as exc:
+        raise AppError(code="INVALID_FILE_TYPE", message="File is not a valid image", status_code=400) from exc
+
+    if max(image.size) > _LOGO_MAX_DIMENSION:
+        image.thumbnail((_LOGO_MAX_DIMENSION, _LOGO_MAX_DIMENSION), Image.LANCZOS)
+
+    for quality in (90, 80, 70, 60, 50, 40, 30, 20):
+        buf = io.BytesIO()
+        image.save(buf, format="WEBP", quality=quality, method=6)
+        data = buf.getvalue()
+        if len(data) <= _LOGO_TARGET_MAX_BYTES:
+            return data
+
+    image.thumbnail((256, 256), Image.LANCZOS)
+    buf = io.BytesIO()
+    image.save(buf, format="WEBP", quality=20, method=6)
+    return buf.getvalue()
+
+
+@router.post("/logo")
+async def upload_logo(
+    file: UploadFile = File(...),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if (file.content_type or "") not in _LOGO_ALLOWED_CONTENT_TYPES:
+        raise AppError(
+            code="INVALID_FILE_TYPE", message="Only JPEG, PNG, or WebP images are allowed", status_code=400
+        )
+    content = await file.read()
+    if len(content) > _LOGO_MAX_BYTES:
+        raise AppError(code="FILE_TOO_LARGE", message="Image exceeds the 4 MB limit", status_code=413)
+
+    content = _compress_logo_image(content)
+
+    storage = get_storage_service()
+    row = db.get(AppSetting, _LOGO_IMAGE_KEY)
+    previous_stored_key = row.value if row else None
+
+    stored_key = f"branding/logo-{uuid.uuid4()}.webp"
+    storage.save(stored_key, content)
+
+    if row:
+        row.value = stored_key
+    else:
+        db.add(AppSetting(key=_LOGO_IMAGE_KEY, value=stored_key))
+    db.commit()
+
+    if previous_stored_key:
+        try:
+            storage.delete(previous_stored_key)
+        except Exception:
+            logger.warning("logo_image_cleanup_failed key=%s", previous_stored_key, exc_info=True)
+
+    record_admin_action(db, admin_email=admin.email, action="logo.upload")
+    return {"logo_url": f"/app/logo?v={stored_key.rsplit('/', 1)[-1]}"}
+
+
+@router.delete("/logo")
+def delete_logo(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.get(AppSetting, _LOGO_IMAGE_KEY)
+    if not row:
+        raise AppError(code="NOT_FOUND", message="No logo has been uploaded", status_code=404)
+
+    storage = get_storage_service()
+    try:
+        storage.delete(row.value)
+    except Exception:
+        logger.warning("logo_image_delete_failed key=%s", row.value, exc_info=True)
+    db.delete(row)
+    db.commit()
+    record_admin_action(db, admin_email=admin.email, action="logo.delete")
+    return MessageResponse(message="Logo removed — the default mark is shown again")
+
+
 # ── Audit log & usage events ───────────────────────────────────────────────────
 
 @router.get("/audit-log", response_model=AuditLogResponse)

@@ -15,6 +15,7 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
 import { buildApiUrl } from "@/constants/config";
 import { OtpInput } from "@/components/ui/otp-input";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { BrandMark } from "@/features/shared/components/brand-mark";
 import { CursorSpotlight, Glare, Reveal } from "@/features/shared/motion/motion";
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
@@ -140,13 +141,8 @@ export default function LoginPage() {
         {/* Brand */}
         <Reveal>
           <div className="mb-8 text-center">
-            <div
-              className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-2xl ring-1 ring-[var(--border-medium)]"
-              style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-              </svg>
+            <div className="mx-auto mb-4 flex justify-center">
+              <BrandMark boxClassName="h-11 w-11 rounded-2xl ring-1 ring-[var(--border-medium)]" iconClassName="h-5 w-5" />
             </div>
             <h1 className="font-headline text-[17px] font-bold text-[var(--text-primary)]">Querex</h1>
             <p className="mt-1 text-[12px] text-zinc-500">Your intelligent research workspace</p>

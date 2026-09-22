@@ -324,6 +324,14 @@ export const adminApi = {
   deleteBackgroundImage: (page: string) =>
     apiRequest<{ message: string }>(`/admin/background/${encodeURIComponent(page)}`, { method: "DELETE" }),
 
+  uploadLogo: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<{ logo_url: string }>("/admin/logo", { method: "POST", body });
+  },
+
+  deleteLogo: () => apiRequest<{ message: string }>("/admin/logo", { method: "DELETE" }),
+
   auditLog: (params: { skip?: number; limit?: number; action?: string } = {}) =>
     apiRequest<AuditLogResponse>(`/admin/audit-log${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, action: params.action })}`),
 

@@ -7,18 +7,7 @@ import { apiRequest } from "@/services/api/client";
 import { useAppConfig } from "@/features/shared/hooks/use-app-config";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
-
-function SparkIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-      />
-    </svg>
-  );
-}
+import { BrandMark } from "@/features/shared/components/brand-mark";
 
 /** Renders admin-authored plain text as paragraphs, blank line = paragraph
  *  break — matches how it's edited in Settings → Legal & contact (a plain
@@ -60,12 +49,7 @@ export function LegalPage({
         <nav className="glass-bar sticky top-0 z-40 border-b">
           <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
             <Link href="/" className="flex items-center gap-2.5">
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-lg shadow-md"
-                style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
-              >
-                <SparkIcon className="h-4 w-4" />
-              </div>
+              <BrandMark />
               <span className="font-headline text-[15px] font-bold tracking-tight">Querex</span>
             </Link>
             <Link href="/" className="text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900">
