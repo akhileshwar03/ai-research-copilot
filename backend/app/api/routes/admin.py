@@ -1283,6 +1283,8 @@ def get_system_info(
 
     openai_ok: bool | None = None
     ollama_ok: bool | None = None
+    tavily_usage: dict | None = None
+    resend_recent: dict | None = None
     if probe:
         try:
             openai_ok = bool(ai_service.ping())
@@ -1293,6 +1295,92 @@ def get_system_info(
             ollama_ok = resp.status_code == 200
         except Exception:
             ollama_ok = False
+        # 2026-09-22: unlike OpenAI/Sentry (which need a separate, higher-
+        # privilege key we don't hold), Tavily's /usage and Resend's list-
+        # emails both work with the exact same secret key already configured
+        # for real requests -- verified against each provider's own API
+        # docs before writing this, not assumed. So these two get real,
+        # live numbers instead of just a "configured" badge.
+        if settings.tavily_api_key:
+            try:
+                resp = httpx.get(
+                    "https://api.tavily.com/usage",
+                    headers={"Authorization": f"Bearer {settings.tavily_api_key}"},
+                    timeout=3.0,
+                )
+                if resp.status_code == 200:
+                    body = resp.json()
+                    account = body.get("account", {})
+                    tavily_usage = {
+                        "ok": True,
+                        "plan": account.get("current_plan"),
+                        "plan_usage": account.get("plan_usage"),
+                        "plan_limit": account.get("plan_limit"),
+                    }
+                else:
+                    tavily_usage = {"ok": False}
+            except Exception:
+                tavily_usage = {"ok": False}
+        if settings.resend_api_key:
+            try:
+                resp = httpx.get(
+                    "https://api.resend.com/emails?limit=100",
+                    headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+                    timeout=3.0,
+                )
+                if resp.status_code == 200:
+                    body = resp.json()
+                    emails = body.get("data", [])
+                    last_events: dict[str, int] = {}
+                    for e in emails:
+                        ev = e.get("last_event") or "unknown"
+                        last_events[ev] = last_events.get(ev, 0) + 1
+                    resend_recent = {
+                        "ok": True,
+                        "sample_size": len(emails),
+                        "has_more": body.get("has_more", False),
+                        "by_status": last_events,
+                        "most_recent_at": emails[0]["created_at"] if emails else None,
+                    }
+                else:
+                    resend_recent = {"ok": False}
+            except Exception:
+                resend_recent = {"ok": False}
+        if settings.uptimerobot_api_key:
+            try:
+                resp = httpx.post(
+                    "https://api.uptimerobot.com/v2/getMonitors",
+                    data={
+                        "api_key": settings.uptimerobot_api_key,
+                        "format": "json",
+                        "custom_uptime_ratios": "30",
+                    },
+                    timeout=3.0,
+                )
+                body = resp.json() if resp.status_code == 200 else {}
+                if resp.status_code == 200 and body.get("stat") == "ok":
+                    # Official status codes (UptimeRobot API v2 docs):
+                    # 0 paused, 1 not checked yet, 2 up, 8 seems down, 9 down.
+                    status_labels = {0: "paused", 1: "not checked yet", 2: "up", 8: "seems down", 9: "down"}
+                    uptimerobot_monitors = {
+                        "ok": True,
+                        "monitors": [
+                            {
+                                "name": m.get("friendly_name"),
+                                "status": status_labels.get(m.get("status"), f"unknown ({m.get('status')})"),
+                                "uptime_30d": m.get("custom_uptime_ratio"),
+                            }
+                            for m in body.get("monitors", [])
+                        ],
+                    }
+                else:
+                    uptimerobot_monitors = {"ok": False}
+            except Exception:
+                uptimerobot_monitors = {"ok": False}
+        else:
+            uptimerobot_monitors = None
+    else:
+        uptimerobot_monitors = None
 
     retention_row = db.get(AppSetting, "retention_last_run_at")
 
@@ -1356,6 +1444,20 @@ def get_system_info(
             "dashboard_url": "https://resend.com/emails",
         },
         {
+            "name": "Sentry",
+            "category": "Live app (error monitoring, backend + frontend)",
+            "configured": bool(settings.sentry_dsn),
+            "tracked_here": False,
+            "dashboard_url": "https://sentry.io",
+        },
+        {
+            "name": "UptimeRobot",
+            "category": "Operational (uptime monitoring, not called by the app itself)",
+            "configured": bool(settings.uptimerobot_api_key),
+            "tracked_here": True,
+            "dashboard_url": "https://uptimerobot.com/dashboard",
+        },
+        {
             "name": "Neon (Postgres)",
             "category": "Live app (database)",
             "configured": True,
@@ -1412,8 +1514,9 @@ def get_system_info(
             "ultra_ollama_url": settings.humanizer_ultra_ollama_url,
             "ultra_ok": ollama_ok,
         },
-        "web_search": {"configured": bool(settings.tavily_api_key)},
-        "email": {"provider": email_provider, "from": settings.email_from},
+        "web_search": {"configured": bool(settings.tavily_api_key), "usage": tavily_usage},
+        "email": {"provider": email_provider, "from": settings.email_from, "recent": resend_recent},
+        "uptimerobot": {"configured": bool(settings.uptimerobot_api_key), "monitors": uptimerobot_monitors},
         "oauth": {
             "google": bool(settings.google_client_id and settings.google_client_secret),
             "github": bool(settings.github_client_id and settings.github_client_secret),

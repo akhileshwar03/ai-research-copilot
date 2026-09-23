@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     # simply never called), so this is safe to leave blank indefinitely.
     sentry_dsn: str = ""
 
+    # Empty = the admin System tab's "API usage" card just links out to
+    # UptimeRobot's dashboard instead of showing live monitor status. A
+    # read-only "main API key" from Integrations & API in the UptimeRobot
+    # dashboard is enough — this app never creates/edits monitors, only
+    # reads their status.
+    uptimerobot_api_key: str = ""
+
     frontend_origins: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 
     database_url: str = "sqlite:///./app.db"

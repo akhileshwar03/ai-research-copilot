@@ -31,7 +31,7 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": [
         "-c",
-        "DATABASE_URL=sqlite:////private/tmp/claude-501/-Users-MacBook-Desktop-ai-research-copilot/134bd040-c991-496f-8776-1af3239e8540/scratchpad/verify.db ADMIN_EMAILS=admin@example.com ENVIRONMENT=development RATE_LIMIT_ENABLED=false venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010"
+        "DATABASE_URL=sqlite:///./app.db ADMIN_EMAILS=admin@example.com ENVIRONMENT=development RATE_LIMIT_ENABLED=false AUTO_CREATE_TABLES=true venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010"
       ],
       "port": 8010
     },

@@ -75,6 +75,7 @@ export function StatCard({
 
 export function SectionCard({
   title,
+  description,
   action,
   children,
   className = "",
@@ -84,6 +85,10 @@ export function SectionCard({
   onOpenChange,
 }: {
   title: string;
+  /** Shown in a click-to-open note beside the title — what this section is
+   *  and what it's used for. Meant so a newly-appointed admin can understand
+   *  every part of this panel without anyone walking them through it. */
+  description?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
@@ -106,6 +111,7 @@ export function SectionCard({
     else setInternalOpen(next);
   };
   const isOpen = !collapsible || open;
+  const [showDescription, setShowDescription] = useState(false);
 
   return (
     <section className={`glass-card rounded-xl ${className}`}>
@@ -129,11 +135,80 @@ export function SectionCard({
             </svg>
           )}
           <h3 className="text-[13px] font-semibold text-[var(--text-primary)]">{title}</h3>
+          {description && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDescription((v) => !v);
+              }}
+              aria-expanded={showDescription}
+              aria-label={showDescription ? `Hide what ${title} is for` : `What is ${title}?`}
+              className={[
+                "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold leading-none ring-1 transition-colors",
+                showDescription
+                  ? "bg-[var(--marketing-accent)] text-white ring-[var(--marketing-accent)]"
+                  : "bg-[var(--surface-2)] text-zinc-500 ring-[var(--border-medium)] hover:text-zinc-300",
+              ].join(" ")}
+            >
+              ?
+            </button>
+          )}
         </div>
         {action}
       </div>
+      {description && showDescription && (
+        <p className="border-b border-[var(--border-subtle)] bg-[var(--surface-1)] px-4 py-2.5 text-[11px] leading-relaxed text-zinc-400">
+          {description}
+        </p>
+      )}
       {isOpen && <div className="p-4">{children}</div>}
     </section>
+  );
+}
+
+/** A click-to-open "?" badge for a single row/item (as opposed to
+ *  SectionCard's own built-in one for a whole section) — e.g. one service in
+ *  a list of many, where each needs its own explanation. Caller renders the
+ *  expanded text itself (via the returned `open` state) since row layouts
+ *  vary too much for this to own that markup. */
+export function HelpToggle({
+  label,
+  open,
+  onToggle,
+}: {
+  /** Used only to build the aria-label ("What is {label}?"). */
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
+      aria-expanded={open}
+      aria-label={open ? `Hide what ${label} is for` : `What is ${label}?`}
+      className={[
+        "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold leading-none ring-1 transition-colors",
+        open
+          ? "bg-[var(--marketing-accent)] text-white ring-[var(--marketing-accent)]"
+          : "bg-[var(--surface-2)] text-zinc-500 ring-[var(--border-medium)] hover:text-zinc-300",
+      ].join(" ")}
+    >
+      ?
+    </button>
+  );
+}
+
+/** The expanded note HelpToggle reveals — a consistent look wherever it's used. */
+export function HelpNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-1.5 rounded-md bg-[var(--surface-1)] px-2.5 py-2 text-[11px] leading-relaxed text-zinc-400">
+      {children}
+    </p>
   );
 }
 

@@ -212,8 +212,28 @@ export interface SystemInfo {
     ultra_ollama_url: string;
     ultra_ok: boolean | null;
   };
-  web_search: { configured: boolean };
-  email: { provider: string; from: string };
+  web_search: {
+    configured: boolean;
+    /** Only populated when probe=true — real numbers from Tavily's own
+     *  /usage endpoint, the same key already used for search requests. */
+    usage: { ok: boolean; plan?: string | null; plan_usage?: number | null; plan_limit?: number | null } | null;
+  };
+  email: {
+    provider: string;
+    from: string;
+    /** Only populated when probe=true — a sample of up to 100 of the most
+     *  recent emails from Resend's list-emails endpoint, the same key
+     *  already used to send. Not a lifetime total (Resend's API doesn't
+     *  expose one), just real recent delivery activity. */
+    recent: { ok: boolean; sample_size?: number; has_more?: boolean; by_status?: Record<string, number>; most_recent_at?: string | null } | null;
+  };
+  uptimerobot: {
+    configured: boolean;
+    /** Only populated when probe=true and UPTIMEROBOT_API_KEY is set —
+     *  real monitor status/uptime from UptimeRobot's own getMonitors API,
+     *  a separate read-only key from anything the live app itself needs. */
+    monitors: { ok: boolean; monitors?: { name: string; status: string; uptime_30d: string | number | null }[] } | null;
+  };
   oauth: { google: boolean; github: boolean };
   admin_bootstrap_emails: number;
   retention: { days: number; last_run_at: string | null };

@@ -18,6 +18,24 @@ const BACKGROUND_PAGE_LABELS: Record<BackgroundPage, string> = {
   paper_analyzer: "Paper Analyzer",
 };
 
+// Shown behind the "?" beside each category — grounded in what actually lives
+// in that category (app/services/runtime_settings.py's _defs()), written so a
+// newly-appointed admin who has never seen this codebase knows what a section
+// governs before touching anything in it.
+const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+  platform: "Site-wide controls: maintenance mode (takes every tool offline except sign-in and this admin panel), whether new accounts can sign up, the announcement banner shown to signed-in users, and the GitHub link on the public landing page.",
+  appearance: "Background for each of the 6 pages (landing + the 5 tools) — either the built-in animated scene, or a static image you upload per page below.",
+  features: "Per-tool kill switches — turn any of the 5 tools (or URL/image text extraction) off without a deploy, e.g. to pause one during an incident. Also controls whether Research Copilot generates follow-up question suggestions after each answer.",
+  uploads: "Limits and cleanup for uploaded documents: max file size, per-IP rate limits, how many pages get sent for vision captioning of diagrams/charts, and how many days documents and chats are kept before automatic deletion.",
+  research_copilot: "Tuning for the document-chat tool: how many text chunks are retrieved per question, how strict the similarity match has to be, the character budget for whole-document questions (summaries/reports), and chat rate limits.",
+  humanizer: "Controls for the Humanizer tool: which backend serves the fine-tuned 'Ultra Human' mode (local/Modal/off), request size limits, and per-IP rate limits.",
+  checker: "Limits for AI Checker and Writing Feedback: max text length accepted and per-IP hourly rate limits for each.",
+  realtime: "Per-IP hourly rate limit for the Real-time AI (web-search-grounded chat) tool.",
+  extract: "Per-IP hourly rate limit for URL/image text extraction.",
+  paper_analyzer: "Limits for Paper Analyzer: max PDF pages accepted per request and the per-IP hourly rate limit.",
+  legal: "Public-facing contact and legal text: the support email shown in the footer, your legal entity name (footer copyright + legal pages), and the full body text of the Privacy Policy and Terms of Service pages.",
+};
+
 const SETTING_LABELS: Record<string, string> = {
   maintenance_mode: "Maintenance mode",
   signups_enabled: "Allow new sign-ups",
@@ -460,7 +478,10 @@ export function SettingsTab() {
         </div>
       </div>
 
-      <SectionCard title="Branding">
+      <SectionCard
+        title="Branding"
+        description="Your logo/mark, shown in the nav, footer, and login screen across the whole app. Upload a custom image to replace the default spark icon everywhere it appears — no code changes needed. Every upload/removal is written to the audit log below."
+      >
         <LogoUploadControl />
       </SectionCard>
 
@@ -474,6 +495,7 @@ export function SettingsTab() {
             <SectionCard
               key={category}
               title={group.label}
+              description={CATEGORY_DESCRIPTIONS[category]}
               collapsible
               open={isOpen}
               onOpenChange={(next) => setOpenCategories((o) => ({ ...o, [category]: next }))}
