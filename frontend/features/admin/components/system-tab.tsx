@@ -318,7 +318,7 @@ const SERVICE_DESCRIPTIONS: Record<string, string> = {
   "Tavily": "Web search grounding for the Real-time AI tool — when a user asks something needing current information, this is what actually searches the live web before the model answers. Real-time AI has no other source of live data; without this key the tool can't ground its answers in anything beyond the model's training data. Real plan-usage numbers (not an estimate) show in the API usage card above after you click Probe integrations.",
   "Resend": "Sends the actual emails: one-time sign-in codes (OTP) to users with no Google/GitHub account. Without this configured, the backend falls back to 'dev echo' — returning the code directly in the API response instead of emailing it, which is fine for local testing but must never happen in production. Recent real send activity (last 100, by delivery status) shows in the API usage card above after you click Probe integrations.",
   "Sentry": "Error monitoring for both halves of the app — the FastAPI backend and the Next.js frontend each report unhandled exceptions and a 10% sample of performance traces here. Fully inert until this DSN is set (no calls made at all), so it's safe to leave blank in any environment you don't want reporting.",
-  "UptimeRobot": "Not called by the app itself — it calls the app, pinging the backend's / endpoint every few minutes. Two effects: keeps the Render free-tier instance from spinning down between real visitors, and — since retention cleanup piggybacks on every hit to / — is what actually makes daily document/chat retention run on schedule rather than only when a real user happens to visit. Real live monitor status/uptime shows in the API usage card above (using a read-only UptimeRobot API key, separate from anything the live app needs), once configured.",
+  "UptimeRobot": "A monitor watching whether querex.app is up — not called by the app itself, it calls the app. Keeping the Render free-tier instance awake and triggering daily retention (which piggybacks on any hit to /) is actually done by a separate cron-job.org ping, not this — UptimeRobot here is purely a status/uptime dashboard. Real live monitor status/uptime shows in the API usage card above (using a read-only UptimeRobot API key, separate from anything the live app needs), once configured.",
   "Neon (Postgres)": "The single source of truth for almost everything: user accounts, uploaded documents' metadata and text chunks (for retrieval), chat sessions and messages, humanizer/checker run history, every runtime setting you change from this admin panel, and the admin audit log itself. If this is down, the app is down.",
   "Cloudflare R2": "Object storage for the raw bytes of every uploaded PDF (separate from Neon, which only holds the extracted text/chunks). If R2 isn't configured, uploads fall back to local disk on the backend server — fine for local dev, but Render wipes local disk on every deploy, so production must always have this configured.",
   "Google AI (Gemini)": "Used only by the offline fine-tuning scripts under backend/scripts/finetune/ (building/evaluating the Ultra Human LoRA model) — not called anywhere in the live production app. Safe to leave unconfigured on Render/Vercel.",
@@ -391,8 +391,14 @@ const OPERATIONAL_TOOLS: { name: string; category: string; description: string; 
   {
     name: "Render",
     category: "Backend hosting",
-    description: "Runs the live FastAPI backend (ai-research-copilot-xtmd.onrender.com) and holds every backend env var — all API keys, DATABASE_URL, SENTRY_DSN, everything in backend/.env.example. Deploys automatically on every push to main; env var changes need a manual 'Deploy latest commit' to take effect. Free tier spins the instance down after inactivity, which is exactly what UptimeRobot below exists to prevent.",
+    description: "Runs the live FastAPI backend (ai-research-copilot-xtmd.onrender.com) and holds every backend env var — all API keys, DATABASE_URL, SENTRY_DSN, everything in backend/.env.example. Deploys automatically on every push to main; env var changes need a manual 'Deploy latest commit' to take effect. Free tier spins the instance down after inactivity, which is exactly what the cron-job.org ping below exists to prevent.",
     dashboard_url: "https://dashboard.render.com",
+  },
+  {
+    name: "cron-job.org",
+    category: "Keep-alive + retention trigger",
+    description: "Pings the backend's / endpoint every few minutes. This is what actually keeps the Render free-tier instance from spinning down between real visitors, and — since retention cleanup piggybacks on any hit to / (see Data stores card above) — is what makes daily document/chat retention run on schedule rather than only when a real user happens to visit. UptimeRobot below is a separate, purely observational status monitor; this is the one doing the keep-alive work.",
+    dashboard_url: "https://console.cron-job.org",
   },
   {
     name: "Vercel",
