@@ -1318,8 +1318,10 @@ def get_system_info(
                         "plan_limit": account.get("plan_limit"),
                     }
                 else:
+                    logger.warning("tavily_usage_probe_failed status=%s body=%s", resp.status_code, resp.text[:500])
                     tavily_usage = {"ok": False}
             except Exception:
+                logger.exception("tavily_usage_probe_failed")
                 tavily_usage = {"ok": False}
         if settings.resend_api_key:
             try:
@@ -1343,8 +1345,10 @@ def get_system_info(
                         "most_recent_at": emails[0]["created_at"] if emails else None,
                     }
                 else:
+                    logger.warning("resend_recent_probe_failed status=%s body=%s", resp.status_code, resp.text[:500])
                     resend_recent = {"ok": False}
             except Exception:
+                logger.exception("resend_recent_probe_failed")
                 resend_recent = {"ok": False}
         if settings.uptimerobot_api_key:
             try:
@@ -1374,8 +1378,10 @@ def get_system_info(
                         ],
                     }
                 else:
+                    logger.warning("uptimerobot_probe_failed status=%s body=%s", resp.status_code, resp.text[:500])
                     uptimerobot_monitors = {"ok": False}
             except Exception:
+                logger.exception("uptimerobot_probe_failed")
                 uptimerobot_monitors = {"ok": False}
         else:
             uptimerobot_monitors = None
