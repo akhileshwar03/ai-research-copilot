@@ -32,6 +32,21 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-that-is-long-enough"
 os.environ["OPENAI_API_KEY"] = "sk-test-placeholder"
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 
+if not TEST_DB_URL.startswith("sqlite"):
+    # document_chunks.embedding is a pgvector VECTOR column (see
+    # app/db/models/document_chunk.py) -- on a real Postgres server, a fresh
+    # database doesn't have the pgvector extension enabled yet. Production
+    # gets this from `alembic upgrade head`'s own migration; importing
+    # app.main below runs Base.metadata.create_all() directly (bypassing
+    # Alembic entirely) the instant it's imported, so the extension has to
+    # exist before that import, not just before this file's own
+    # create_all() call further down.
+    from sqlalchemy import create_engine as _create_engine, text as _text
+
+    with _create_engine(TEST_DB_URL).connect() as _conn:
+        _conn.execute(_text("CREATE EXTENSION IF NOT EXISTS vector"))
+        _conn.commit()
+
 from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.api.dependencies import services as service_deps  # noqa: E402
