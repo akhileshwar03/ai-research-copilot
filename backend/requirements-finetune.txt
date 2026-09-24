@@ -1,7 +1,7 @@
 # Phase 2 (Humanizer LoRA fine-tune) tooling only — deliberately NOT part of the deployed
 # API's requirements.txt. Install with:
 #   pip install -r requirements-finetune.txt
-datasets>=2.19,<3
+datasets>=5.0.1,<6
 kaggle>=1.6,<2
 # Was pinned <1 when this file was first written; the actually-installed venv has
 # 1.5.3 (a real major-version jump past that upper bound). Loosening the pin to
