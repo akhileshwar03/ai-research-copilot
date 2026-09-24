@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_token
 from app.db.models.otp import OtpToken
 
 OTP_RATE_LIMIT = 5          # max sends per window
@@ -32,13 +33,16 @@ class OtpRepository:
             .scalar()
         ) or 0
 
-    def create(self, email: str, purpose: str = "auth", ttl_minutes: int = 10) -> OtpToken:
+    def create(self, email: str, purpose: str = "auth", ttl_minutes: int = 10) -> tuple[OtpToken, str]:
+        """Returns (token, plaintext_code) — the plaintext exists only in this
+        return value, for the caller to email once. It is never stored;
+        only its hash is persisted on the token."""
         code = f"{secrets.randbelow(1_000_000):06d}"
         expires_at = _utcnow_naive() + timedelta(minutes=ttl_minutes)
-        token = OtpToken(email=email, code=code, purpose=purpose, expires_at=expires_at, used=False)
+        token = OtpToken(email=email, code_hash=hash_token(code), purpose=purpose, expires_at=expires_at, used=False)
         self.db.add(token)
         self.db.flush()
-        return token
+        return token, code
 
     def get_latest(self, email: str, purpose: str = "auth") -> OtpToken | None:
         return (

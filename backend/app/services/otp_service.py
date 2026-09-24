@@ -68,10 +68,10 @@ class OtpService:
                 status_code=429,
             )
         self.otp_repo.delete_expired(email)
-        token = self.otp_repo.create(email=email, purpose="auth")
+        token, plaintext_code = self.otp_repo.create(email=email, purpose="auth")
         self.otp_repo.db.commit()
 
-        dev_code = self.email_service.send_otp_email(email=email, code=token.code)
+        dev_code = self.email_service.send_otp_email(email=email, code=plaintext_code)
         logger.info("otp_sent email=%s", email)
 
         result: dict = {"message": "Verification code sent"}
@@ -93,7 +93,7 @@ class OtpService:
                 status_code=429,
             )
 
-        if not hmac.compare_digest(token.code, code.strip()):
+        if not hmac.compare_digest(token.code_hash, hash_token(code.strip())):
             token.attempts = (token.attempts or 0) + 1
             if token.attempts >= MAX_OTP_ATTEMPTS:
                 token.used = True  # burn the token permanently

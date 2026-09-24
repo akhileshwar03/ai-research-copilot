@@ -209,8 +209,17 @@ def _run_startup_migrations() -> None:
                 conn.commit()
                 logger.info("startup_migration: documents.vision_truncated added")
 
-            existing_index_names = {idx["name"] for idx in inspector.get_indexes("documents")}
-            if "uq_documents_user_name" not in existing_index_names:
+            # NOT inspector.get_indexes(): SQLAlchemy's SQLite reflection can't
+            # see expression-based indexes (this one uses lower(...)) and
+            # silently omits them -- logged as "Skipped unsupported reflection
+            # of expression-based index uq_documents_user_name" -- so that
+            # check was always false and this block retried the CREATE (and
+            # crashed) on every single startup, aborting every migration
+            # after it in this function. sqlite_master has no such gap.
+            index_exists = conn.execute(text(
+                "SELECT 1 FROM sqlite_master WHERE type='index' AND name='uq_documents_user_name'"
+            )).first()
+            if not index_exists:
                 logger.info("startup_migration: adding uq_documents_user_name")
                 # Defensively resolve any pre-existing duplicate names first —
                 # same reasoning as the Alembic migration (20260812_0017):
@@ -273,6 +282,17 @@ def _run_startup_migrations() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_action ON admin_audit_log (action)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_admin_audit_log_created_at ON admin_audit_log (created_at)"))
             conn.commit()
+
+            # ── otp_tokens.code -> code_hash (migration 0019) ──────────────────
+            otp_cols = {c["name"] for c in inspector.get_columns("otp_tokens")}
+            if "code_hash" not in otp_cols:
+                logger.info("startup_migration: renaming otp_tokens.code to code_hash")
+                conn.execute(text("DELETE FROM otp_tokens"))
+                conn.execute(text("ALTER TABLE otp_tokens ADD COLUMN code_hash VARCHAR"))
+                if "code" in otp_cols:
+                    conn.execute(text("ALTER TABLE otp_tokens DROP COLUMN code"))
+                conn.commit()
+                logger.info("startup_migration: otp_tokens.code_hash added")
 
     except Exception:
         logger.exception(
