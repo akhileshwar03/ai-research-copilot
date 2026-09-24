@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "NEXT_PUBLIC_API_URL=http://127.0.0.1:8099 NEXT_PUBLIC_API_PREFIX=/api/v1 next build && playwright test"
   },
   "dependencies": {
     "@paper-design/shaders-react": "^0.0.77",
@@ -33,6 +34,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

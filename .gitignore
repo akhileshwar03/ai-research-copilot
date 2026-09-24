@@ -103,6 +103,9 @@ backend/scripts/finetune/kaggle/work/
 # =========================
 .DS_Store
 backend/app.db
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
 backend/scripts/finetune/ollama_model/
 # Ollama model pulls used for local QA of finetune checkpoints (GBs of GGUF
 # binaries, regenerable from the Modal volume, never for a public repo).
