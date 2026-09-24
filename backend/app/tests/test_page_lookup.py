@@ -18,7 +18,7 @@ page mentioned — see the found_pages/missing_pages reporting tested below.
 from app.db.models.document_chunk import DocumentChunk
 from app.modules.rag.pgvector_store import PgVectorStore
 from app.modules.rag.retrieval_service import RetrievalService
-from app.tests.conftest import TestingSessionLocal
+from app.tests.conftest import TestingSessionLocal, fake_embedding
 
 
 def _seed_chunk(db, source: str, user_email: str, chunk: int, page: int, content: str):
@@ -30,7 +30,7 @@ def _seed_chunk(db, source: str, user_email: str, chunk: int, page: int, content
             chunk=chunk,
             page=page,
             content=content,
-            embedding="0",
+            embedding=fake_embedding(),
         )
     )
 

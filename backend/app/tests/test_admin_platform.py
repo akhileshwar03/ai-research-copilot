@@ -28,7 +28,7 @@ from app.db.models.usage_event import UsageEvent
 from app.db.models.user import User
 from app.services.chat_service import RESEARCH_ACTIONS, ChatService
 from app.services.runtime_settings import BACKGROUND_PAGES, runtime_settings
-from app.tests.conftest import TestingSessionLocal
+from app.tests.conftest import TEST_DB_URL, TestingSessionLocal
 from app.tests.test_admin_and_security import _make_admin, _register_and_login
 import app.api.middleware.request_context as request_context_module
 
@@ -441,11 +441,16 @@ def test_storage_usage_requires_admin(client, auth_headers):
     assert client.get("/api/v1/admin/system/storage", headers=auth_headers).status_code == 403
 
 
+@pytest.mark.skipif(
+    not TEST_DB_URL.startswith("sqlite"),
+    reason="This asserts the SQLite-only degradation path; the Postgres CI job legitimately gets real neon usage back instead.",
+)
 def test_storage_usage_neon_is_null_on_sqlite_dev(client, admin_headers):
-    """Tests run against SQLite (see conftest.py) -- pg_database_size/
-    pg_stat_user_tables don't exist there, so this must degrade to null
-    rather than error, exactly like production would on a non-Postgres dev
-    setup."""
+    """Tests run against SQLite by default (see conftest.py) --
+    pg_database_size/pg_stat_user_tables don't exist there, so this must
+    degrade to null rather than error, exactly like production would on a
+    non-Postgres dev setup. Skipped on the Postgres CI job, which legitimately
+    gets real (if empty-database) numbers back instead of null."""
     body = client.get("/api/v1/admin/system/storage", headers=admin_headers).json()
     assert body["neon"] is None
 

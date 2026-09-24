@@ -13,7 +13,7 @@ Postgres/pgvector instance).
 
 from app.db.models.document_chunk import DocumentChunk
 from app.modules.rag.pgvector_store import PgVectorStore
-from app.tests.conftest import TestingSessionLocal
+from app.tests.conftest import TestingSessionLocal, fake_embedding
 
 
 def _seed_chunk(db, source: str, user_email: str, chunk: int, page: int | None):
@@ -27,7 +27,7 @@ def _seed_chunk(db, source: str, user_email: str, chunk: int, page: int | None):
             chunk=chunk,
             page=page,
             content="text",
-            embedding="0",  # SQLite variant stores this as plain Text
+            embedding=fake_embedding(),
         )
     )
 

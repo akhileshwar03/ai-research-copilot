@@ -64,6 +64,20 @@ Base.metadata.create_all(bind=_test_engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_test_engine)
 
 
+def fake_embedding():
+    """A placeholder value for DocumentChunk.embedding, valid on whichever
+    dialect this test run is actually using. The column is Text on SQLite
+    (any string works, including a bare "0") but a real pgvector VECTOR(1536)
+    on Postgres, which rejects "0" outright (not a 1536-dim array) -- tests
+    that don't exercise real vector math just need *a* value, so this picks
+    the right shape rather than hardcoding the SQLite-only one."""
+    if TEST_DB_URL.startswith("sqlite"):
+        return "0"
+    from app.db.models.document_chunk import EMBEDDING_DIMENSIONS
+
+    return [0.0] * EMBEDDING_DIMENSIONS
+
+
 def _override_get_db():
     """Yield a DB session backed by the test in-memory database."""
     db = TestingSessionLocal()
