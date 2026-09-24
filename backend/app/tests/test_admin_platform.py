@@ -661,7 +661,7 @@ def test_usage_events_and_system_info(client, admin_headers, auth_headers, track
     system = client.get("/api/v1/admin/system", headers=admin_headers)
     assert system.status_code == 200
     body = system.json()
-    assert body["database"]["dialect"] == "sqlite"
+    assert body["database"]["dialect"] in {"sqlite", "postgresql"}
     assert body["storage"]["backend"] in {"local", "r2"}
     assert body["openai"]["ok"] is None  # no probe requested, no network call made
     assert "api_key" not in json.dumps(body).lower()
