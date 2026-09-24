@@ -1,9 +1,14 @@
 """Test configuration.
 
-Tests run against a temporary in-memory SQLite database created fresh for the
-test session. StaticPool ensures all SQLAlchemy connections share the same
-underlying SQLite connection, which is required for in-memory databases where
-each new connection would otherwise see an empty database.
+Tests run against a temporary database created fresh for the test session --
+in-memory SQLite by default (fast, zero setup, what every contributor gets
+locally), or a real Postgres instance when DATABASE_URL is already set in the
+environment (what CI's postgres-matrix job does — see .github/workflows/ci.yml
+— to catch dialect-specific bugs SQLite can't, like the real boolean-default
+migration bug this project hit once). StaticPool on the SQLite path ensures
+all SQLAlchemy connections share the same underlying in-memory connection,
+which in-memory SQLite requires (each new connection otherwise sees an empty
+database) — Postgres needs no such workaround, it's a real server.
 """
 
 import os
@@ -16,8 +21,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Override DATABASE_URL *before* importing anything that reads settings.
-# get_settings() uses lru_cache so the first call wins.
-TEST_DB_URL = "sqlite:///:memory:"
+# get_settings() uses lru_cache so the first call wins. Respect an
+# already-set DATABASE_URL (CI's Postgres matrix leg) instead of always
+# forcing SQLite.
+TEST_DB_URL = os.environ.get("DATABASE_URL") or "sqlite:///:memory:"
 os.environ["DATABASE_URL"] = TEST_DB_URL
 os.environ["AUTO_CREATE_TABLES"] = "true"
 os.environ["ENVIRONMENT"] = "development"
@@ -29,12 +36,15 @@ from app.db.session import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
 from app.api.dependencies import services as service_deps  # noqa: E402
 
-# StaticPool: all connections share one in-memory SQLite database.
-_test_engine = create_engine(
-    TEST_DB_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+if TEST_DB_URL.startswith("sqlite"):
+    # StaticPool: all connections share one in-memory SQLite database.
+    _test_engine = create_engine(
+        TEST_DB_URL,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+else:
+    _test_engine = create_engine(TEST_DB_URL)
 Base.metadata.create_all(bind=_test_engine)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_test_engine)
 
