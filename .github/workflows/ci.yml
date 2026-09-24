@@ -72,6 +72,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Real Alembic migrations, not conftest.py's Base.metadata.create_all()
+      # shortcut (that's still what the SQLite job above uses) -- this is
+      # what actually deploys to Render, so it's the only way CI verifies
+      # the migrations themselves. It also creates alembic_version (which
+      # the admin /system endpoint queries) and the pgvector extension
+      # (migration 20260719_0011) in the right order, for free.
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql://querex:querex@localhost:5432/querex_ci
+
       - name: Run tests
         run: python -m pytest app/tests/ -q
         env:
