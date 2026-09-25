@@ -23,6 +23,7 @@ import re
 import time
 import uuid
 
+import sentry_sdk
 from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -129,6 +130,16 @@ class RequestContextMiddleware:
         # which is backed by this exact dict.
         state = scope.setdefault("state", {})
         state["request_id"] = request_id
+
+        # Sentry's FastAPI/ASGI integration pushes a fresh isolation scope
+        # per request before user middleware runs, so this tags only *this*
+        # request's events -- not a global/shared scope other concurrent
+        # requests would also pick up. A no-op if SENTRY_DSN isn't set
+        # (set_tag against no active client is safe and does nothing). This
+        # is what lets a frontend-reported error and the backend request
+        # that served it be found by the same request_id in Sentry, instead
+        # of two unrelated-looking events on either side of the network.
+        sentry_sdk.set_tag("request_id", request_id)
 
         method = scope.get("method", "GET")
         path = scope.get("path", "")

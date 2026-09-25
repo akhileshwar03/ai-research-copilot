@@ -29,7 +29,11 @@ test("Real-time AI streams a real answer and degrades gracefully without web sea
   // finally block).
   await expect(sendButton).toHaveText("Send", { timeout: 30_000 });
 
-  await expect(page.getByText("56")).toBeVisible();
+  // exact: true -- a loose substring match can collide with the random
+  // numeric suffix in the test's own unique email shown in the account
+  // menu (e.g. "e2e-realtime-...-560934" contains "56"), a real flake
+  // this test hit in practice, not a hypothetical one.
+  await expect(page.getByText("56", { exact: true })).toBeVisible();
 
   // No Tavily key configured -> sources is always [] -> the citation-chip
   // block (rendered only when message.sources.length > 0) must not
