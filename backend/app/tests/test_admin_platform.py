@@ -637,6 +637,92 @@ def test_analytics_series_and_tools(client, admin_headers, auth_headers, track_u
     assert body["top_users"] and body["active_users_7d"] >= 1
 
 
+def _seed_usage(email: str, day: str, *, tool: str = "humanizer", ok: bool = True, count: int = 1) -> int:
+    from datetime import datetime
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.email == email).first()
+        for _ in range(count):
+            db.add(
+                UsageEvent(
+                    user_id=user.id,
+                    tool=tool,
+                    status_code=200 if ok else 500,
+                    ok=ok,
+                    duration_ms=100,
+                    created_at=datetime.fromisoformat(day + "T12:00:00"),
+                )
+            )
+        db.commit()
+        return user.id
+    finally:
+        db.close()
+
+
+def test_analytics_custom_range_is_inclusive_and_bounded(client, admin_headers, unique_email):
+    _seed_usage(unique_email, "2026-03-10", count=2)
+    _seed_usage(unique_email, "2026-03-12", count=3)
+    _seed_usage(unique_email, "2026-03-13", count=5)  # outside the window
+
+    resp = client.get("/api/v1/admin/analytics?start=2026-03-10&end=2026-03-12", headers=admin_headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert (body["start"], body["end"], body["days"]) == ("2026-03-10", "2026-03-12", 3)
+    by_day = {d["date"]: d["requests"] for d in body["series"]}
+    assert by_day == {"2026-03-10": 2, "2026-03-11": 0, "2026-03-12": 3}
+    assert body["tools"][0]["requests"] == 5
+    assert "previous" not in body
+
+
+def test_analytics_compare_returns_equal_length_previous_period(client, admin_headers, unique_email):
+    _seed_usage(unique_email, "2025-06-11", count=4)  # previous period
+    _seed_usage(unique_email, "2025-06-13", count=1)  # current period
+
+    body = client.get(
+        "/api/v1/admin/analytics?start=2025-06-12&end=2025-06-14&compare=true", headers=admin_headers
+    ).json()
+    previous = body["previous"]
+    assert (previous["start"], previous["end"], previous["days"]) == ("2025-06-09", "2025-06-11", 3)
+    assert sum(d["requests"] for d in previous["series"]) == 4
+    assert sum(d["requests"] for d in body["series"]) == 1
+    assert "previous" not in previous
+
+
+def test_analytics_scopes_to_a_single_user(client, admin_headers, unique_email):
+    other_email = "other-" + unique_email
+    _register_and_login(client, other_email)
+    mine = _seed_usage(unique_email, "2025-01-10", count=2)
+    _seed_usage(other_email, "2025-01-10", count=7)
+
+    everyone = client.get("/api/v1/admin/analytics?start=2025-01-10&end=2025-01-10", headers=admin_headers).json()
+    scoped = client.get(
+        f"/api/v1/admin/analytics?start=2025-01-10&end=2025-01-10&user_id={mine}", headers=admin_headers
+    ).json()
+    assert everyone["series"][0]["requests"] == 9
+    assert scoped["series"][0]["requests"] == 2
+    assert scoped["user_id"] == mine
+    assert [u["user_id"] for u in scoped["top_users"]] == [mine]
+
+
+def test_analytics_rejects_bad_ranges_and_unknown_users(client, admin_headers):
+    inverted = client.get("/api/v1/admin/analytics?start=2026-03-12&end=2026-03-10", headers=admin_headers)
+    assert inverted.status_code == 400 and inverted.json()["error"]["code"] == "INVALID_RANGE"
+
+    huge = client.get("/api/v1/admin/analytics?start=2024-01-01&end=2026-03-10", headers=admin_headers)
+    assert huge.status_code == 400 and huge.json()["error"]["code"] == "RANGE_TOO_LARGE"
+
+    missing = client.get("/api/v1/admin/analytics?user_id=999999", headers=admin_headers)
+    assert missing.status_code == 404 and missing.json()["error"]["code"] == "USER_NOT_FOUND"
+
+    garbage = client.get("/api/v1/admin/analytics?start=not-a-date", headers=admin_headers)
+    assert garbage.status_code == 422
+
+
+def test_analytics_requires_admin(client, auth_headers):
+    assert client.get("/api/v1/admin/analytics?start=2026-03-10&end=2026-03-12", headers=auth_headers).status_code == 403
+
+
 def test_documents_listing_and_audit_log(client, admin_headers):
     resp = client.get("/api/v1/admin/documents?status=all", headers=admin_headers)
     assert resp.status_code == 200

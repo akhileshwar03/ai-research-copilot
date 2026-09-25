@@ -224,11 +224,12 @@ def get_stats(admin: User = Depends(require_admin), db: Session = Depends(get_db
 
 # ── Analytics ──────────────────────────────────────────────────────────────────
 
-def _daily_counts(db: Session, column, since: datetime, *filters) -> dict[str, int]:
-    """{YYYY-MM-DD: count} for rows whose *column* timestamp >= since."""
+def _daily_counts(db: Session, column, since: datetime, *filters, until: datetime | None = None) -> dict[str, int]:
+    """{YYYY-MM-DD: count} for rows whose *column* timestamp is >= since (and < until, if given)."""
+    bounds = [column >= since] + ([column < until] if until is not None else [])
     rows = (
         db.query(func.date(column), func.count())
-        .filter(column >= since, *filters)
+        .filter(*bounds, *filters)
         .group_by(func.date(column))
         .all()
     )
@@ -247,23 +248,30 @@ def _percentile(values: list[int], pct: float) -> int:
     return int(ordered[index])
 
 
-@router.get("/analytics")
-def get_analytics(
-    days: int = Query(default=30, ge=1, le=365),
-    admin: User = Depends(require_admin),
-    db: Session = Depends(get_db),
-):
-    """Daily time series and per-tool aggregates for the last *days* days."""
+def _compute_analytics(db: Session, start: date, end: date, user_id: int | None, user_email: str | None) -> dict:
+    """Daily series and per-tool aggregates for the inclusive UTC day range
+    [start, end], optionally scoped to a single user."""
     now = _utcnow_naive()
-    since = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    days = (end - start).days + 1
+    since = datetime(start.year, start.month, start.day)
+    until = since + timedelta(days=days)
 
-    signups = _daily_counts(db, User.created_at, since)
-    documents = _daily_counts(db, Document.created_at, since)
-    sessions = _daily_counts(db, ChatSession.created_at, since)
-    humanizer_runs = _daily_counts(db, HumanizerRun.created_at, since)
-    realtime_sessions = _daily_counts(db, RealtimeSession.created_at, since)
-    requests = _daily_counts(db, UsageEvent.created_at, since)
-    errors = _daily_counts(db, UsageEvent.created_at, since, UsageEvent.ok.is_(False))
+    def scoped(column, *extra):
+        return [*extra, column == user_id] if user_id is not None else list(extra)
+
+    signups = _daily_counts(db, User.created_at, since, *scoped(User.id), until=until)
+    documents = _daily_counts(
+        db, Document.created_at, since, *([Document.user_email == user_email] if user_id is not None else []), until=until
+    )
+    sessions = _daily_counts(db, ChatSession.created_at, since, *scoped(ChatSession.user_id), until=until)
+    humanizer_runs = _daily_counts(db, HumanizerRun.created_at, since, *scoped(HumanizerRun.user_id), until=until)
+    realtime_sessions = _daily_counts(
+        db, RealtimeSession.created_at, since, *scoped(RealtimeSession.user_id), until=until
+    )
+    requests = _daily_counts(db, UsageEvent.created_at, since, *scoped(UsageEvent.user_id), until=until)
+    errors = _daily_counts(
+        db, UsageEvent.created_at, since, *scoped(UsageEvent.user_id, UsageEvent.ok.is_(False)), until=until
+    )
 
     # Chat messages have no timestamp of their own — attribute them to their
     # session's creation day, which is exact for the (dominant) single-day
@@ -271,7 +279,7 @@ def get_analytics(
     message_rows = (
         db.query(func.date(ChatSession.created_at), func.count(ChatMessage.id))
         .join(ChatMessage, ChatMessage.session_id == ChatSession.id)
-        .filter(ChatSession.created_at >= since)
+        .filter(ChatSession.created_at >= since, ChatSession.created_at < until, *scoped(ChatSession.user_id))
         .group_by(func.date(ChatSession.created_at))
         .all()
     )
@@ -300,22 +308,22 @@ def get_analytics(
     # so a very busy window can't turn this into a multi-megabyte fetch.
     events = (
         db.query(UsageEvent.tool, UsageEvent.ok, UsageEvent.duration_ms, UsageEvent.user_id)
-        .filter(UsageEvent.created_at >= since)
+        .filter(UsageEvent.created_at >= since, UsageEvent.created_at < until, *scoped(UsageEvent.user_id))
         .order_by(UsageEvent.created_at.desc())
         .limit(20000)
         .all()
     )
     by_tool: dict[str, dict] = defaultdict(lambda: {"requests": 0, "errors": 0, "durations": [], "users": set()})
     per_user: dict[int, int] = defaultdict(int)
-    for tool, ok, duration_ms, user_id in events:
+    for tool, ok, duration_ms, event_user_id in events:
         bucket = by_tool[tool]
         bucket["requests"] += 1
         if not ok:
             bucket["errors"] += 1
         bucket["durations"].append(int(duration_ms or 0))
-        if user_id is not None:
-            bucket["users"].add(user_id)
-            per_user[user_id] += 1
+        if event_user_id is not None:
+            bucket["users"].add(event_user_id)
+            per_user[event_user_id] += 1
 
     tools = []
     for tool in sorted(by_tool, key=lambda t: -by_tool[t]["requests"]):
@@ -343,26 +351,69 @@ def get_analytics(
     def active_since(delta: timedelta) -> int:
         return int(
             db.query(func.count(func.distinct(UsageEvent.user_id)))
-            .filter(UsageEvent.created_at >= now - delta, UsageEvent.user_id.isnot(None))
+            .filter(UsageEvent.created_at >= now - delta, *scoped(UsageEvent.user_id, UsageEvent.user_id.isnot(None)))
             .scalar()
             or 0
         )
 
+    doc_status_query = db.query(Document.upload_status, func.count(Document.id))
+    if user_id is not None:
+        doc_status_query = doc_status_query.filter(Document.user_email == user_email)
+
     return {
         "days": days,
-        "since": since.date().isoformat(),
+        "since": start.isoformat(),
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "user_id": user_id,
         "series": series,
         "tools": tools,
         "top_users": top_users,
         "active_users_7d": active_since(timedelta(days=7)),
         "active_users_30d": active_since(timedelta(days=30)),
         "documents_by_status": {
-            status: int(n)
-            for status, n in db.query(Document.upload_status, func.count(Document.id))
-            .group_by(Document.upload_status)
-            .all()
+            status: int(n) for status, n in doc_status_query.group_by(Document.upload_status).all()
         },
     }
+
+
+@router.get("/analytics")
+def get_analytics(
+    days: int = Query(default=30, ge=1, le=365),
+    start: date | None = Query(default=None, description="Inclusive UTC start day, YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="Inclusive UTC end day, YYYY-MM-DD"),
+    user_id: int | None = Query(default=None, ge=1, description="Scope every series and table to one user"),
+    compare: bool = Query(default=False, description="Also return the equivalent immediately-preceding period"),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Daily time series and per-tool aggregates.
+
+    The window is [start, end] when either is given (a missing end defaults to
+    today, a missing start to end - days + 1), otherwise the last *days* days.
+    """
+    today = _utcnow_naive().date()
+    range_end = end or today
+    range_start = start or (range_end - timedelta(days=days - 1))
+    if range_start > range_end:
+        raise AppError(code="INVALID_RANGE", message="start must be on or before end.", status_code=400)
+    if (range_end - range_start).days + 1 > 366:
+        raise AppError(code="RANGE_TOO_LARGE", message="Date range cannot exceed 366 days.", status_code=400)
+
+    user_email = None
+    if user_id is not None:
+        user_email = db.query(User.email).filter(User.id == user_id).scalar()
+        if user_email is None:
+            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
+
+    result = _compute_analytics(db, range_start, range_end, user_id, user_email)
+    if compare:
+        span = (range_end - range_start).days + 1
+        previous_end = range_start - timedelta(days=1)
+        result["previous"] = _compute_analytics(
+            db, previous_end - timedelta(days=span - 1), previous_end, user_id, user_email
+        )
+    return result
 
 
 # ── User management ────────────────────────────────────────────────────────────
