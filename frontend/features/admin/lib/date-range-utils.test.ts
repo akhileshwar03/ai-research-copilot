@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateComparisonPeriod,
   calculateDelta,
   formatRangeLabel,
   formatYMD,
@@ -40,13 +39,6 @@ describe("date-range-utils", () => {
     const range = getPresetDateRange("this_month", ref);
     expect(range.start).toBe("2026-09-01");
     expect(range.end).toBe("2026-09-25");
-  });
-
-  it("calculates previous comparison period accurately", () => {
-    const comp = calculateComparisonPeriod("2026-09-19", "2026-09-25");
-    expect(comp.durationDays).toBe(7);
-    expect(comp.previousEnd).toBe("2026-09-18");
-    expect(comp.previousStart).toBe("2026-09-12");
   });
 
   it("calculates delta percentage and direction", () => {

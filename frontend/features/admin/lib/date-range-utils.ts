@@ -8,21 +8,6 @@ export type DateRangePreset =
   | "ytd"
   | "custom";
 
-export interface DateRangeState {
-  preset: DateRangePreset;
-  start: string; // YYYY-MM-DD
-  end: string;   // YYYY-MM-DD
-  compare: boolean;
-}
-
-export interface PeriodComparison {
-  currentStart: string;
-  currentEnd: string;
-  previousStart: string;
-  previousEnd: string;
-  durationDays: number;
-}
-
 /** Formats a Date object to YYYY-MM-DD in UTC. */
 export function formatYMD(date: Date): string {
   const y = date.getUTCFullYear();
@@ -81,29 +66,6 @@ export function getPresetDateRange(preset: DateRangePreset, now: Date = new Date
       return { start: formatYMD(start), end: endStr };
     }
   }
-}
-
-/** Computes the equivalent preceding period for comparison. */
-export function calculateComparisonPeriod(startStr: string, endStr: string): PeriodComparison {
-  const startDate = parseYMD(startStr);
-  const endDate = parseYMD(endStr);
-
-  const diffMs = endDate.getTime() - startDate.getTime();
-  const durationDays = Math.max(1, Math.round(diffMs / (24 * 60 * 60 * 1000)) + 1);
-
-  const prevEnd = new Date(startDate);
-  prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
-
-  const prevStart = new Date(prevEnd);
-  prevStart.setUTCDate(prevStart.getUTCDate() - durationDays + 1);
-
-  return {
-    currentStart: startStr,
-    currentEnd: endStr,
-    previousStart: formatYMD(prevStart),
-    previousEnd: formatYMD(prevEnd),
-    durationDays,
-  };
 }
 
 /** Calculates difference and percentage change between two values. */
