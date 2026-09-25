@@ -225,7 +225,17 @@ export interface SystemInfo {
      *  recent emails from Resend's list-emails endpoint, the same key
      *  already used to send. Not a lifetime total (Resend's API doesn't
      *  expose one), just real recent delivery activity. */
-    recent: { ok: boolean; sample_size?: number; has_more?: boolean; by_status?: Record<string, number>; most_recent_at?: string | null } | null;
+    recent: {
+      ok: boolean;
+      sample_size?: number;
+      has_more?: boolean;
+      by_status?: Record<string, number>;
+      most_recent_at?: string | null;
+      /** True when the key is deliberately scoped to sending-only (see
+       *  CLAUDE.md) and Resend rejected the read-only list-emails call for
+       *  that reason — expected, not a failure. */
+      restricted?: boolean;
+    } | null;
   };
   uptimerobot: {
     configured: boolean;

@@ -1344,6 +1344,14 @@ def get_system_info(
                         "by_status": last_events,
                         "most_recent_at": emails[0]["created_at"] if emails else None,
                     }
+                elif resp.status_code == 401 and resp.json().get("name") == "restricted_api_key":
+                    # Expected, not a bug: this key is deliberately scoped to
+                    # sending-only (see CLAUDE.md) and Resend's list-emails
+                    # endpoint is a read operation that scope doesn't grant.
+                    # Widening the key just to populate this card would undo
+                    # a real security decision, so surface it as its own
+                    # state instead of a generic failure.
+                    resend_recent = {"ok": False, "restricted": True}
                 else:
                     logger.warning("resend_recent_probe_failed status=%s body=%s", resp.status_code, resp.text[:500])
                     resend_recent = {"ok": False}

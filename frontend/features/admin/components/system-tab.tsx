@@ -260,7 +260,13 @@ function ApiUsageSection({
               ) : (
                 <div>
                   <p className="text-[12.5px] font-medium text-zinc-300">Resend</p>
-                  <p className="mt-2 text-[12px] text-zinc-500">{resend ? "Activity check failed — see backend logs." : "Click Probe integrations to check."}</p>
+                  <p className="mt-2 text-[12px] text-zinc-500">
+                    {resend
+                      ? resend.restricted
+                        ? "Key is scoped to sending-only — activity view unavailable by design."
+                        : "Activity check failed — see backend logs."
+                      : "Click Probe integrations to check."}
+                  </p>
                 </div>
               )
             ) : (
