@@ -18,22 +18,26 @@ const BACKGROUND_PAGE_LABELS: Record<BackgroundPage, string> = {
   paper_analyzer: "Paper Analyzer",
 };
 
-// Shown behind the "?" beside each category — grounded in what actually lives
-// in that category (app/services/runtime_settings.py's _defs()), written so a
-// newly-appointed admin who has never seen this codebase knows what a section
-// governs before touching anything in it.
 const CATEGORY_DESCRIPTIONS: Record<string, string> = {
-  platform: "Site-wide controls: maintenance mode (takes every tool offline except sign-in and this admin panel), whether new accounts can sign up, the announcement banner shown to signed-in users, and the GitHub link on the public landing page.",
-  appearance: "Background for each of the 6 pages (landing + the 5 tools) — either the built-in animated scene, or a static image you upload per page below.",
-  features: "Per-tool kill switches — turn any of the 5 tools (or URL/image text extraction) off without a deploy, e.g. to pause one during an incident. Also controls whether Research Copilot generates follow-up question suggestions after each answer.",
-  uploads: "Limits and cleanup for uploaded documents: max file size, per-IP rate limits, how many pages get sent for vision captioning of diagrams/charts, and how many days documents and chats are kept before automatic deletion.",
-  research_copilot: "Tuning for the document-chat tool: how many text chunks are retrieved per question, how strict the similarity match has to be, the character budget for whole-document questions (summaries/reports), and chat rate limits.",
-  humanizer: "Controls for the Humanizer tool: which backend serves the fine-tuned 'Ultra Human' mode (local/Modal/off), request size limits, and per-IP rate limits.",
-  checker: "Limits for AI Checker and Writing Feedback: max text length accepted and per-IP hourly rate limits for each.",
+  platform:
+    "Site-wide controls: maintenance mode (takes every tool offline except sign-in and this admin panel), whether new accounts can sign up, the announcement banner shown to signed-in users, and the GitHub link on the public landing page.",
+  appearance:
+    "Background for each of the 6 pages (landing + the 5 tools) — either the built-in animated scene, or a static image you upload per page below.",
+  features:
+    "Per-tool kill switches — turn any of the 5 tools (or URL/image text extraction) off without a deploy, e.g. to pause one during an incident. Also controls whether Research Copilot generates follow-up question suggestions after each answer.",
+  uploads:
+    "Limits and cleanup for uploaded documents: max file size, per-IP rate limits, how many pages get sent for vision captioning of diagrams/charts, and how many days documents and chats are kept before automatic deletion.",
+  research_copilot:
+    "Tuning for the document-chat tool: how many text chunks are retrieved per question, how strict the similarity match has to be, the character budget for whole-document questions (summaries/reports), and chat rate limits.",
+  humanizer:
+    "Controls for the Humanizer tool: which backend serves the fine-tuned 'Ultra Human' mode (local/Modal/off), request size limits, and per-IP rate limits.",
+  checker:
+    "Limits for AI Checker and Writing Feedback: max text length accepted and per-IP hourly rate limits for each.",
   realtime: "Per-IP hourly rate limit for the Real-time AI (web-search-grounded chat) tool.",
   extract: "Per-IP hourly rate limit for URL/image text extraction.",
   paper_analyzer: "Limits for Paper Analyzer: max PDF pages accepted per request and the per-IP hourly rate limit.",
-  legal: "Public-facing contact and legal text: the support email shown in the footer, your legal entity name (footer copyright + legal pages), and the full body text of the Privacy Policy and Terms of Service pages.",
+  legal:
+    "Public-facing contact and legal text: the support email shown in the footer, your legal entity name (footer copyright + legal pages), and the full body text of the Privacy Policy and Terms of Service pages.",
 };
 
 const SETTING_LABELS: Record<string, string> = {
@@ -43,7 +47,7 @@ const SETTING_LABELS: Record<string, string> = {
   github_link_enabled: "Show GitHub link on landing page",
   github_repo_url: "GitHub repo URL",
   ...Object.fromEntries(
-    Object.entries(BACKGROUND_PAGE_LABELS).map(([page, label]) => [`bg_mode_${page}`, `${label} background`])
+    Object.entries(BACKGROUND_PAGE_LABELS).map(([page, label]) => [`bg_mode_${page}`, `${label} background`]),
   ),
   tool_research_copilot_enabled: "Research Copilot",
   tool_humanizer_enabled: "Humanizer",
@@ -81,25 +85,57 @@ const SETTING_LABELS: Record<string, string> = {
   terms_of_service_content: "Terms of Service page body",
 };
 
-// Long-form text settings get a multi-line textarea instead of the default
-// single-line input — everything else (a URL, an email, a short banner) is
-// fine on one line.
 const LONG_TEXT_KEYS = new Set(["privacy_policy_content", "terms_of_service_content"]);
-
 const DANGEROUS_KEYS = new Set(["maintenance_mode"]);
 
 function valuesEqual(a: SettingValue, b: SettingValue): boolean {
   return String(a) === String(b);
 }
 
-/**
- * Inline upload/replace/remove control shown under a bg_mode_<page> row
- * whenever that row's pending value is "static" — the backend independently
- * refuses to save "static" without an image already uploaded (see admin.py's
- * update_runtime_settings), so this exists to make that obvious up front
- * rather than as a save-time error, and to let the image be replaced or
- * removed once static is already live.
- */
+function CategoryIcon({ category }: { category: string }) {
+  if (category === "platform") {
+    return (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
+      </svg>
+    );
+  }
+  if (category === "appearance") {
+    return (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.098 19.902a3.75 3.75 0 005.304 0l6.401-6.402M6.75 21A3.75 3.75 0 013 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.072M6.75 21a3.75 3.75 0 003.75-3.75V8.197M6.75 21h13.125c.621 0 1.125-.504 1.125-1.125v-5.25c0-.621-.504-1.125-1.125-1.125h-4.072M10.5 8.197l9.804-9.804a2.828 2.828 0 114 4l-9.804 9.804" />
+      </svg>
+    );
+  }
+  if (category === "features") {
+    return (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
+      </svg>
+    );
+  }
+  if (category === "uploads") {
+    return (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+      </svg>
+    );
+  }
+  if (category === "legal") {
+    return (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-16.5-.52l3.75 7.5m12.75-7.5l-3.75 7.5m0 0A7.5 7.5 0 114.5 12.47m15 0A7.5 7.5 0 109.5 12.47" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+
 function BackgroundImageControl({ page }: { page: BackgroundPage }) {
   const { config } = useAppConfig();
   const queryClient = useQueryClient();
@@ -115,7 +151,7 @@ function BackgroundImageControl({ page }: { page: BackgroundPage }) {
     mutationFn: (file: File) => adminApi.uploadBackgroundImage(page, file),
     onSuccess: () => {
       invalidate();
-      toast.success("Image uploaded — click Save above to switch this page to static");
+      toast.success("Image uploaded — click Save changes to switch this page to static");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Upload failed"),
   });
@@ -143,18 +179,22 @@ function BackgroundImageControl({ page }: { page: BackgroundPage }) {
   };
 
   return (
-    <div className="ml-1 mt-2 flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5">
+    <div className="mt-2.5 flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-3">
       {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary uploaded file, not a Next-optimizable static asset
-        <img src={buildApiUrl(imageUrl)} alt="" className="h-12 w-20 shrink-0 rounded-md object-cover ring-1 ring-[var(--border-medium)]" />
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={buildApiUrl(imageUrl)}
+          alt=""
+          className="h-12 w-20 shrink-0 rounded-md object-cover ring-1 ring-[var(--border-medium)]"
+        />
       ) : (
-        <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-md bg-[var(--surface-2)] text-[10px] text-zinc-600 ring-1 ring-[var(--border-medium)]">
+        <div className="flex h-12 w-20 shrink-0 items-center justify-center rounded-md bg-[var(--surface-2)] text-[10px] font-bold text-zinc-500 ring-1 ring-[var(--border-medium)]">
           No image
         </div>
       )}
-      <div className="min-w-0 flex-1 text-[11px] text-zinc-500">
+      <div className="min-w-0 flex-1 text-[11.5px] text-zinc-400">
         {imageUrl
-          ? "Uploaded image, live once saved."
+          ? "Uploaded static image, active once settings are saved."
           : "Required before this page can be saved as static — JPEG/PNG/WebP, up to 8 MB."}
       </div>
       <input
@@ -162,28 +202,35 @@ function BackgroundImageControl({ page }: { page: BackgroundPage }) {
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
       />
-      <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
-        {uploadMutation.isPending ? "Uploading…" : imageUrl ? "Replace" : "Upload"}
-      </Button>
-      {imageUrl && (
-        <Button variant="ghost" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-          Remove
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadMutation.isPending}
+        >
+          {uploadMutation.isPending ? "Uploading…" : imageUrl ? "Replace" : "Upload"}
         </Button>
-      )}
+        {imageUrl && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
 
-/**
- * The brand logo, admin-uploadable, global (not per-page like backgrounds).
- * Not a typed runtime_setting — same reasoning as _bg_image_<page>, it's a
- * bookkeeping row, not a value a human hand-types — so it lives in its own
- * always-visible SectionCard instead of inside the generated category list.
- * Swapping it updates every placement at once via BrandMark (landing nav +
- * footer, legal pages nav, the app's top nav, the login page).
- */
 function LogoUploadControl() {
   const { config } = useAppConfig();
   const queryClient = useQueryClient();
@@ -205,7 +252,7 @@ function LogoUploadControl() {
     mutationFn: () => adminApi.deleteLogo(),
     onSuccess: () => {
       invalidate();
-      toast.success("Logo removed — the default mark is shown again");
+      toast.success("Logo removed — default spark mark restored");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Remove failed"),
   });
@@ -224,35 +271,54 @@ function LogoUploadControl() {
   };
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-2.5">
+    <div className="flex flex-wrap items-center gap-3.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)] p-3">
       {logoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- admin-only preview of an arbitrary uploaded file, not a Next-optimizable static asset
-        <img src={buildApiUrl(logoUrl)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-contain ring-1 ring-[var(--border-medium)]" />
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={buildApiUrl(logoUrl)}
+          alt=""
+          className="h-12 w-12 shrink-0 rounded-lg object-contain ring-1 ring-[var(--border-medium)] bg-[var(--surface-1)] p-1"
+        />
       ) : (
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[10px] text-zinc-600 ring-1 ring-[var(--border-medium)]">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[10px] font-bold text-zinc-500 ring-1 ring-[var(--border-medium)]">
           Default
         </div>
       )}
-      <div className="min-w-0 flex-1 text-[11px] text-zinc-500">
+      <div className="min-w-0 flex-1 text-[11.5px] text-zinc-400">
         {logoUrl
-          ? "Uploaded logo, live now, everywhere the mark appears."
-          : "Showing the default spark mark. Upload a logo — JPEG/PNG/WebP, up to 4 MB, transparency preserved."}
+          ? "Uploaded brand logo active across landing, nav, footer, and login."
+          : "Currently showing default spark mark. Upload custom logo (JPEG/PNG/WebP, max 4 MB)."}
       </div>
       <input
         ref={fileInputRef}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         className="hidden"
-        onChange={(e) => { handleFile(e.target.files?.[0]); e.target.value = ""; }}
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = "";
+        }}
       />
-      <Button variant="ghost" onClick={() => fileInputRef.current?.click()} disabled={uploadMutation.isPending}>
-        {uploadMutation.isPending ? "Uploading…" : logoUrl ? "Replace" : "Upload"}
-      </Button>
-      {logoUrl && (
-        <Button variant="ghost" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-          Remove
+      <div className="flex items-center gap-1.5">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadMutation.isPending}
+        >
+          {uploadMutation.isPending ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
         </Button>
-      )}
+        {logoUrl && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
+            Remove
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
@@ -278,14 +344,11 @@ function SettingRow({
   if (setting.type === "bool") {
     control = <Toggle checked={Boolean(current)} onChange={(v) => onChange(v)} />;
   } else if (setting.type === "str" && setting.choices && setting.choices.length > 0) {
-    // A constrained str setting (e.g. the Ultra Human backend selector) — a dropdown
-    // of exactly the valid values instead of free text, so this can't be typo'd into
-    // an invalid backend name from the admin panel.
     control = (
       <select
         value={String(current)}
         onChange={(e) => onChange(e.target.value)}
-        className={`${INPUT_CLASS} w-40`}
+        className={`${INPUT_CLASS} w-44 font-semibold text-zinc-200 cursor-pointer`}
       >
         {setting.choices.map((choice) => (
           <option key={choice} value={choice}>
@@ -296,14 +359,19 @@ function SettingRow({
     );
   } else if (setting.type === "str" && LONG_TEXT_KEYS.has(setting.key)) {
     control = (
-      <textarea
-        value={String(current)}
-        maxLength={setting.max}
-        placeholder="Empty = page shows a “not yet published” notice"
-        onChange={(e) => onChange(e.target.value)}
-        rows={6}
-        className={`${INPUT_CLASS} w-full resize-y`}
-      />
+      <div className="w-full space-y-1">
+        <textarea
+          value={String(current)}
+          maxLength={setting.max}
+          placeholder="Leave empty to display default 'not yet published' banner"
+          onChange={(e) => onChange(e.target.value)}
+          rows={6}
+          className={`${INPUT_CLASS} w-full font-mono text-[12px] leading-relaxed resize-y`}
+        />
+        <div className="flex justify-end text-[10.5px] font-data text-zinc-500">
+          {String(current).length.toLocaleString()} / {setting.max?.toLocaleString()} chars
+        </div>
+      </div>
     );
   } else if (setting.type === "str") {
     control = (
@@ -313,7 +381,7 @@ function SettingRow({
         maxLength={setting.max}
         placeholder="Empty = hidden"
         onChange={(e) => onChange(e.target.value)}
-        className={`${INPUT_CLASS} w-72`}
+        className={`${INPUT_CLASS} w-64 sm:w-80`}
       />
     );
   } else {
@@ -325,48 +393,70 @@ function SettingRow({
         step={setting.type === "int" ? 1 : 0.05}
         value={String(current)}
         onChange={(e) => onChange(e.target.value)}
-        className={`${INPUT_CLASS} w-28 text-right`}
+        className={`${INPUT_CLASS} w-28 text-right font-data font-semibold`}
       />
     );
   }
 
   const isLongText = LONG_TEXT_KEYS.has(setting.key);
+
   const header = (
-    <div className="min-w-0">
-      <p className="text-[13px] font-medium text-zinc-200">
-        {label}
+    <div className="min-w-0 pr-2">
+      <div className="flex items-center gap-2">
+        <p className="text-[13px] font-semibold text-zinc-200">{label}</p>
         {DANGEROUS_KEYS.has(setting.key) && Boolean(current) && (
-          <span className="ml-2 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-400">on</span>
+          <span className="rounded border border-amber-500/30 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">
+            Active
+          </span>
         )}
-      </p>
-      <p className="text-[12px] text-zinc-500">
+        {dirty && (
+          <span className="rounded border border-[var(--marketing-accent)] bg-[var(--marketing-accent-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--marketing-accent-text)]">
+            Modified
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 text-[11.5px] leading-relaxed text-zinc-400">
         {setting.description}
-        {setting.type !== "bool" && setting.type !== "str" && ` · range ${setting.min}–${setting.max} · default ${setting.default}`}
-        {setting.type === "str" && !setting.choices && ` · up to ${setting.max} characters`}
-        {setting.type === "str" && setting.choices && ` · default ${setting.default}`}
+        {setting.type !== "bool" &&
+          setting.type !== "str" &&
+          ` · range ${setting.min}–${setting.max} (default ${setting.default})`}
+        {setting.type === "str" && !setting.choices && ` · max ${setting.max} chars`}
+        {setting.type === "str" && setting.choices && ` · default "${setting.default}"`}
       </p>
     </div>
   );
+
   const resetButton = !atDefault && (
-    <Button variant="ghost" onClick={() => onChange(setting.default)} title="Reset to default">
-      Reset
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => onChange(setting.default)}
+      title={`Reset to default value: ${setting.default}`}
+    >
+      ↺ Default
     </Button>
   );
 
   return (
-    <div className={`rounded-lg px-2 py-2 ${dirty ? "bg-[var(--surface-1)]" : ""}`}>
+    <div
+      className={`rounded-xl p-2.5 transition-all sm:p-3 ${
+        dirty
+          ? "border-l-4 border-l-[var(--marketing-accent)] bg-[var(--surface-2)]/90 shadow-xs"
+          : "hover:bg-[var(--surface-1)]/60"
+      }`}
+    >
       {isLongText ? (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-4">
+        <div className="space-y-2.5">
+          <div className="flex items-start justify-between gap-3">
             {header}
             {resetButton}
           </div>
           {control}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap">
           {header}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2 self-center">
             {resetButton}
             {control}
           </div>
@@ -379,13 +469,14 @@ function SettingRow({
 
 export function SettingsTab() {
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useQuery({ queryKey: ["admin-settings"], queryFn: () => adminApi.settings() });
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: () => adminApi.settings(),
+  });
   const [draft, setDraft] = useState<Record<string, SettingValue>>({});
-  // Collapsed by default — 9 categories stacked always-open was the actual
-  // complaint ("very unorganised"). Explicit per-category state (not just
-  // each SectionCard's own internal toggle) so "Expand all" and
-  // auto-expanding a category with an unsaved change both work.
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  const [searchFilter, setSearchFilter] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const saveMutation = useMutation({
     mutationFn: (changed: Record<string, SettingValue>) => adminApi.updateSettings(changed),
@@ -394,7 +485,7 @@ export function SettingsTab() {
       queryClient.invalidateQueries({ queryKey: ["app-config"] });
       queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
       setDraft({});
-      toast.success("Settings saved — live within 30 seconds on every server");
+      toast.success("Settings saved — live within 30 seconds across all nodes");
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Save failed"),
   });
@@ -422,8 +513,6 @@ export function SettingsTab() {
     return out;
   }, [draft, settings]);
 
-  // A category with an unsaved change auto-expands — the point of collapsing
-  // by default is decluttering, not hiding a change you're mid-way through.
   const dirtyCategories = useMemo(() => {
     const cats = new Set<string>();
     for (const key of Object.keys(changed)) {
@@ -433,7 +522,29 @@ export function SettingsTab() {
     return cats;
   }, [changed, settings]);
 
-  const allOpen = groups.length > 0 && groups.every(([category]) => openCategories[category] ?? dirtyCategories.has(category));
+  const filteredGroups = useMemo(() => {
+    return groups
+      .filter(([cat]) => selectedCategory === "all" || cat === selectedCategory)
+      .map(([cat, group]) => {
+        if (!searchFilter.trim()) return [cat, group] as const;
+        const q = searchFilter.toLowerCase();
+        const matchesCat =
+          group.label.toLowerCase().includes(q) ||
+          (CATEGORY_DESCRIPTIONS[cat] || "").toLowerCase().includes(q);
+        const matchingItems = group.items.filter((item) => {
+          const label = (SETTING_LABELS[item.key] || item.key).toLowerCase();
+          const desc = (item.description || "").toLowerCase();
+          const key = item.key.toLowerCase();
+          return label.includes(q) || desc.includes(q) || key.includes(q);
+        });
+        return [cat, { ...group, items: matchesCat ? group.items : matchingItems }] as const;
+      })
+      .filter(([, group]) => group.items.length > 0);
+  }, [groups, selectedCategory, searchFilter]);
+
+  const allOpen =
+    groups.length > 0 &&
+    groups.every(([category]) => openCategories[category] ?? dirtyCategories.has(category));
 
   const handleSave = () => {
     for (const [key, value] of Object.entries(changed)) {
@@ -447,7 +558,13 @@ export function SettingsTab() {
       return;
     }
     if ("maintenance_mode" in changed && changed.maintenance_mode === true) {
-      if (!window.confirm("Turn on maintenance mode? Every tool request from every user will be declined until you switch it off.")) return;
+      if (
+        !window.confirm(
+          "Turn on maintenance mode? Every tool request from every user will be declined until you switch it off.",
+        )
+      ) {
+        return;
+      }
     }
     saveMutation.mutate(changed);
   };
@@ -456,10 +573,45 @@ export function SettingsTab() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="font-headline text-[15px] font-bold text-zinc-200">Runtime settings</h2>
-        <div className="flex items-center gap-2">
+      {/* Top Header & Global Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-headline text-[15px] font-bold text-[var(--text-primary)]">
+            Runtime Settings
+          </h2>
+          <p className="mt-0.5 text-[12px] text-zinc-400">
+            Configure platform limits, kill switches, and AI tuning without server deploys
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Search Input */}
+          <div className="relative">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500">
+              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </span>
+            <input
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Search setting key or keyword…"
+              className={`${INPUT_CLASS} w-52 pl-8 pr-7 sm:w-64`}
+            />
+            {searchFilter && (
+              <button
+                type="button"
+                onClick={() => setSearchFilter("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           <Button
+            size="sm"
             variant="ghost"
             onClick={() => {
               const next: Record<string, boolean> = {};
@@ -469,28 +621,126 @@ export function SettingsTab() {
           >
             {allOpen ? "Collapse all" : "Expand all"}
           </Button>
+
           {dirtyCount > 0 && (
-            <Button variant="ghost" onClick={() => setDraft({})}>Discard {dirtyCount} change{dirtyCount === 1 ? "" : "s"}</Button>
+            <Button size="sm" variant="ghost" onClick={() => setDraft({})}>
+              Discard {dirtyCount} change{dirtyCount === 1 ? "" : "s"}
+            </Button>
           )}
-          <Button variant="primary" onClick={handleSave} disabled={saveMutation.isPending || dirtyCount === 0}>
-            {saveMutation.isPending ? "Saving…" : dirtyCount > 0 ? `Save ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}` : "Save changes"}
+
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleSave}
+            disabled={saveMutation.isPending || dirtyCount === 0}
+          >
+            {saveMutation.isPending
+              ? "Saving…"
+              : dirtyCount > 0
+                ? `Save ${dirtyCount} change${dirtyCount === 1 ? "" : "s"}`
+                : "Save changes"}
           </Button>
         </div>
       </div>
 
-      <SectionCard
-        title="Branding"
-        description="Your logo/mark, shown in the nav, footer, and login screen across the whole app. Upload a custom image to replace the default spark icon everywhere it appears — no code changes needed. Every upload/removal is written to the audit log below."
-      >
-        <LogoUploadControl />
-      </SectionCard>
+      {/* Category Filter Pills */}
+      <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-thin">
+        <button
+          onClick={() => setSelectedCategory("all")}
+          className={`shrink-0 rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition ${
+            selectedCategory === "all"
+              ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)] ring-1 ring-[var(--border-medium)]"
+              : "text-zinc-400 hover:bg-[var(--surface-1)] hover:text-zinc-200"
+          }`}
+        >
+          All categories ({settings?.length ?? 0})
+        </button>
+        {groups.map(([category, grp]) => {
+          const isSelected = selectedCategory === category;
+          const dirtyInCat = grp.items.filter((s) => s.key in changed).length;
+          return (
+            <button
+              key={category}
+              onClick={() => setSelectedCategory(isSelected ? "all" : category)}
+              className={`shrink-0 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11.5px] font-semibold transition ${
+                isSelected
+                  ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)] ring-1 ring-[var(--border-medium)]"
+                  : "text-zinc-400 hover:bg-[var(--surface-1)] hover:text-zinc-200"
+              }`}
+            >
+              <span>{grp.label}</span>
+              {dirtyInCat > 0 && (
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--marketing-accent)]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
 
+      {/* Floating Unsaved Changes Warning Banner */}
+      {dirtyCount > 0 && (
+        <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--marketing-accent)] bg-[var(--surface-2)]/95 px-4 py-3 shadow-xl backdrop-blur-md">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[var(--marketing-accent)] text-white text-xs font-bold">
+              !
+            </span>
+            <div>
+              <p className="text-[13px] font-bold text-[var(--text-primary)]">
+                You have {dirtyCount} unsaved setting change{dirtyCount === 1 ? "" : "s"}
+              </p>
+              <p className="text-[11.5px] text-zinc-400">
+                Click &quot;Save changes&quot; to apply to all running instances
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDraft({})}>
+              Discard all
+            </Button>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? "Saving…" : "Save changes now"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Branding Section */}
+      {(selectedCategory === "all" || selectedCategory === "appearance") && !searchFilter && (
+        <SectionCard
+          title="Branding &amp; App Identity"
+          description="Your logo/mark, shown in the nav, footer, and login screen across the whole app. Upload a custom image to replace the default spark icon everywhere it appears — no code changes needed. Every upload/removal is written to the audit log below."
+          icon={<CategoryIcon category="appearance" />}
+        >
+          <LogoUploadControl />
+        </SectionCard>
+      )}
+
+      {/* Categorized Settings Groups */}
       {isLoading ? (
-        <p className="py-6 text-center text-[13px] text-zinc-500">Loading settings…</p>
+        <div className="glass-card flex items-center justify-center rounded-xl p-12 text-center">
+          <div className="flex flex-col items-center gap-2">
+            <div
+              className="h-6 w-6 animate-spin rounded-full border-2"
+              style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
+            />
+            <p className="text-[13px] font-medium text-zinc-400">Loading settings schema…</p>
+          </div>
+        </div>
+      ) : filteredGroups.length === 0 ? (
+        <div className="glass-card flex items-center justify-center rounded-xl p-8 text-center text-zinc-400">
+          No settings match &quot;{searchFilter}&quot;
+        </div>
       ) : (
-        groups.map(([category, group]) => {
+        filteredGroups.map(([category, group]) => {
           const dirtyInCategory = group.items.filter((s) => s.key in changed).length;
-          const isOpen = openCategories[category] ?? dirtyCategories.has(category);
+          const isSearching = Boolean(searchFilter.trim());
+          const isOpen = isSearching || (openCategories[category] ?? dirtyCategories.has(category));
+
           return (
             <SectionCard
               key={category}
@@ -499,18 +749,21 @@ export function SettingsTab() {
               collapsible
               open={isOpen}
               onOpenChange={(next) => setOpenCategories((o) => ({ ...o, [category]: next }))}
+              icon={<CategoryIcon category={category} />}
               action={
                 <div className="flex items-center gap-2">
                   {dirtyInCategory > 0 && (
-                    <span className="rounded-full bg-[var(--marketing-accent-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--marketing-accent-text)]">
+                    <span className="rounded-full bg-[var(--marketing-accent-soft)] px-2 py-0.5 text-[10.5px] font-bold text-[var(--marketing-accent-text)] ring-1 ring-[var(--marketing-accent)]">
                       {dirtyInCategory} unsaved
                     </span>
                   )}
-                  <span className="text-[11px] text-zinc-600">{group.items.length}</span>
+                  <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 font-data text-[11px] font-bold text-zinc-400">
+                    {group.items.length}
+                  </span>
                 </div>
               }
             >
-              <div className="space-y-1">
+              <div className="divide-y divide-[var(--border-subtle)] space-y-1">
                 {group.items.map((setting) => (
                   <SettingRow
                     key={setting.key}

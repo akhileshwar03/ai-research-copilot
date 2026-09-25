@@ -50,15 +50,26 @@ export interface AnalyticsTool {
   users: number;
 }
 
+export interface AnalyticsParams {
+  days?: number;
+  start?: string;
+  end?: string;
+  user_id?: number;
+  compare?: boolean;
+}
+
 export interface AdminAnalytics {
   days: number;
   since: string;
+  start?: string;
+  end?: string;
   series: AnalyticsDay[];
   tools: AnalyticsTool[];
   top_users: { user_id: number; email: string; requests: number }[];
   active_users_7d: number;
   active_users_30d: number;
   documents_by_status: Record<string, number>;
+  previous?: AdminAnalytics;
 }
 
 export interface AdminUser {
@@ -284,7 +295,20 @@ export const adminApi = {
   me: () => apiRequest<MeResponse>("/auth/me"),
 
   stats: () => apiRequest<AdminStats>("/admin/stats"),
-  analytics: (days = 30) => apiRequest<AdminAnalytics>(`/admin/analytics?days=${days}`),
+  analytics: (paramsOrDays: number | AnalyticsParams = 30) => {
+    if (typeof paramsOrDays === "number") {
+      return apiRequest<AdminAnalytics>(`/admin/analytics?days=${paramsOrDays}`);
+    }
+    return apiRequest<AdminAnalytics>(
+      `/admin/analytics${qs({
+        days: paramsOrDays.days,
+        start: paramsOrDays.start,
+        end: paramsOrDays.end,
+        user_id: paramsOrDays.user_id,
+        compare: paramsOrDays.compare ? "true" : undefined,
+      })}`,
+    );
+  },
 
   users: (params: UserListParams = {}) =>
     apiRequest<AdminUserList>(`/admin/users${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, q: params.q, status: params.status, role: params.role, sort: params.sort })}`),

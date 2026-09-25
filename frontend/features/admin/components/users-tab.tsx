@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
@@ -15,17 +15,18 @@ import {
   Badge,
   Button,
   EmptyRow,
+  HBar,
   INPUT_CLASS,
   Pager,
   ROW_CLASS,
-  THEAD_CLASS,
   TableShell,
+  TableSkeletonRows,
   Th,
   formatBytes,
   formatDate,
-  statusTone,
   timeAgo,
 } from "@/features/admin/components/shared";
+import { DynamicChart } from "@/features/admin/components/dynamic-chart";
 
 function UserDetailDrawer({
   user,
@@ -39,9 +40,30 @@ function UserDetailDrawer({
   onChanged: () => void;
 }) {
   const queryClient = useQueryClient();
-  const { data: activity } = useQuery({ queryKey: ["admin-user-activity", user.id], queryFn: () => adminApi.userActivity(user.id) });
-  const { data: docsData, isLoading: docsLoading } = useQuery({ queryKey: ["admin-user-documents", user.id], queryFn: () => adminApi.userDocuments(user.id) });
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({ queryKey: ["admin-user-sessions", user.id], queryFn: () => adminApi.userSessions(user.id) });
+  const { data: activity, isLoading: activityLoading } = useQuery({
+    queryKey: ["admin-user-activity", user.id],
+    queryFn: () => adminApi.userActivity(user.id),
+  });
+  const { data: userAnalytics } = useQuery({
+    queryKey: ["admin-user-analytics", user.id],
+    queryFn: () => adminApi.analytics({ user_id: user.id, days: 30 }),
+  });
+  const { data: docsData, isLoading: docsLoading } = useQuery({
+    queryKey: ["admin-user-documents", user.id],
+    queryFn: () => adminApi.userDocuments(user.id),
+  });
+  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+    queryKey: ["admin-user-sessions", user.id],
+    queryFn: () => adminApi.userSessions(user.id),
+  });
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-user-activity", user.id] });
@@ -56,6 +78,7 @@ function UserDetailDrawer({
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : "Failed"),
   });
+
   const verify = useMutation({
     mutationFn: (email_verified: boolean) => adminApi.patchUser(user.id, { email_verified }),
     onSuccess: (res) => {
@@ -67,105 +90,180 @@ function UserDetailDrawer({
 
   const documents = docsData?.documents ?? [];
   const sessions = sessionsData?.sessions ?? [];
+  const chartSeries = (userAnalytics?.series ?? []).map((d) => ({
+    label: d.date,
+    value: d.requests,
+  }));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/50" onClick={onClose}>
-      <div className="glass-panel flex h-full w-full max-w-lg flex-col overflow-y-auto border-l p-6" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-[15px] font-semibold text-[var(--text-primary)]">{user.email}</h3>
-            <p className="mt-0.5 text-[12px] text-zinc-500">
-              {user.is_admin ? "Admin" : "User"} · {user.is_active ? "Active" : "Suspended"} · joined {formatDate(user.created_at)}
-            </p>
-            <p className="mt-0.5 text-[12px] text-zinc-500">
-              Last active {timeAgo(user.last_active_at)}
-              {activity && ` · signs in with ${activity.identities.join(", ") || "—"}`}
-            </p>
+    <div
+      className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-xs transition-opacity duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="glass-panel flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface-1)] p-5 shadow-2xl scrollbar-thin sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Drawer Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-[var(--border-subtle)] pb-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--surface-2)] text-lg font-bold text-zinc-200 ring-1 ring-[var(--border-medium)]">
+              {user.email.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate text-base font-bold text-[var(--text-primary)]" title={user.email}>
+                  {user.email}
+                </h3>
+                {isSelf && (
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-bold bg-[var(--marketing-accent-soft)] text-[var(--marketing-accent-text)]">
+                    you
+                  </span>
+                )}
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-zinc-400">
+                <Badge tone={user.is_active ? "good" : "bad"} dot>
+                  {user.is_active ? "Active" : "Suspended"}
+                </Badge>
+                <Badge tone={user.is_admin ? "info" : "neutral"}>
+                  {user.is_admin ? "Admin" : "Standard User"}
+                </Badge>
+                {!user.email_verified && <Badge tone="warn">Unverified</Badge>}
+              </div>
+              <p className="mt-1 text-[11.5px] text-zinc-400">
+                Joined {formatDate(user.created_at)} · Last active {timeAgo(user.last_active_at)}
+              </p>
+            </div>
           </div>
-          <Button onClick={onClose}>Close</Button>
+          <Button variant="ghost" size="sm" onClick={onClose} title="Close drawer (Esc)">
+            ✕
+          </Button>
         </div>
 
+        {/* Quick Operations Bar */}
         {!isSelf && (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button onClick={() => revoke.mutate()} disabled={revoke.isPending} title="Revoke every refresh token — signs the user out on all devices within an hour">
+          <div className="mt-4 flex flex-wrap gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)]/60 p-3">
+            <Button
+              onClick={() => revoke.mutate()}
+              disabled={revoke.isPending}
+              title="Revoke every refresh token — signs the user out on all devices within an hour"
+              size="sm"
+            >
               Sign out everywhere
-              {activity && activity.active_refresh_tokens > 0 && <Badge>{activity.active_refresh_tokens} active</Badge>}
+              {activity && activity.active_refresh_tokens > 0 && (
+                <span className="ml-1 rounded bg-[var(--surface-3)] px-1.5 py-0.2 text-[10px] font-bold text-zinc-300">
+                  {activity.active_refresh_tokens} active
+                </span>
+              )}
             </Button>
-            <Button onClick={() => verify.mutate(!user.email_verified)} disabled={verify.isPending}>
+            <Button
+              onClick={() => verify.mutate(!user.email_verified)}
+              disabled={verify.isPending}
+              size="sm"
+            >
               {user.email_verified ? "Mark email unverified" : "Mark email verified"}
             </Button>
           </div>
         )}
 
+        {/* 30-Day Activity Chart */}
+        <div className="mt-5">
+          <DynamicChart
+            id={`user-${user.id}-trajectory`}
+            title="User Activity Trajectory (30 Days)"
+            data={chartSeries}
+            unit="reqs"
+            height={150}
+          />
+        </div>
+
+        {/* Usage Breakdown */}
         <div className="mt-6">
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">Usage (last 30 days)</h4>
-          {!activity ? (
-            <p className="text-[13px] text-zinc-500">Loading…</p>
-          ) : activity.usage_30d.length === 0 ? (
-            <p className="text-[13px] text-zinc-600">No tool requests in the last 30 days.</p>
+          <div className="mb-2 flex items-center justify-between">
+            <h4 className="text-[12px] font-bold uppercase tracking-wider text-zinc-400">
+              Tool Usage Breakdown
+            </h4>
+            {activity && (
+              <span className="text-[11px] text-zinc-500 font-data">
+                {activity.humanizer_runs} humanizer · {activity.realtime_sessions} realtime
+              </span>
+            )}
+          </div>
+          {activityLoading ? (
+            <p className="text-xs text-zinc-500">Loading…</p>
+          ) : !activity || activity.usage_30d.length === 0 ? (
+            <p className="rounded-lg border border-[var(--border-subtle)] p-3 text-center text-xs text-zinc-500">
+              No tool requests in the last 30 days.
+            </p>
           ) : (
-            <ul className="space-y-1">
+            <ul className="space-y-1.5">
               {activity.usage_30d.map((u) => (
-                <li key={u.tool} className="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-1.5 text-[12.5px]">
-                  <span className="text-zinc-300">{u.label}</span>
-                  <span className="tabular-nums text-zinc-500">
-                    {u.requests} req{u.errors > 0 && <span className="ml-1.5 text-red-400">· {u.errors} err</span>}
-                  </span>
+                <li
+                  key={u.tool}
+                  className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 p-2.5"
+                >
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-zinc-200">{u.label}</span>
+                    <span className="font-data font-bold text-zinc-400">
+                      {u.requests.toLocaleString()} reqs {u.errors > 0 && <span className="text-rose-400">({u.errors} err)</span>}
+                    </span>
+                  </div>
+                  <div className="mt-1.5">
+                    <HBar value={u.requests} max={activity.usage_30d[0]?.requests || 1} />
+                  </div>
                 </li>
               ))}
             </ul>
           )}
-          {activity && (
-            <p className="mt-2 text-[11px] text-zinc-600">
-              {activity.humanizer_runs} humanizer runs saved · {activity.realtime_sessions} real-time chats
-            </p>
-          )}
         </div>
 
+        {/* Uploaded Documents List */}
         <div className="mt-6">
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">Documents ({documents.length})</h4>
-          <div className="space-y-1.5">
+          <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-zinc-400">
+            Documents ({documents.length})
+          </h4>
+          <div className="max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin">
             {docsLoading ? (
-              <p className="text-[13px] text-zinc-500">Loading…</p>
+              <p className="text-xs text-zinc-500">Loading documents…</p>
             ) : documents.length === 0 ? (
-              <p className="text-[13px] text-zinc-600">No documents uploaded.</p>
+              <p className="text-xs text-zinc-500">No documents uploaded.</p>
             ) : (
               documents.map((d) => (
-                <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] text-zinc-200">{d.name}</p>
-                    <p className="text-[11px] text-zinc-500">
-                      {formatBytes(d.size_bytes)}
-                      {d.page_count != null && ` · ${d.page_count} pages`} · {formatDate(d.created_at)}
-                      {!d.file_exists && <span className="text-red-400"> · file missing in storage</span>}
-                      {d.error_message && <span className="text-red-400"> · {d.error_message}</span>}
-                    </p>
-                  </div>
-                  <Badge tone={statusTone(d.upload_status)}>{d.upload_status}</Badge>
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 px-3 py-2 text-xs"
+                >
+                  <span className="truncate font-medium text-zinc-300" title={d.name}>
+                    {d.name}
+                  </span>
+                  <span className="shrink-0 font-data text-zinc-500">{formatBytes(d.size_bytes)}</span>
                 </div>
               ))
             )}
           </div>
         </div>
 
+        {/* Chat Sessions List */}
         <div className="mt-6">
-          <h4 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-zinc-500">Chat sessions ({sessions.length})</h4>
-          <div className="space-y-1.5">
+          <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-zinc-400">
+            Chat Sessions ({sessions.length})
+          </h4>
+          <div className="max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin">
             {sessionsLoading ? (
-              <p className="text-[13px] text-zinc-500">Loading…</p>
+              <p className="text-xs text-zinc-500">Loading sessions…</p>
             ) : sessions.length === 0 ? (
-              <p className="text-[13px] text-zinc-600">No chat sessions yet.</p>
+              <p className="text-xs text-zinc-500">No chat sessions yet.</p>
             ) : (
               sessions.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-[13px] text-zinc-200">
-                      {s.pinned && "📌 "}
-                      {s.title}
-                    </p>
-                    <p className="text-[11px] text-zinc-500">{formatDate(s.created_at)}</p>
-                  </div>
-                  <span className="shrink-0 text-[11px] text-zinc-500">{s.message_count} msgs</span>
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 px-3 py-2 text-xs"
+                >
+                  <span className="truncate font-medium text-zinc-300" title={s.title}>
+                    {s.pinned && "📌 "}
+                    {s.title}
+                  </span>
+                  <span className="shrink-0 font-data text-zinc-500">{s.message_count} msgs</span>
                 </div>
               ))
             )}
@@ -185,6 +283,17 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   const [skip, setSkip] = useState(0);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set());
+
+  // Density & Column Chooser state
+  const [density, setDensity] = useState<"compact" | "normal">("normal");
+  const [visibleCols, setVisibleCols] = useState({
+    docs: true,
+    sessions: true,
+    lastActive: true,
+    joined: true,
+  });
+  const [showColMenu, setShowColMenu] = useState(false);
+
   const limit = 50;
 
   const params = { skip, limit, q: search, status, role, sort };
@@ -200,7 +309,13 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   };
 
   const patchMutation = useMutation({
-    mutationFn: ({ userId, patch }: { userId: number; patch: { is_active?: boolean; is_admin?: boolean } }) => adminApi.patchUser(userId, patch),
+    mutationFn: ({
+      userId,
+      patch,
+    }: {
+      userId: number;
+      patch: { is_active?: boolean; is_admin?: boolean };
+    }) => adminApi.patchUser(userId, patch),
     onSuccess: (res) => {
       toast.success(res.message);
       invalidate();
@@ -285,15 +400,17 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
 
   const users = data?.users ?? [];
   const total = data?.total ?? 0;
-  const selectClass = `${INPUT_CLASS} py-1.5`;
+  const selectClass = `${INPUT_CLASS} py-1.5 text-zinc-300 font-medium cursor-pointer`;
 
-  // Keep the drawer's user in sync with the freshly fetched list after an action.
-  const drawerUser = selectedUser ? users.find((u) => u.id === selectedUser.id) ?? selectedUser : null;
+  const drawerUser = selectedUser
+    ? users.find((u) => u.id === selectedUser.id) ?? selectedUser
+    : null;
 
-  // Self can never be bulk-deleted (same rule as the row-level action), so
-  // it's excluded from "select all" and never gets a checkbox at all.
-  const selectableUsers = users.filter((u) => currentEmail?.toLowerCase() !== u.email.toLowerCase());
-  const allSelectableChecked = selectableUsers.length > 0 && selectableUsers.every((u) => checkedIds.has(u.id));
+  const selectableUsers = users.filter(
+    (u) => currentEmail?.toLowerCase() !== u.email.toLowerCase(),
+  );
+  const allSelectableChecked =
+    selectableUsers.length > 0 && selectableUsers.every((u) => checkedIds.has(u.id));
   const someSelectableChecked = selectableUsers.some((u) => checkedIds.has(u.id));
 
   const toggleSelectAll = () => {
@@ -310,55 +427,257 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   };
 
   return (
-    <section>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-headline text-[15px] font-bold text-zinc-200">Users ({total})</h2>
+    <section className="space-y-3.5">
+      {/* Search & Filter Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className="font-headline text-[15px] font-bold text-[var(--text-primary)]">
+            Users
+          </h2>
+          <span className="rounded-full border border-[var(--border-subtle)] bg-[var(--surface-2)] px-2.5 py-0.5 text-[11px] font-bold font-data text-zinc-300">
+            {total.toLocaleString()} total
+          </span>
+
+          {/* Quick Filter Presets */}
+          <div className="hidden sm:flex items-center gap-1 ml-2">
+            <button
+              type="button"
+              onClick={() => {
+                setStatus("all");
+                setRole("all");
+                setSearch("");
+                setSkip(0);
+              }}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-bold transition ${
+                status === "all" && role === "all" && !search
+                  ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)] ring-1 ring-[var(--border-medium)]"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setRole("admin");
+                setSkip(0);
+              }}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-bold transition ${
+                role === "admin"
+                  ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)] ring-1 ring-[var(--border-medium)]"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Admins
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatus("suspended");
+                setSkip(0);
+              }}
+              className={`rounded-md px-2 py-0.5 text-[11px] font-bold transition ${
+                status === "suspended"
+                  ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)] ring-1 ring-[var(--border-medium)]"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Suspended
+            </button>
+          </div>
+        </div>
+
         {checkedIds.size > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] text-zinc-400">{checkedIds.size} selected</span>
-            <Button onClick={() => setCheckedIds(new Set())}>Clear selection</Button>
-            <Button variant="danger" onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
-              {bulkDeleteMutation.isPending ? "Deleting…" : `Delete ${checkedIds.size} selected`}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 shadow-xs">
+            <span className="text-[12.5px] font-bold text-rose-300">
+              {checkedIds.size} selected
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setCheckedIds(new Set())}>
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending
+                ? "Deleting…"
+                : `Delete ${checkedIds.size} selected`}
             </Button>
           </div>
         ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setSkip(0);
-            }}
-            placeholder="Search by email…"
-            className={`${INPUT_CLASS} w-56`}
-          />
-          <select value={status} onChange={(e) => { setStatus(e.target.value as UserStatusFilter); setSkip(0); }} className={selectClass}>
-            <option value="all">All statuses</option>
-            <option value="active">Active</option>
-            <option value="suspended">Suspended</option>
-          </select>
-          <select value={role} onChange={(e) => { setRole(e.target.value as UserRoleFilter); setSkip(0); }} className={selectClass}>
-            <option value="all">All roles</option>
-            <option value="admin">Admins</option>
-            <option value="user">Users</option>
-          </select>
-          <select value={sort} onChange={(e) => { setSort(e.target.value as UserSort); setSkip(0); }} className={selectClass}>
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
-            <option value="email">Email A–Z</option>
-          </select>
-          <Button onClick={() => refetch()} disabled={isFetching} title="Refresh user list">
-            {isFetching ? "Refreshing…" : "Refresh"}
-          </Button>
-          <Button onClick={handleExport} title="Download the filtered list as CSV">Export CSV</Button>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Search Input */}
+            <div className="relative">
+              <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+              </span>
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setSkip(0);
+                }}
+                placeholder="Search email…"
+                className={`${INPUT_CLASS} w-44 pl-8 pr-7 sm:w-56`}
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setSkip(0);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Status Dropdown */}
+            <select
+              value={status}
+              onChange={(e) => {
+                setStatus(e.target.value as UserStatusFilter);
+                setSkip(0);
+              }}
+              className={selectClass}
+            >
+              <option value="all">All statuses</option>
+              <option value="active">Active</option>
+              <option value="suspended">Suspended</option>
+            </select>
+
+            {/* Role Dropdown */}
+            <select
+              value={role}
+              onChange={(e) => {
+                setRole(e.target.value as UserRoleFilter);
+                setSkip(0);
+              }}
+              className={selectClass}
+            >
+              <option value="all">All roles</option>
+              <option value="admin">Admins</option>
+              <option value="user">Users</option>
+            </select>
+
+            {/* Sort Dropdown */}
+            <select
+              value={sort}
+              onChange={(e) => {
+                setSort(e.target.value as UserSort);
+                setSkip(0);
+              }}
+              className={selectClass}
+            >
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="email">Email A–Z</option>
+            </select>
+
+            {/* Density Toggle */}
+            <div className="flex items-center rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] p-0.5">
+              <button
+                type="button"
+                onClick={() => setDensity("compact")}
+                className={`rounded px-2 py-1 text-[11px] font-bold ${
+                  density === "compact"
+                    ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)]"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                title="Compact density"
+              >
+                Compact
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity("normal")}
+                className={`rounded px-2 py-1 text-[11px] font-bold ${
+                  density === "normal"
+                    ? "bg-[var(--surface-2)] text-[var(--marketing-accent-text)]"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                title="Normal density"
+              >
+                Normal
+              </button>
+            </div>
+
+            {/* Column Chooser Popover */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowColMenu((p) => !p)}
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-2.5 py-1.5 text-[11px] font-bold text-zinc-300 hover:bg-[var(--surface-2)]"
+                title="Choose visible columns"
+              >
+                Cols ▾
+              </button>
+              {showColMenu && (
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-1)] p-2.5 shadow-xl">
+                  <p className="mb-2 text-[10.5px] font-bold uppercase tracking-wider text-zinc-400">
+                    Visible Columns
+                  </p>
+                  <div className="space-y-1.5 text-xs text-zinc-300">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleCols.docs}
+                        onChange={(e) => setVisibleCols((c) => ({ ...c, docs: e.target.checked }))}
+                      />
+                      <span>Documents</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleCols.sessions}
+                        onChange={(e) => setVisibleCols((c) => ({ ...c, sessions: e.target.checked }))}
+                      />
+                      <span>Sessions</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleCols.lastActive}
+                        onChange={(e) => setVisibleCols((c) => ({ ...c, lastActive: e.target.checked }))}
+                      />
+                      <span>Last Active</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleCols.joined}
+                        onChange={(e) => setVisibleCols((c) => ({ ...c, joined: e.target.checked }))}
+                      />
+                      <span>Joined Date</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Refresh & CSV Buttons */}
+            <Button size="sm" onClick={() => refetch()} disabled={isFetching}>
+              {isFetching ? "…" : "Refresh"}
+            </Button>
+            <Button size="sm" onClick={handleExport}>
+              CSV
+            </Button>
+          </div>
         )}
       </div>
 
+      {/* Dense Users Table */}
       <TableShell>
-        <thead className={THEAD_CLASS}>
+        <thead>
           <tr>
-            <Th>
+            <Th className="w-10">
               <input
                 type="checkbox"
                 checked={allSelectableChecked}
@@ -368,66 +687,165 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
                 onChange={toggleSelectAll}
                 onClick={(e) => e.stopPropagation()}
                 title="Select all"
+                className="h-4 w-4 rounded border-[var(--border-medium)] bg-[var(--surface-2)] text-[var(--marketing-accent)] focus:ring-[var(--marketing-accent)]"
               />
             </Th>
-            <Th>Email</Th>
+            <Th>Email &amp; Identity</Th>
             <Th>Status</Th>
             <Th>Role</Th>
-            <Th right>Docs</Th>
-            <Th right>Sessions</Th>
-            <Th>Last active</Th>
-            <Th>Joined</Th>
+            {visibleCols.docs && <Th right>Docs</Th>}
+            {visibleCols.sessions && <Th right>Sessions</Th>}
+            {visibleCols.lastActive && <Th>Last Active</Th>}
+            {visibleCols.joined && <Th>Joined</Th>}
             <Th right>Actions</Th>
           </tr>
         </thead>
         <tbody>
           {isLoading ? (
-            <EmptyRow colSpan={9}>Loading users…</EmptyRow>
+            <TableSkeletonRows colSpan={9} rows={8} />
           ) : users.length === 0 ? (
-            <EmptyRow colSpan={9}>{search || status !== "all" || role !== "all" ? "No users match these filters" : "No users yet"}</EmptyRow>
+            <EmptyRow colSpan={9}>
+              {search || status !== "all" || role !== "all"
+                ? "No users match your current search/filters."
+                : "No users exist in the system yet."}
+            </EmptyRow>
           ) : (
             users.map((user) => {
               const isSelf = currentEmail?.toLowerCase() === user.email.toLowerCase();
+              const pyClass = density === "compact" ? "py-1.5" : "py-2.5 sm:py-3";
+
               return (
-                <tr key={user.id} onClick={() => setSelectedUser(user)} className={`cursor-pointer ${ROW_CLASS}`}>
-                  <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    {!isSelf && (
+                <tr
+                  key={user.id}
+                  onClick={() => setSelectedUser(user)}
+                  className={`cursor-pointer ${ROW_CLASS}`}
+                >
+                  {/* Select Checkbox */}
+                  <td className={`px-3.5 ${pyClass}`} onClick={(e) => e.stopPropagation()}>
+                    {!isSelf ? (
                       <input
                         type="checkbox"
                         checked={checkedIds.has(user.id)}
                         onChange={() => toggleChecked(user.id)}
+                        className="h-4 w-4 rounded border-[var(--border-medium)] bg-[var(--surface-2)] text-[var(--marketing-accent)] focus:ring-[var(--marketing-accent)]"
                       />
+                    ) : (
+                      <div className="h-4 w-4" />
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-zinc-200">
-                    {user.email}
-                    {isSelf && (
-                      <span className="ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-medium" style={{ backgroundColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}>
-                        you
+
+                  {/* Email */}
+                  <td className={`px-3.5 ${pyClass}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--surface-3)] text-[11px] font-bold text-zinc-300">
+                        {user.email.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="font-semibold text-zinc-200" title={user.email}>
+                        {user.email}
                       </span>
-                    )}
-                    {!user.email_verified && <span className="ml-2"><Badge tone="warn">unverified</Badge></span>}
+                      {isSelf && (
+                        <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold bg-[var(--marketing-accent-soft)] text-[var(--marketing-accent-text)]">
+                          you
+                        </span>
+                      )}
+                      {!user.email_verified && <Badge tone="warn">unverified</Badge>}
+                    </div>
                   </td>
-                  <td className="px-3 py-2.5"><Badge tone={user.is_active ? "good" : "bad"}>{user.is_active ? "active" : "suspended"}</Badge></td>
-                  <td className="px-3 py-2.5 text-zinc-400">{user.is_admin ? <Badge tone="info">admin</Badge> : "user"}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-zinc-400">{user.document_count}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-zinc-400">{user.session_count}</td>
-                  <td className="px-3 py-2.5 text-zinc-500">{timeAgo(user.last_active_at)}</td>
-                  <td className="px-3 py-2.5 text-zinc-500">{user.created_at ? new Date(user.created_at).toLocaleDateString() : "—"}</td>
-                  <td className="px-3 py-2.5">
+
+                  {/* Status */}
+                  <td className={`px-3.5 ${pyClass}`}>
+                    <Badge tone={user.is_active ? "good" : "bad"} dot>
+                      {user.is_active ? "active" : "suspended"}
+                    </Badge>
+                  </td>
+
+                  {/* Role */}
+                  <td className={`px-3.5 ${pyClass}`}>
+                    {user.is_admin ? (
+                      <Badge tone="info">admin</Badge>
+                    ) : (
+                      <span className="text-zinc-400">user</span>
+                    )}
+                  </td>
+
+                  {/* Documents count */}
+                  {visibleCols.docs && (
+                    <td className={`px-3.5 ${pyClass} text-right font-data font-semibold tabular-nums text-zinc-300`}>
+                      {user.document_count}
+                    </td>
+                  )}
+
+                  {/* Chat sessions count */}
+                  {visibleCols.sessions && (
+                    <td className={`px-3.5 ${pyClass} text-right font-data font-semibold tabular-nums text-zinc-300`}>
+                      {user.session_count}
+                    </td>
+                  )}
+
+                  {/* Last Active */}
+                  {visibleCols.lastActive && (
+                    <td className={`px-3.5 ${pyClass} text-zinc-400`} title={formatDate(user.last_active_at)}>
+                      {timeAgo(user.last_active_at)}
+                    </td>
+                  )}
+
+                  {/* Joined Date */}
+                  {visibleCols.joined && (
+                    <td className={`px-3.5 ${pyClass} text-zinc-400`}>
+                      {user.created_at ? new Date(user.created_at).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                    </td>
+                  )}
+
+                  {/* Actions */}
+                  <td className={`px-3.5 ${pyClass}`} onClick={(e) => e.stopPropagation()}>
                     {isSelf ? (
-                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-[11px] text-zinc-600" title="You can't suspend, demote, or delete your own account from here">Manage from Settings</span>
+                      <div className="flex justify-end">
+                        <span className="rounded px-2 py-0.5 text-[11px] font-medium text-zinc-500">
+                          Owner
+                        </span>
                       </div>
                     ) : (
-                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                        <Button onClick={() => patchMutation.mutate({ userId: user.id, patch: { is_active: !user.is_active } })}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelectedUser(user)}
+                          title="Open full user telemetry timeline"
+                        >
+                          Analyze
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            patchMutation.mutate({
+                              userId: user.id,
+                              patch: { is_active: !user.is_active },
+                            })
+                          }
+                          title={user.is_active ? "Suspend" : "Reinstate"}
+                        >
                           {user.is_active ? "Suspend" : "Reinstate"}
                         </Button>
-                        <Button onClick={() => patchMutation.mutate({ userId: user.id, patch: { is_admin: !user.is_admin } })}>
-                          {user.is_admin ? "Demote" : "Make admin"}
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            patchMutation.mutate({
+                              userId: user.id,
+                              patch: { is_admin: !user.is_admin },
+                            })
+                          }
+                          title={user.is_admin ? "Demote" : "Make admin"}
+                        >
+                          {user.is_admin ? "Demote" : "Promote"}
                         </Button>
-                        <Button variant="danger" onClick={() => handleDelete(user)}>Delete</Button>
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => handleDelete(user)}
+                          title="Delete user"
+                        >
+                          Delete
+                        </Button>
                       </div>
                     )}
                   </td>
@@ -438,6 +856,7 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
         </tbody>
       </TableShell>
 
+      {/* Drawer */}
       {drawerUser && (
         <UserDetailDrawer
           user={drawerUser}
@@ -447,6 +866,7 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
         />
       )}
 
+      {/* Pagination */}
       <Pager skip={skip} limit={limit} total={total} onChange={setSkip} />
     </section>
   );
