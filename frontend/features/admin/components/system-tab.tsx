@@ -16,6 +16,7 @@ import {
   formatDate,
   formatUptime,
 } from "@/features/admin/components/shared";
+import { DynamicChart } from "@/features/admin/components/dynamic-chart";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -170,6 +171,17 @@ function NeonUsagePanel({ neon }: { neon: StorageUsage["neon"] }) {
         limitBytes={neon.limit_bytes}
         percent={neon.percent_used}
       />
+      {neon.top_tables.length > 0 && (
+        <DynamicChart
+          id="neon-tables-donut"
+          title="Table Storage Composition"
+          subtitle="Relative byte weight by database table"
+          data={neon.top_tables.map((t) => ({ label: t.name, value: t.bytes }))}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+      )}
       <div className="space-y-1.5">
         <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Top Database Tables</p>
         <div className="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)]/60 px-3 py-1">
@@ -207,6 +219,17 @@ function R2UsagePanel({ r2 }: { r2: StorageUsage["r2"] }) {
         limitBytes={r2.limit_bytes}
         percent={r2.percent_used}
       />
+      {r2.by_prefix.length > 0 && (
+        <DynamicChart
+          id="r2-prefix-donut"
+          title="Bucket Prefix Distribution"
+          subtitle="Storage bytes by object namespace prefix"
+          data={r2.by_prefix.map((p) => ({ label: p.prefix, value: p.bytes }))}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+      )}
       <div className="space-y-1.5">
         <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Usage by Bucket Prefix</p>
         <div className="divide-y divide-[var(--border-subtle)] rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-0)]/60 px-3 py-1">

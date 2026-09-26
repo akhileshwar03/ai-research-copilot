@@ -18,6 +18,8 @@ import {
   formatDate,
   formatDuration,
 } from "@/features/admin/components/shared";
+import { DynamicChart } from "@/features/admin/components/dynamic-chart";
+import { exportTableCsv } from "@/features/admin/lib/chart-export";
 
 const ACTION_FILTERS = [
   { value: "", label: "All actions" },
@@ -93,6 +95,24 @@ function AuditLog() {
   });
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
+
+  const handleExportAuditCsv = () => {
+    const headers = ["ID", "TimestampUTC", "AdminEmail", "Action", "Target", "Details"];
+    const rows = entries.map((e) => [
+      e.id,
+      e.created_at,
+      e.admin_email,
+      e.action,
+      e.target ?? "",
+      e.details ?? "",
+    ]);
+    exportTableCsv({
+      filename: `querex-audit-log-${new Date().toISOString().slice(0, 10)}.csv`,
+      title: "Admin Audit Trail",
+      headers,
+      rows,
+    });
+  };
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
@@ -177,6 +197,14 @@ function AuditLog() {
             </svg>
             <span>{isFetching ? "Refreshing…" : "Refresh"}</span>
           </Button>
+
+          <Button
+            size="sm"
+            onClick={handleExportAuditCsv}
+            title="Export filtered audit logs to CSV"
+          >
+            CSV
+          </Button>
         </div>
       </div>
 
@@ -246,6 +274,26 @@ function UsageEvents() {
   });
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
+
+  const handleExportEventsCsv = () => {
+    const headers = ["ID", "TimestampUTC", "Tool", "UserEmail", "StatusCode", "Status", "DurationMs", "RequestID"];
+    const rows = events.map((e) => [
+      e.id,
+      e.created_at,
+      e.tool,
+      e.user_email ?? "anon",
+      e.status_code,
+      e.ok ? "SUCCESS" : "ERROR",
+      e.duration_ms,
+      e.request_id ?? "",
+    ]);
+    exportTableCsv({
+      filename: `querex-usage-events-${new Date().toISOString().slice(0, 10)}.csv`,
+      title: "Recent Tool Requests & Invocations",
+      headers,
+      rows,
+    });
+  };
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
@@ -334,6 +382,14 @@ function UsageEvents() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
             <span>{isFetching ? "Refreshing…" : "Refresh"}</span>
+          </Button>
+
+          <Button
+            size="sm"
+            onClick={handleExportEventsCsv}
+            title="Export filtered usage events to CSV"
+          >
+            CSV
           </Button>
         </div>
       </div>
@@ -426,10 +482,70 @@ function UsageEvents() {
 }
 
 export function AuditTab() {
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-analytics", { days: 30 }],
+    queryFn: () => adminApi.analytics({ days: 30 }),
+    refetchInterval: 120_000,
+  });
+
+  const toolData = (analytics?.tools ?? []).map((t) => ({
+    label: t.label,
+    value: t.requests,
+  }));
+
+  const latencyData = (analytics?.tools ?? []).map((t) => ({
+    label: t.label,
+    value: t.p95_ms,
+  }));
+
+  const errorSeries = (analytics?.series ?? []).map((d) => ({
+    label: d.date,
+    value: d.errors,
+  }));
+
   return (
     <div className="space-y-8 divide-y divide-[var(--border-subtle)]">
-      <AuditLog />
-      <UsageEvents />
+      {/* Visual Analytics Strip for Audit & Tool Telemetry */}
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        <DynamicChart
+          id="audit-tool-volume"
+          title="Tool Usage Split"
+          subtitle="Proportion of tool executions"
+          data={toolData}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+        <DynamicChart
+          id="audit-error-trajectory"
+          title="30-Day Error History"
+          subtitle="Exceptions logged daily"
+          data={errorSeries}
+          color="#e11d48"
+          unit="errors"
+          height={140}
+          allow3D={false}
+          allowedViews={["line", "bar", "area"]}
+        />
+        <DynamicChart
+          id="audit-latency-benchmarks"
+          title="p95 Tail Latency"
+          subtitle="Ceiling execution duration per tool"
+          data={latencyData}
+          color="#0284c7"
+          unit="ms"
+          height={140}
+          allow3D={false}
+          allowedViews={["bar"]}
+        />
+      </div>
+
+      <div className="pt-8">
+        <AuditLog />
+      </div>
+      <div className="pt-8">
+        <UsageEvents />
+      </div>
     </div>
   );
 }

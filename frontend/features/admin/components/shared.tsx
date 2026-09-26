@@ -460,13 +460,19 @@ export function Th({
   children,
   right,
   className = "",
+  onClick,
+  title,
 }: {
   children?: ReactNode;
   right?: boolean;
   className?: string;
+  onClick?: () => void;
+  title?: string;
 }) {
   return (
     <th
+      onClick={onClick}
+      title={title}
       className={`sticky top-0 z-10 bg-[var(--surface-1)]/95 px-3.5 py-3 text-[11px] font-bold uppercase tracking-wider text-zinc-400 backdrop-blur-md border-b border-[var(--border-subtle)] ${
         right ? "text-right" : "text-left"
       } ${className}`}

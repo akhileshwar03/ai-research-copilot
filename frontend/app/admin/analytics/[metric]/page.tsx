@@ -8,9 +8,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
 import { adminApi, type AnalyticsDay } from "@/services/api/admin-api";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
-import { DeltaBadge, TableShell, Th, formatDay } from "@/features/admin/components/shared";
+import { Button, DeltaBadge, TableShell, Th, formatDay } from "@/features/admin/components/shared";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
 import { calculateDelta, formatRangeLabel, getPresetDateRange } from "@/features/admin/lib/date-range-utils";
+import { exportTableCsv } from "@/features/admin/lib/chart-export";
 
 const METRIC_CONFIG: Record<
   string,
@@ -141,6 +142,30 @@ function AnalyticsDetailInner() {
     return chartData.filter((d) => d.label.includes(filterQuery));
   }, [chartData, filterQuery]);
 
+  const handleExportBreakdownCsv = () => {
+    const headers = ["Date", "DayOfWeek", "RecordedVolume", "ShareOfPeriodPct", "VarianceVsDailyAvgPct"];
+    const rows = filteredDays.map((row) => {
+      const sharePct = total > 0 ? ((row.value / total) * 100).toFixed(1) : "0.0";
+      const variancePct = avg > 0 ? (((row.value - avg) / avg) * 100).toFixed(1) : "0.0";
+      return [
+        row.label,
+        formatDay(row.label),
+        row.value,
+        `${sharePct}%`,
+        `${variancePct}%`,
+      ];
+    });
+
+    exportTableCsv({
+      filename: `querex-${metricKey}-breakdown-${new Date().toISOString().slice(0, 10)}.csv`,
+      title: `${config.title} Day-by-Day Breakdown`,
+      dateRange: formatRangeLabel(start, end),
+      scope: scopedEmail || (userId ? `User #${userId}` : "All Users"),
+      headers,
+      rows,
+    });
+  };
+
   if (!isReady || !isAuthenticated || isMeLoading) {
     return (
       <div className="relative flex h-screen items-center justify-center">
@@ -236,7 +261,7 @@ function AnalyticsDetailInner() {
 
           <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4">
             <p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Variance Index</p>
-            <p className="mt-1 font-data text-2xl sm:text-3xl font-bold tabular-nums text-sky-400">
+            <p className="mt-1 font-data text-2xl sm:text-3xl font-bold tabular-nums text-sky-700 dark-theme:text-sky-400">
               {maxPoint.value > 0 ? (maxPoint.value / Math.max(1, avg)).toFixed(1) : 1}x
             </p>
             <p className="mt-1 text-[11.5px] text-zinc-400">Peak vs average baseline ratio</p>
@@ -252,6 +277,8 @@ function AnalyticsDetailInner() {
             color={config.color}
             unit={config.unit}
             height={260}
+            dateRange={formatRangeLabel(start, end)}
+            scope={scopedEmail || (userId ? `User #${userId}` : undefined)}
           />
         </div>
 
@@ -262,13 +289,18 @@ function AnalyticsDetailInner() {
               <h3 className="text-[14px] font-bold text-[var(--text-primary)]">Day-by-Day Telemetry Breakdown</h3>
               <p className="text-[12px] text-zinc-400">Detailed logs sorted chronologically</p>
             </div>
-            <input
-              type="text"
-              value={filterQuery}
-              onChange={(e) => setFilterQuery(e.target.value)}
-              placeholder="Filter by date (YYYY-MM-DD)…"
-              className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[var(--marketing-accent)]"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={filterQuery}
+                onChange={(e) => setFilterQuery(e.target.value)}
+                placeholder="Filter by date (YYYY-MM-DD)…"
+                className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-primary)] placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-[var(--marketing-accent)]"
+              />
+              <Button size="sm" onClick={handleExportBreakdownCsv} title="Download breakdown table CSV">
+                CSV
+              </Button>
+            </div>
           </div>
 
           <TableShell maxHeight="360px">
@@ -305,7 +337,7 @@ function AnalyticsDetailInner() {
                         {sharePct}%
                       </td>
                       <td className="px-3.5 py-3 text-right font-data tabular-nums">
-                        <span className={isAboveAvg ? "text-emerald-400" : "text-zinc-500"}>
+                        <span className={isAboveAvg ? "text-emerald-700 dark-theme:text-emerald-400" : "text-zinc-500"}>
                           {isAboveAvg ? `+${variancePct}%` : `${variancePct}%`}
                         </span>
                       </td>

@@ -19,6 +19,8 @@ import {
   formatDate,
   statusTone,
 } from "@/features/admin/components/shared";
+import { DynamicChart } from "@/features/admin/components/dynamic-chart";
+import { exportTableCsv } from "@/features/admin/lib/chart-export";
 
 const STATUSES = ["all", "ready", "processing", "failed", "empty"] as const;
 
@@ -42,6 +44,13 @@ export function DocumentsTab() {
     queryKey: ["admin-documents", params],
     queryFn: () => adminApi.documents(params),
     refetchInterval: status === "processing" ? 5_000 : false,
+  });
+
+
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-analytics", { days: 30 }],
+    queryFn: () => adminApi.analytics({ days: 30 }),
+    refetchInterval: 120_000,
   });
 
   const invalidate = () => {
@@ -92,8 +101,85 @@ export function DocumentsTab() {
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
+  const handleExportCsv = () => {
+    const headers = ["ID", "Filename", "OwnerEmail", "Status", "SizeBytes", "PageCount", "UploadedAt"];
+    const rows = documents.map((doc) => [
+      doc.id,
+      doc.name,
+      doc.owner_email ?? "",
+      doc.upload_status,
+      doc.size_bytes,
+      doc.page_count ?? "",
+      doc.created_at ?? "",
+    ]);
+    exportTableCsv({
+      filename: `querex-documents-${new Date().toISOString().slice(0, 10)}.csv`,
+      title: "Documents & Embeddings Ingestion",
+      headers,
+      rows,
+    });
+  };
+
+  const statusCounts = analytics?.documents_by_status ?? {};
+  const statusData = Object.entries(statusCounts).map(([k, v]) => ({
+    label: k,
+    value: v,
+    color:
+      k === "ready"
+        ? "#059669"
+        : k === "processing"
+          ? "#0284c7"
+          : k === "failed"
+            ? "#e11d48"
+            : "#71717a",
+  }));
+
+  const smallCount = rawDocuments.filter((d) => d.size_bytes < 1024 * 1024).length;
+  const medCount = rawDocuments.filter(
+    (d) => d.size_bytes >= 1024 * 1024 && d.size_bytes <= 10 * 1024 * 1024,
+  ).length;
+  const largeCount = rawDocuments.filter((d) => d.size_bytes > 10 * 1024 * 1024).length;
+  const sizeData = [
+    { label: "< 1 MB", value: smallCount, color: "#059669" },
+    { label: "1 – 10 MB", value: medCount, color: "#d9793a" },
+    { label: "> 10 MB", value: largeCount, color: "#7c3aed" },
+  ];
+
   return (
-    <section className="space-y-3.5">
+    <section className="space-y-4">
+      {/* Visual Analytics Strip for Documents */}
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        <DynamicChart
+          id="docs-upload-velocity"
+          title="30-Day Upload Velocity"
+          subtitle="Documents parsed & embedded daily"
+          data={(analytics?.series ?? []).map((d) => ({ label: d.date, value: d.documents }))}
+          color="#7c3aed"
+          unit="docs"
+          height={140}
+          allow3D={false}
+          allowedViews={["bar", "line", "area"]}
+        />
+        <DynamicChart
+          id="docs-status-donut"
+          title="Ingestion Status"
+          subtitle="Pipeline parsing breakdown"
+          data={statusData.length > 0 ? statusData : [{ label: "ready", value: total, color: "#059669" }]}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+        <DynamicChart
+          id="docs-size-histogram"
+          title="File Size Distribution"
+          subtitle="Document byte footprint classes"
+          data={sizeData}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+      </div>
+
       {/* Search & Filter Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -266,6 +352,15 @@ export function DocumentsTab() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
             <span>{isFetching ? "Refreshing…" : "Refresh"}</span>
+          </Button>
+
+          {/* Export CSV Button */}
+          <Button
+            size="sm"
+            onClick={handleExportCsv}
+            title="Export filtered documents to CSV"
+          >
+            CSV
           </Button>
         </div>
       </div>

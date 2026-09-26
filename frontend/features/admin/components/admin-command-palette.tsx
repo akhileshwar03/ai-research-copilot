@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { adminApi } from "@/services/api/admin-api";
 import { forwardedQuery } from "@/features/admin/lib/admin-query";
 
 export interface PaletteItem {
@@ -144,9 +146,50 @@ export function AdminCommandPalette({
         onClose();
       },
     },
+    ...(searchParams.has("user_id")
+      ? [
+          {
+            id: "action-clear-scope",
+            category: "Action" as const,
+            title: "Clear User Scope Filter",
+            subtitle: "Reset all dashboard charts to platform-wide telemetry",
+            onSelect: () => {
+              const q = new URLSearchParams(searchParams.toString());
+              q.delete("user_id");
+              q.delete("user_email");
+              router.push(`/admin?${q.toString()}`);
+              onClose();
+            },
+          },
+        ]
+      : []),
   ];
 
-  const filtered = items.filter(
+  // Dynamic user search results
+  const { data: usersData } = useQuery({
+    queryKey: ["admin-palette-users", query],
+    queryFn: () => adminApi.users({ q: query, limit: 5 }),
+    enabled: open && query.trim().length > 1,
+  });
+
+  const userScopeItems: PaletteItem[] = (usersData?.users ?? []).map((u) => ({
+    id: `user-scope-${u.id}`,
+    category: "Action" as const,
+    title: `Scope Dashboard to: ${u.email}`,
+    subtitle: `Filter overview charts and metrics to user #${u.id}`,
+    onSelect: () => {
+      const q = new URLSearchParams(searchParams.toString());
+      q.set("user_id", String(u.id));
+      q.set("user_email", u.email);
+      q.set("tab", "overview");
+      router.push(`/admin?${q.toString()}`);
+      onClose();
+    },
+  }));
+
+  const allItems = [...items, ...userScopeItems];
+
+  const filtered = allItems.filter(
     (item) =>
       item.title.toLowerCase().includes(query.toLowerCase()) ||
       item.category.toLowerCase().includes(query.toLowerCase()) ||

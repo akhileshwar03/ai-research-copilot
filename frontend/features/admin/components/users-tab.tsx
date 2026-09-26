@@ -27,6 +27,7 @@ import {
   timeAgo,
 } from "@/features/admin/components/shared";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
+import { downloadBlob } from "@/features/admin/lib/chart-export";
 
 function UserDetailDrawer({
   user,
@@ -302,6 +303,18 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
     queryFn: () => adminApi.users(params),
   });
 
+  const { data: stats } = useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: () => adminApi.stats(),
+    refetchInterval: 60_000,
+  });
+
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-analytics", { days: 30 }],
+    queryFn: () => adminApi.analytics({ days: 30 }),
+    refetchInterval: 120_000,
+  });
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
@@ -386,12 +399,7 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   const handleExport = async () => {
     try {
       const blob = await adminApi.exportUsers({ q: search, status, role });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `querex-users-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `querex-users-${new Date().toISOString().slice(0, 10)}.csv`);
       toast.success("CSV downloaded");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed");
@@ -427,7 +435,50 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
   };
 
   return (
-    <section className="space-y-3.5">
+    <section className="space-y-4">
+      {/* Visual Analytics Strip for Users */}
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        <DynamicChart
+          id="users-signup-trend"
+          title="30-Day Registrations"
+          subtitle="New sign-ups recorded daily"
+          data={(analytics?.series ?? []).map((d) => ({ label: d.date, value: d.signups }))}
+          color="#059669"
+          unit="users"
+          height={140}
+          allow3D={false}
+          allowedViews={["bar", "line", "area"]}
+        />
+        <DynamicChart
+          id="users-role-distribution"
+          title="Role Distribution"
+          subtitle="Administrative vs standard users"
+          data={[
+            { label: "Admin Users", value: stats?.admin_users ?? 0, color: "#d9793a" },
+            {
+              label: "Standard Users",
+              value: Math.max(0, (stats?.total_users ?? 0) - (stats?.admin_users ?? 0)),
+              color: "#0284c7",
+            },
+          ]}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+        <DynamicChart
+          id="users-status-distribution"
+          title="Account Status"
+          subtitle="Active vs suspended standing"
+          data={[
+            { label: "Active", value: stats?.active_users ?? 0, color: "#059669" },
+            { label: "Suspended", value: stats?.suspended_users ?? 0, color: "#e11d48" },
+          ]}
+          height={140}
+          allow3D={true}
+          isComposition={true}
+        />
+      </div>
+
       {/* Search & Filter Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -690,13 +741,33 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
                 className="h-4 w-4 rounded border-[var(--border-medium)] bg-[var(--surface-2)] text-[var(--marketing-accent)] focus:ring-[var(--marketing-accent)]"
               />
             </Th>
-            <Th>Email &amp; Identity</Th>
+            <Th
+              className="cursor-pointer hover:text-[var(--text-primary)]"
+              onClick={() => {
+                setSort((s) => (s === "email" ? "newest" : "email"));
+                setSkip(0);
+              }}
+              title="Click to sort by email"
+            >
+              Email &amp; Identity {sort === "email" ? "▲" : ""}
+            </Th>
             <Th>Status</Th>
             <Th>Role</Th>
             {visibleCols.docs && <Th right>Docs</Th>}
             {visibleCols.sessions && <Th right>Sessions</Th>}
             {visibleCols.lastActive && <Th>Last Active</Th>}
-            {visibleCols.joined && <Th>Joined</Th>}
+            {visibleCols.joined && (
+              <Th
+                className="cursor-pointer hover:text-[var(--text-primary)]"
+                onClick={() => {
+                  setSort((s) => (s === "newest" ? "oldest" : "newest"));
+                  setSkip(0);
+                }}
+                title="Click to toggle newest/oldest"
+              >
+                Joined {sort === "newest" ? "▼" : sort === "oldest" ? "▲" : ""}
+              </Th>
+            )}
             <Th right>Actions</Th>
           </tr>
         </thead>
