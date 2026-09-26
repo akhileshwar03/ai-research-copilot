@@ -24,7 +24,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 from PIL import Image
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import case, func, text
+from sqlalchemy import case, extract, func, text
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import require_admin
@@ -248,6 +248,32 @@ def _percentile(values: list[int], pct: float) -> int:
     return int(ordered[index])
 
 
+def _hourly_activity(db: Session, since: datetime, until: datetime, user_id: int | None) -> list[dict]:
+    """Requests and errors bucketed by UTC weekday (Mon=0) and hour, non-empty cells only."""
+    column = UsageEvent.created_at
+    if db.get_bind().dialect.name == "postgresql":
+        column = func.timezone("UTC", column)
+    dow = extract("dow", column)
+    hour = extract("hour", column)
+    query = (
+        db.query(
+            dow,
+            hour,
+            func.count(UsageEvent.id),
+            func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)),
+        )
+        .filter(UsageEvent.created_at >= since, UsageEvent.created_at < until)
+        .group_by(dow, hour)
+    )
+    if user_id is not None:
+        query = query.filter(UsageEvent.user_id == user_id)
+    cells = [
+        {"weekday": (int(d) + 6) % 7, "hour": int(h), "requests": int(n), "errors": int(e or 0)}
+        for d, h, n, e in query.all()
+    ]
+    return sorted(cells, key=lambda c: (c["weekday"], c["hour"]))
+
+
 def _compute_analytics(db: Session, start: date, end: date, user_id: int | None, user_email: str | None) -> dict:
     """Daily series and per-tool aggregates for the inclusive UTC day range
     [start, end], optionally scoped to a single user."""
@@ -367,6 +393,7 @@ def _compute_analytics(db: Session, start: date, end: date, user_id: int | None,
         "end": end.isoformat(),
         "user_id": user_id,
         "series": series,
+        "hourly": _hourly_activity(db, since, until, user_id),
         "tools": tools,
         "top_users": top_users,
         "active_users_7d": active_since(timedelta(days=7)),

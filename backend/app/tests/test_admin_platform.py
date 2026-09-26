@@ -705,6 +705,47 @@ def test_analytics_scopes_to_a_single_user(client, admin_headers, unique_email):
     assert [u["user_id"] for u in scoped["top_users"]] == [mine]
 
 
+def test_analytics_hourly_buckets_by_weekday_and_hour(client, admin_headers, unique_email):
+    from datetime import date, datetime, timezone
+
+    monday, sunday = "2024-11-04", "2024-11-10"
+    assert date.fromisoformat(monday).weekday() == 0 and date.fromisoformat(sunday).weekday() == 6
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.email == unique_email).first()
+        for stamp, ok in [
+            (f"{monday}T09:05:00", True),
+            (f"{monday}T09:55:00", False),
+            (f"{sunday}T23:10:00", True),
+        ]:
+            db.add(
+                UsageEvent(
+                    user_id=user.id,
+                    tool="checker",
+                    status_code=200 if ok else 500,
+                    ok=ok,
+                    duration_ms=50,
+                    created_at=datetime.fromisoformat(stamp).replace(tzinfo=timezone.utc),
+                )
+            )
+        db.commit()
+        uid = user.id
+    finally:
+        db.close()
+
+    body = client.get(
+        f"/api/v1/admin/analytics?start={monday}&end={sunday}&user_id={uid}", headers=admin_headers
+    ).json()
+    assert body["hourly"] == [
+        {"weekday": 0, "hour": 9, "requests": 2, "errors": 1},
+        {"weekday": 6, "hour": 23, "requests": 1, "errors": 0},
+    ]
+    outside = client.get(
+        f"/api/v1/admin/analytics?start=2024-11-11&end=2024-11-12&user_id={uid}", headers=admin_headers
+    ).json()
+    assert outside["hourly"] == []
+
+
 def test_analytics_rejects_bad_ranges_and_unknown_users(client, admin_headers):
     inverted = client.get("/api/v1/admin/analytics?start=2026-03-12&end=2026-03-10", headers=admin_headers)
     assert inverted.status_code == 400 and inverted.json()["error"]["code"] == "INVALID_RANGE"
