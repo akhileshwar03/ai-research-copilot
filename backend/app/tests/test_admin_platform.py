@@ -1279,3 +1279,13 @@ def test_document_summary_counts_the_whole_inventory_by_status_and_size(client, 
 
     everything = client.get("/api/v1/admin/documents/summary", headers=admin_headers).json()
     assert everything["count"] >= 5 and set(everything["by_size"]) == {"small", "medium", "large"}
+
+
+def test_admin_sign_in_is_audited_but_regular_sign_in_is_not(client, unique_email):
+    _register_and_login(client, unique_email)  # regular user at this point
+    _make_admin(unique_email)
+    _register_and_login(client, unique_email)  # now signs in as an admin
+
+    with TestingSessionLocal() as db:
+        rows = db.query(AdminAuditLog).filter(AdminAuditLog.admin_email == unique_email).all()
+    assert [r.action for r in rows] == ["admin.login"]

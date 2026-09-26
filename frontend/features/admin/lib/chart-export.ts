@@ -60,7 +60,7 @@ export function exportTableCsv({
     const lines: string[] = [];
 
     // Header comment block
-    lines.push(`# Querex Admin Telemetry Export: ${title}`);
+    lines.push(`# Querex Admin Export: ${title}`);
     if (dateRange) {
       lines.push(`# Date Range: ${dateRange} (UTC)`);
     }
@@ -158,7 +158,7 @@ export async function exportChartPng({
     // Header: System badge & title
     ctx.fillStyle = accentColor;
     ctx.font = "bold 11px system-ui, -apple-system, sans-serif";
-    ctx.fillText("QUEREX COMMAND CENTER · TELEMETRY SNAPSHOT", 40, 36);
+    ctx.fillText("QUEREX ADMIN · CHART EXPORT", 40, 36);
 
     ctx.fillStyle = textColor;
     ctx.font = "bold 24px system-ui, -apple-system, sans-serif";
@@ -260,7 +260,7 @@ export async function exportChartPng({
     // Footer: Watermark
     ctx.fillStyle = subtextColor;
     ctx.font = "11px system-ui, -apple-system, sans-serif";
-    ctx.fillText("Querex Platform Analytics · High-DPI Lossless Export", 40, totalHeight - 16);
+    ctx.fillText("Querex Admin · Chart export", 40, totalHeight - 16);
     ctx.textAlign = "right";
     ctx.fillText("All timestamps & bounds in UTC", width - 40, totalHeight - 16);
     ctx.textAlign = "left";

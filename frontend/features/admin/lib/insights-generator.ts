@@ -10,6 +10,9 @@ export interface SystemInsight {
   metric?: string;
 }
 
+const MIN_REQUESTS_FOR_INSIGHTS = 50;
+const MIN_TOOL_REQUESTS = 20;
+
 export function generateCommandInsights(
   analytics: AdminAnalytics | undefined | null,
   previous?: AdminAnalytics | null,
@@ -19,7 +22,7 @@ export function generateCommandInsights(
       {
         id: "empty-state",
         category: "info",
-        title: "Collecting Telemetry",
+        title: "No activity yet",
         description: "Activity data will populate as users interact with tools, upload documents, and generate chats.",
         tone: "neutral",
       },
@@ -47,7 +50,21 @@ export function generateCommandInsights(
     }
   }
 
-  if (peakDay && maxRequests > 0) {
+  // Percentages and "trends" on a handful of requests are noise, so stay quiet until there is enough volume.
+  if (totalRequests < MIN_REQUESTS_FOR_INSIGHTS && totalSignups === 0) {
+    return [
+      {
+        id: "low-volume",
+        category: "info",
+        title: "Not enough activity yet",
+        description: `Highlights appear once a period has at least ${MIN_REQUESTS_FOR_INSIGHTS} tool requests (this one has ${totalRequests}).`,
+        tone: "neutral",
+      },
+    ];
+  }
+  const enoughVolume = totalRequests >= MIN_REQUESTS_FOR_INSIGHTS;
+
+  if (peakDay && maxRequests > 0 && enoughVolume) {
     insights.push({
       id: "peak-day",
       category: "record",
@@ -59,7 +76,7 @@ export function generateCommandInsights(
   }
 
   // 2. Primary Tool Engine & Mover
-  if (tools.length > 0) {
+  if (tools.length > 0 && enoughVolume) {
     const sortedByRequests = [...tools].sort((a, b) => b.requests - a.requests);
     const topTool: AnalyticsTool = sortedByRequests[0];
     const topToolPct = totalRequests > 0 ? Math.round((topTool.requests / totalRequests) * 100) : 0;
@@ -76,9 +93,11 @@ export function generateCommandInsights(
 
   // 3. Reliability & Actionable Issues
   const overallErrorRate = totalRequests > 0 ? totalErrors / totalRequests : 0;
-  const problematicTools = tools.filter((t) => t.requests > 10 && t.error_rate > 0.05);
+  const problematicTools = tools.filter((t) => t.requests >= MIN_TOOL_REQUESTS && t.error_rate > 0.05);
 
-  if (problematicTools.length > 0) {
+  if (!enoughVolume) {
+    // too little traffic to judge reliability
+  } else if (problematicTools.length > 0) {
     const names = problematicTools.map((t) => t.label).join(", ");
     insights.push({
       id: "tool-errors-action",
@@ -119,7 +138,7 @@ export function generateCommandInsights(
   }
 
   // 4. Momentum vs Previous Window
-  if (previous && previous.series && previous.series.length > 0) {
+  if (previous && previous.series && previous.series.length > 0 && enoughVolume) {
     const prevRequests = previous.series.reduce((sum, d) => sum + d.requests, 0);
     const prevSignups = previous.series.reduce((sum, d) => sum + d.signups, 0);
 
@@ -142,7 +161,7 @@ export function generateCommandInsights(
       id: "signup-momentum",
       category: "growth",
       title: `User Growth: +${totalSignups} New Accounts`,
-      description: `${totalSignups} user signups recorded in this date range. Platform adoption continues to expand.`,
+      description: `${totalSignups} user signups recorded in this date range.`,
       tone: "good",
       metric: `+${totalSignups} signups`,
     });

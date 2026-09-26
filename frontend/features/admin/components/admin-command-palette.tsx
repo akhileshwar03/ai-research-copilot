@@ -33,8 +33,8 @@ export function AdminCommandPalette({
     {
       id: "tab-overview",
       category: "Navigation",
-      title: "Overview Command Center",
-      subtitle: "Main system KPI vitals, insights, and telemetry charts",
+      title: "Overview",
+      subtitle: "Key metrics, highlights and trend charts",
       shortcut: "1",
       onSelect: () => {
         onSelectTab("overview");
@@ -120,7 +120,7 @@ export function AdminCommandPalette({
       id: "metric-signups",
       category: "Metric Drilldown",
       title: "Analyze: User Growth & Sign-ups",
-      subtitle: "Registration momentum and conversion trajectory",
+      subtitle: "Registration trend and conversion",
       onSelect: () => {
         router.push(`/admin/analytics/signups${forwardedQuery(searchParams)}`);
         onClose();
@@ -152,7 +152,7 @@ export function AdminCommandPalette({
             id: "action-clear-scope",
             category: "Action" as const,
             title: "Clear User Scope Filter",
-            subtitle: "Reset all dashboard charts to platform-wide telemetry",
+            subtitle: "Reset all dashboard charts to platform-wide data",
             onSelect: () => {
               const q = new URLSearchParams(searchParams.toString());
               q.delete("user_id");

@@ -822,7 +822,7 @@ export function SystemTab() {
               className="h-6 w-6 animate-spin rounded-full border-2"
               style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
             />
-            <p className="text-[13px] font-medium text-zinc-400">Loading system telemetry…</p>
+            <p className="text-[13px] font-medium text-zinc-400">Loading system status…</p>
           </div>
         </div>
       ) : (

@@ -171,7 +171,7 @@ function UserDetailDrawer({
         <div className="mt-5">
           <DynamicChart
             id={`user-${user.id}-trajectory`}
-            title="User Activity Trajectory (30 Days)"
+            title="User activity (30 days)"
             data={chartSeries}
             unit="reqs"
             height={150}
@@ -877,7 +877,7 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
                           size="sm"
                           variant="ghost"
                           onClick={() => setSelectedUser(user)}
-                          title="Open full user telemetry timeline"
+                          title="Open full user activity"
                         >
                           Analyze
                         </Button>

@@ -136,6 +136,12 @@ class OtpService:
         )
         self.otp_repo.db.commit()
 
+        if user.is_admin or email.lower() in self.settings.admin_email_list:
+            # Every admin sign-in is on the audit trail so an unexpected one is visible in the Audit tab.
+            from app.services.admin_audit import record_admin_action
+
+            record_admin_action(self.otp_repo.db, admin_email=user.email, action="admin.login")
+
         logger.info("otp_verified email=%s new_user=%s", email, is_new_user)
         return {
             "token": access_token,

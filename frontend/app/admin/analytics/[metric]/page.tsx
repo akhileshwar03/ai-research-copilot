@@ -191,7 +191,7 @@ function AnalyticsDetailInner() {
               onClick={handleBack}
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-1.5 text-[12.5px] font-semibold text-zinc-300 transition hover:border-[var(--border-medium)] hover:bg-[var(--surface-2)] hover:text-white"
             >
-              ← Command Center
+              ← Overview
             </button>
             <div className="h-5 w-px bg-[var(--border-subtle)]" />
             <div>
@@ -200,7 +200,7 @@ function AnalyticsDetailInner() {
                   {config.title}
                 </h1>
                 <span className="rounded-full border border-sky-500/25 bg-sky-500/10 px-2 py-0.5 text-[10.5px] font-bold text-sky-400">
-                  Telemetry Detail
+                  Metric Detail
                 </span>
               </div>
               <p className="mt-0.5 text-[12px] text-zinc-400">{config.description}</p>
@@ -272,7 +272,7 @@ function AnalyticsDetailInner() {
         <div className="space-y-2">
           <DynamicChart
             id={`detail-${metricKey}`}
-            title={`Full Telemetry Trajectory: ${config.title}`}
+            title={`Daily trend: ${config.title}`}
             data={chartData}
             color={config.color}
             unit={config.unit}
@@ -286,7 +286,7 @@ function AnalyticsDetailInner() {
         <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="text-[14px] font-bold text-[var(--text-primary)]">Day-by-Day Telemetry Breakdown</h3>
+              <h3 className="text-[14px] font-bold text-[var(--text-primary)]">Daily breakdown</h3>
               <p className="text-[12px] text-zinc-400">Detailed logs sorted chronologically</p>
             </div>
             <div className="flex items-center gap-2">

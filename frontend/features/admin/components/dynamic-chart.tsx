@@ -5,16 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { forwardedQuery } from "@/features/admin/lib/admin-query";
 import { formatBytes, formatDay } from "@/features/admin/components/shared";
 import { exportChartPng, exportTableCsv } from "@/features/admin/lib/chart-export";
-import { CATEGORICAL_PALETTE, SEQUENTIAL_SCALE } from "@/features/admin/lib/types";
+import { CATEGORICAL_PALETTE } from "@/features/admin/lib/types";
+import { CalendarHeatmapGrid } from "@/features/admin/components/chart-calendar";
+import type { ChartDataPoint } from "@/features/admin/lib/chart-types";
 
 type ChartType = "area" | "bar" | "calendar" | "donut";
 
-interface DataPoint {
-  label: string; // YYYY-MM-DD or category name
-  value: number;
-  compareValue?: number;
-  color?: string;
-}
+type DataPoint = ChartDataPoint;
 
 interface DynamicChartProps {
   id: string;
@@ -33,7 +30,6 @@ interface DynamicChartProps {
   scope?: string;
 }
 
-const WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** Folds a daily series into per-day (<=10 days), per-week (<=120 days) or per-month slices so every day is counted. */
 type BucketPoint = DataPoint & { children?: DataPoint[] };
@@ -66,6 +62,18 @@ function bucketByPeriod(points: DataPoint[]): BucketPoint[] {
     value: b.value,
     children: b.children,
   }));
+}
+
+/** Axis top and tick count that land on round numbers (4 -> 0..4 by 1, 54 -> 0..60 by 15). */
+function niceScale(maxValue: number): { top: number; ticks: number } {
+  if (maxValue <= 4) {
+    const n = Math.max(1, Math.ceil(maxValue));
+    return { top: n, ticks: n };
+  }
+  const raw = maxValue / 4;
+  const pow = 10 ** Math.floor(Math.log10(raw));
+  const step = ([1, 2, 2.5, 5, 10].find((m) => m * pow >= raw) ?? 10) * pow;
+  return { top: step * 4, ticks: 4 };
 }
 
 function donutSlicePath(cx: number, cy: number, rOuter: number, rInner: number, startRad: number, endRad: number): string {
@@ -185,7 +193,10 @@ export function DynamicChart({
 
   // Statistics
   const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
-  const max = useMemo(() => Math.max(1, ...data.map((d) => d.value)), [data]);
+  const max = useMemo(() => Math.max(1, ...data.map((d) => Math.max(d.value, d.compareValue ?? 0))), [data]);
+  const scale = useMemo(() => niceScale(max), [max]);
+  const axisMax = scale.top;
+  const peak = useMemo(() => Math.max(0, ...data.map((d) => d.value)), [data]);
   const avg = useMemo(() => (data.length > 0 ? Math.round(total / data.length) : 0), [data, total]);
 
   // Composition data processing: Sort descending, group <3% into "Other"
@@ -331,7 +342,7 @@ export function DynamicChart({
                 Total: <span className="font-bold text-[var(--text-primary)]">{fmt(total)}</span>
               </span>
               <span className="font-data">
-                Peak: <span className="font-bold text-[var(--text-primary)]">{fmt(max)}</span>
+                Peak: <span className="font-bold text-[var(--text-primary)]">{fmt(peak)}</span>
                 {unit ? ` ${unit}` : ""}
               </span>
               <span className="font-data">
@@ -370,7 +381,7 @@ export function DynamicChart({
               type="button"
               onClick={handleExportCsv}
               className="rounded p-1 text-zinc-500 hover:bg-[var(--surface-2)] hover:text-zinc-200"
-              title="Download RFC 4180 CSV export with UTF-8 BOM"
+              title="Download data as CSV"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
@@ -380,7 +391,7 @@ export function DynamicChart({
               type="button"
               onClick={handleExportPng}
               className="rounded p-1 text-zinc-500 hover:bg-[var(--surface-2)] hover:text-zinc-200"
-              title="Download high-DPI 2x PNG snapshot"
+              title="Download chart as PNG"
             >
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
@@ -395,7 +406,7 @@ export function DynamicChart({
       <div className="relative mt-3 w-full">
         {data.length === 0 ? (
           <div className="flex h-44 items-center justify-center text-xs text-zinc-500">
-            No telemetry data recorded for this window.
+            No data for this period.
           </div>
         ) : chartType === "donut" ? (
           /* High-Fidelity SVG Donut with Radial Pop-out and Legend Sync */
@@ -484,7 +495,7 @@ export function DynamicChart({
 
             {/* Synchronized Donut Legend Table */}
             <div className="max-h-48 w-full min-w-[11rem] max-w-xs flex-1 space-y-1.5 overflow-y-auto pr-2 scrollbar-thin">
-              {isDateData && (
+              {isDateData && compositionSlices.length > 0 && (
                 <div className="flex items-center justify-between gap-2 px-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                     {drillLabel
@@ -558,7 +569,7 @@ export function DynamicChart({
 
               <g transform={`translate(${AXIS_LEFT} 6)`}>
               {/* Y axis: value gridlines with labels */}
-              {[1, 0.75, 0.5, 0.25, 0].map((frac) => (
+              {Array.from({ length: scale.ticks + 1 }, (_, k) => 1 - k / scale.ticks).map((frac) => (
                 <g key={frac}>
                   <line
                     x1="0"
@@ -569,7 +580,7 @@ export function DynamicChart({
                     strokeDasharray={frac === 0 ? undefined : "3 3"}
                   />
                   <text x={-8} y={height - frac * height + 5} textAnchor="end" fontSize={15} fill="currentColor" className="font-data text-zinc-500">
-                    {fmt(Math.round(max * frac * 10) / 10)}
+                    {fmt(Math.round(axisMax * frac * 100) / 100)}
                   </text>
                 </g>
               ))}
@@ -597,7 +608,7 @@ export function DynamicChart({
               {/* Bar View */}
               {chartType === "bar" &&
                 data.map((d, i) => {
-                  const h = Math.max(d.value > 0 ? 3 : 0, (d.value / max) * height);
+                  const h = Math.max(d.value > 0 ? 3 : 0, (d.value / axisMax) * height);
                   const x = i * (barW + gap);
                   const isHovered = activeIdx === i;
                   return (
@@ -638,7 +649,7 @@ export function DynamicChart({
               {chartType === "area" && (() => {
                 const points = data.map((d, i) => {
                   const x = (i / Math.max(1, data.length - 1)) * svgWidth;
-                  const y = height - Math.max(3, (d.value / max) * height);
+                  const y = height - Math.max(3, (d.value / axisMax) * height);
                   return { x, y, d };
                 });
 
@@ -652,7 +663,7 @@ export function DynamicChart({
                   const compPoints = data.map((d, i) => {
                     const x = (i / Math.max(1, data.length - 1)) * svgWidth;
                     const val = d.compareValue ?? 0;
-                    const y = height - Math.max(3, (val / max) * height);
+                    const y = height - Math.max(3, (val / axisMax) * height);
                     return { x, y };
                   });
                   comparePath = compPoints.reduce((acc, p, i) => `${acc} ${i === 0 ? "M" : "L"} ${p.x} ${p.y}`, "");
@@ -785,256 +796,6 @@ export function DynamicChart({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-const MONTH_LAYOUT_MAX_DAYS = 45;
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const WEEKDAY_FULL = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-interface CalendarCell {
-  date: string;
-  value: number;
-}
-
-/** Days grouped into Monday-first weeks; days outside the data range are null. */
-function buildWeeks(points: DataPoint[]): (CalendarCell | null)[][] {
-  const weeks: (CalendarCell | null)[][] = [];
-  let row: (CalendarCell | null)[] = new Array(7).fill(null);
-  for (const point of points) {
-    const weekday = (new Date(`${point.label}T00:00:00Z`).getUTCDay() + 6) % 7;
-    row[weekday] = { date: point.label, value: point.value };
-    if (weekday === 6) {
-      weeks.push(row);
-      row = new Array(7).fill(null);
-    }
-  }
-  if (row.some(Boolean)) weeks.push(row);
-  return weeks;
-}
-
-/** Intensity bucket 0-4 for a value, or -1 for no activity. */
-function intensityBucket(value: number, peak: number): number {
-  if (value <= 0) return -1;
-  const ratio = peak > 0 ? value / peak : 0;
-  if (ratio > 0.75) return 4;
-  if (ratio > 0.5) return 3;
-  if (ratio > 0.25) return 2;
-  if (ratio > 0.05) return 1;
-  return 0;
-}
-
-const bucketFill = (bucket: number) => (bucket < 0 ? "var(--surface-2)" : SEQUENTIAL_SCALE[bucket]);
-const onStrongFill = (bucket: number) => bucket >= 3;
-
-/**
- * Activity calendar. Short ranges render as a month-style calendar (weeks as rows, day numbers and values
- * inside each day); long ranges as a compact year-style grid (weeks as columns).
- */
-function CalendarHeatmapGrid({
-  data,
-  maxVal,
-  unit,
-  format,
-}: {
-  data: DataPoint[];
-  maxVal: number;
-  unit?: string;
-  format: (value: number) => string;
-}) {
-  const [hovered, setHovered] = useState<CalendarCell | null>(null);
-  const weeks = useMemo(() => buildWeeks(data), [data]);
-  const periodTotal = useMemo(() => data.reduce((sum, d) => sum + d.value, 0), [data]);
-  const monthLayout = data.length <= MONTH_LAYOUT_MAX_DAYS;
-
-  const legend = (x: number, y: number) => (
-    <g transform={`translate(${x} ${y})`}>
-      <text x={0} y={10} fontSize={9} fontWeight={700} fill="currentColor" className="text-zinc-500">
-        Less
-      </text>
-      {[-1, 0, 1, 2, 3, 4].map((bucket, i) => (
-        <rect
-          key={bucket}
-          x={28 + i * 15}
-          y={1}
-          width={12}
-          height={12}
-          rx={3}
-          style={{ fill: bucketFill(bucket), stroke: "var(--border-subtle)" }}
-        />
-      ))}
-      <text x={28 + 6 * 15 + 4} y={10} fontSize={9} fontWeight={700} fill="currentColor" className="text-zinc-500">
-        More
-      </text>
-    </g>
-  );
-
-  const readout = (
-    <div className="min-h-5 text-center text-[11px] text-zinc-500" aria-live="polite">
-      {hovered ? (
-        <span className="font-data">
-          <strong className="text-[var(--text-primary)]">
-            {formatDay(hovered.date)} ({WEEKDAY_FULL[(new Date(`${hovered.date}T00:00:00Z`).getUTCDay() + 6) % 7]})
-          </strong>
-          : <strong className="text-[var(--marketing-accent-text)]">{format(hovered.value)} {unit}</strong>
-          {periodTotal > 0 && ` · ${((hovered.value / periodTotal) * 100).toFixed(1)}% of the period`}
-        </span>
-      ) : (
-        <span>Hover a day for details</span>
-      )}
-    </div>
-  );
-
-  if (monthLayout) {
-    const cellW = 54;
-    const cellH = 36;
-    const gap = 6;
-    const head = 22;
-    const width = 7 * cellW + 6 * gap;
-    const height = head + weeks.length * (cellH + gap) + 24;
-    return (
-      <div className="flex flex-col gap-1.5">
-        <svg
-          data-chart-svg="true"
-          viewBox={`0 0 ${width} ${height}`}
-          className="mx-auto h-auto w-full max-w-[460px] select-none"
-          role="img"
-          aria-label={`Activity calendar, ${data.length} days`}
-        >
-          {WEEKDAY_NAMES.map((name, i) => (
-            <text
-              key={name}
-              x={i * (cellW + gap) + cellW / 2}
-              y={13}
-              textAnchor="middle"
-              fontSize={10}
-              fontWeight={700}
-              fill="currentColor"
-              className="text-zinc-500"
-            >
-              {name}
-            </text>
-          ))}
-          {weeks.flatMap((week, w) =>
-            week.map((cell, i) => {
-              const x = i * (cellW + gap);
-              const y = head + w * (cellH + gap);
-              if (!cell) {
-                return (
-                  <rect
-                    key={`${w}-${i}`}
-                    x={x}
-                    y={y}
-                    width={cellW}
-                    height={cellH}
-                    rx={6}
-                    style={{ fill: "none", stroke: "var(--border-subtle)", strokeDasharray: "3 3" }}
-                  />
-                );
-              }
-              const bucket = intensityBucket(cell.value, maxVal);
-              const dayNumber = Number(cell.date.slice(8, 10));
-              const strong = onStrongFill(bucket);
-              const active = hovered?.date === cell.date;
-              const textFill = strong ? "#ffffff" : "var(--text-primary)";
-              return (
-                <g
-                  key={cell.date}
-                  className="cursor-pointer"
-                  opacity={hovered && !active ? 0.55 : 1}
-                  onMouseEnter={() => setHovered(cell)}
-                  onMouseLeave={() => setHovered(null)}
-                >
-                  <rect
-                    x={x}
-                    y={y}
-                    width={cellW}
-                    height={cellH}
-                    rx={6}
-                    style={{ fill: bucketFill(bucket), stroke: active ? "var(--text-primary)" : "var(--border-subtle)" }}
-                    strokeWidth={active ? 1.75 : 1}
-                  />
-                  <text x={x + 6} y={y + 12} fontSize={9} fontWeight={700} style={{ fill: textFill }} opacity={0.7}>
-                    {dayNumber === 1 ? `${MONTHS[Number(cell.date.slice(5, 7)) - 1]} 1` : dayNumber}
-                  </text>
-                  {cell.value > 0 && (
-                    <text x={x + cellW - 6} y={y + cellH - 8} textAnchor="end" fontSize={12} fontWeight={800} style={{ fill: textFill }}>
-                      {format(cell.value)}
-                    </text>
-                  )}
-                  <title>{`${cell.date}: ${format(cell.value)} ${unit ?? ""}`}</title>
-                </g>
-              );
-            }),
-          )}
-          {legend(width - 28 - 6 * 15 - 30, height - 18)}
-        </svg>
-        {readout}
-      </div>
-    );
-  }
-
-  const cell = 11;
-  const step = 14;
-  const left = 30;
-  const top = 20;
-  const width = left + weeks.length * step + 4;
-  const height = top + 7 * step + 26;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <svg
-        data-chart-svg="true"
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-auto w-full select-none"
-        role="img"
-        aria-label={`Activity calendar, ${data.length} days`}
-      >
-        {[0, 2, 4, 6].map((row) => (
-          <text key={row} x={0} y={top + row * step + cell - 2} fontSize={8} fontWeight={700} fill="currentColor" className="text-zinc-500">
-            {WEEKDAY_NAMES[row]}
-          </text>
-        ))}
-        {weeks.map((week, w) => {
-          const first = week.find(Boolean) as CalendarCell;
-          const month = Number(first.date.slice(5, 7)) - 1;
-          const prevFirst = weeks[w - 1]?.find(Boolean);
-          const showMonth = !prevFirst || Number(prevFirst.date.slice(5, 7)) - 1 !== month;
-          return (
-            <g key={first.date} transform={`translate(${left + w * step} 0)`}>
-              {showMonth && (
-                <text x={0} y={12} fontSize={8.5} fontWeight={700} fill="currentColor" className="text-zinc-500">
-                  {MONTHS[month]}
-                </text>
-              )}
-              {week.map((day, i) => {
-                if (!day) return null;
-                const active = hovered?.date === day.date;
-                return (
-                  <rect
-                    key={day.date}
-                    x={0}
-                    y={top + i * step}
-                    width={cell}
-                    height={cell}
-                    rx={2.5}
-                    style={{ fill: bucketFill(intensityBucket(day.value, maxVal)), stroke: active ? "var(--text-primary)" : "var(--border-subtle)" }}
-                    strokeWidth={active ? 1.5 : 0.8}
-                    opacity={hovered && !active ? 0.55 : 1}
-                    className="cursor-pointer"
-                    onMouseEnter={() => setHovered(day)}
-                    onMouseLeave={() => setHovered(null)}
-                  >
-                    <title>{`${day.date}: ${format(day.value)} ${unit ?? ""}`}</title>
-                  </rect>
-                );
-              })}
-            </g>
-          );
-        })}
-        {legend(width - 28 - 6 * 15 - 30, height - 16)}
-      </svg>
-      {readout}
     </div>
   );
 }

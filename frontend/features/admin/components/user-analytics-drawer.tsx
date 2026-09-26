@@ -92,7 +92,7 @@ export function UserAnalyticsDrawer({
                   onScopeUser(userId, email);
                   onClose();
                 }}
-                title="Filter Overview command center to this user"
+                title="Filter the Overview to this user"
               >
                 Scope Overview
               </Button>
@@ -144,7 +144,7 @@ export function UserAnalyticsDrawer({
             Tool Breakdown (Last 30 Days)
           </h4>
           {!userAnalytics ? (
-            <p className="py-4 text-center text-xs text-zinc-500">Loading tool telemetry…</p>
+            <p className="py-4 text-center text-xs text-zinc-500">Loading tool usage…</p>
           ) : userTools.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">No tool requests in this window.</p>
           ) : (

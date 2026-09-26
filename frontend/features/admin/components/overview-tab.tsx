@@ -269,7 +269,7 @@ export function OverviewTab() {
               onClick={handleManualRefresh}
               disabled={isFetching}
               className="rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark-theme:hover:text-zinc-200"
-              title="Refresh telemetry now"
+              title="Refresh data"
             >
               <svg
                 className={`h-3.5 w-3.5 ${isFetching ? "animate-spin text-[var(--marketing-accent)]" : ""}`}
@@ -452,7 +452,7 @@ export function OverviewTab() {
           </div>
 
           {/* Retention & Reliability Command Scorecard Bar */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {/* Engagement: DAU/MAU stickiness (windows end on the range's last day) */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
@@ -478,50 +478,6 @@ export function OverviewTab() {
               </p>
             </div>
 
-            {/* Tool success rate */}
-            <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  Tool Success Rate
-                </span>
-                <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-data text-[10px] font-bold text-zinc-400">
-                  Reliability
-                </span>
-              </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span
-                  className={`font-data text-2xl font-bold ${
-                    errorRate > 5
-                      ? "text-rose-700 dark-theme:text-rose-400"
-                      : errorRate > 2
-                        ? "text-amber-700 dark-theme:text-amber-400"
-                        : "text-emerald-700 dark-theme:text-emerald-400"
-                  }`}
-                >
-                  {totalRequests > 0 ? (100 - errorRate).toFixed(1) : "—"}
-                  {totalRequests > 0 && "%"}
-                </span>
-                <span className="text-xs text-zinc-500 font-data">
-                  {(totalRequests - totalErrors).toLocaleString()} ok / {totalRequests.toLocaleString()} reqs
-                </span>
-              </div>
-              <div className="mt-2">
-                <HBar
-                  value={totalRequests - totalErrors}
-                  max={Math.max(1, totalRequests)}
-                  color="var(--marketing-accent)"
-                />
-              </div>
-              <p className="mt-2 text-[11px] text-zinc-500">
-                {totalRequests === 0
-                  ? "No tool requests in this range."
-                  : totalErrors === 0
-                    ? "Every tool request in this range completed successfully."
-                    : `${totalErrors.toLocaleString()} tool request${totalErrors === 1 ? "" : "s"} failed. The Audit tab shows which tools and status codes.`}
-              </p>
-            </div>
-
-            {/* Average latency (exact mean from the backend) */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
@@ -577,11 +533,11 @@ export function OverviewTab() {
                   ✦
                 </span>
                 <h3 className="font-headline text-[14px] font-bold text-[var(--text-primary)]">
-                  Automated Operations &amp; Growth Insights
+                  Highlights
                 </h3>
               </div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 font-data">
-                Telemetry Intelligence
+                Rule-based summary
               </span>
             </div>
 
@@ -619,7 +575,7 @@ export function OverviewTab() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-headline text-[15px] font-bold text-[var(--text-primary)]">
-                  Operational Trajectory
+                  Activity Trends
                 </h2>
                 <p className="text-[12px] text-zinc-500 dark-theme:text-zinc-400">
                   Switch any chart between area, bars, donut and activity calendar; click to pin values and export as PNG or CSV
@@ -634,7 +590,7 @@ export function OverviewTab() {
                     className="h-7 w-7 animate-spin rounded-full border-2"
                     style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
                   />
-                  <p className="text-[13px] font-medium text-zinc-400">Streaming analytics telemetry…</p>
+                  <p className="text-[13px] font-medium text-zinc-400">Loading analytics…</p>
                 </div>
               </div>
             ) : (
