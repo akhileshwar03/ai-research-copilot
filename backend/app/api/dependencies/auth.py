@@ -8,6 +8,7 @@ from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.services.one_time_code_store import is_account_denied
 from app.core.security import decode_access_token
+from app.services.admin_2fa import step_up_token_valid
 from app.db.models.user import User
 from app.db.repositories.user_repository import UserRepository
 from app.db.session import engine, get_db
@@ -85,8 +86,20 @@ def get_current_user_email(user: User = Depends(get_current_user)) -> str:
     return user.email
 
 
-def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Dependency for admin-only endpoints. 403 for non-admin users."""
+def require_admin_basic(user: User = Depends(get_current_user)) -> User:
+    """Admin check without the two-factor step-up (used only by the two-factor endpoints themselves)."""
     if not user.is_admin:
         raise AppError(code="ADMIN_REQUIRED", message="Admin privileges required", status_code=403)
+    return user
+
+
+def require_admin(request: Request, user: User = Depends(require_admin_basic)) -> User:
+    """Dependency for admin-only endpoints. 403 for non-admins; 403 ADMIN_2FA_REQUIRED for admins who
+    enabled two-factor but have not entered a current code this session."""
+    if user.totp_enabled and not step_up_token_valid(request.headers.get("X-Admin-2FA"), user.email):
+        raise AppError(
+            code="ADMIN_2FA_REQUIRED",
+            message="Enter your authenticator code to continue",
+            status_code=403,
+        )
     return user

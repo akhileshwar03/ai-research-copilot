@@ -1,5 +1,6 @@
 "use client";
 
+import { TwoFactorCard } from "@/features/admin/components/two-factor-card";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -573,6 +574,8 @@ export function SettingsTab() {
 
   return (
     <section className="space-y-4">
+      <TwoFactorCard />
+
       {/* Top Header & Global Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>

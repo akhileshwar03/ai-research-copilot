@@ -13,6 +13,9 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
+    # Admin two-factor (TOTP). The secret is stored encrypted; see app/services/admin_2fa.py.
+    totp_secret = Column(String, nullable=True)
+    totp_enabled = Column(Boolean, default=False, server_default="false", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     chats = relationship("ChatSession", backref="user")

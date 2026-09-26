@@ -147,7 +147,7 @@ def fake_bg_storage(monkeypatch, tmp_path):
     check pass deterministically everywhere, not by accident on just one box."""
     from app.core.config import get_settings
     from app.services.storage_service import LocalStorageService
-    import app.api.routes.admin as admin_module
+    from app.api.routes.admin import settings as admin_settings, system as admin_system, users as admin_users
     import app.api.routes.app_config as app_config_module
 
     settings = get_settings()
@@ -157,7 +157,8 @@ def fake_bg_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "r2_bucket_name", "test-bucket")
 
     fake_storage = LocalStorageService(base_dir=str(tmp_path))
-    monkeypatch.setattr(admin_module, "get_storage_service", lambda: fake_storage)
+    for admin_module in (admin_settings, admin_system, admin_users):
+        monkeypatch.setattr(admin_module, "get_storage_service", lambda: fake_storage)
     monkeypatch.setattr(app_config_module, "get_storage_service", lambda: fake_storage)
     return fake_storage
 
@@ -1289,3 +1290,133 @@ def test_admin_sign_in_is_audited_but_regular_sign_in_is_not(client, unique_emai
     with TestingSessionLocal() as db:
         rows = db.query(AdminAuditLog).filter(AdminAuditLog.admin_email == unique_email).all()
     assert [r.action for r in rows] == ["admin.login"]
+
+
+# ── Operational alerts ─────────────────────────────────────────────────────────
+
+def _seed_recent_events(user_id_email: str, tool: str, ok_count: int, fail_count: int):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with TestingSessionLocal() as db:
+        user = db.query(User).filter(User.email == user_id_email).first()
+        for i in range(ok_count + fail_count):
+            failed = i < fail_count
+            db.add(
+                UsageEvent(
+                    user_id=user.id,
+                    tool=tool,
+                    status_code=500 if failed else 200,
+                    ok=not failed,
+                    duration_ms=100,
+                    request_id="alert-test",
+                    created_at=now - timedelta(minutes=5),
+                )
+            )
+        db.commit()
+
+
+def test_alerts_flag_error_spike_and_failing_tool(client, admin_headers, unique_email):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    quiet = client.get("/api/v1/admin/alerts", headers=admin_headers)
+    assert quiet.status_code == 200 and quiet.json()["alerts"] == []
+
+    _seed_recent_events(unique_email, "humanizer", ok_count=2, fail_count=8)
+    alerts = client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"]
+    ids = {a["id"] for a in alerts}
+    assert "error-rate" in ids and "tool-failing:humanizer" in ids
+    assert "80%" in next(a for a in alerts if a["id"] == "error-rate")["title"]
+
+
+def test_alerts_stay_quiet_on_low_volume(client, admin_headers, unique_email):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_recent_events(unique_email, "humanizer", ok_count=0, fail_count=3)  # 100% errors but only 3 requests
+    assert client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"] == []
+
+
+def test_alerts_require_authentication(client):
+    assert client.get("/api/v1/admin/alerts").status_code in (401, 403)
+
+
+# ── Admin two-factor (TOTP) ────────────────────────────────────────────────────
+
+def _current_code(secret: str) -> str:
+    import time
+
+    from app.services import admin_2fa
+
+    return admin_2fa._code_at(secret, int(time.time() // 30))
+
+
+def test_totp_matches_rfc_6238_vector():
+    from app.services import admin_2fa
+
+    # RFC 6238 appendix B (SHA-1, secret "12345678901234567890"): T=59s -> 94287082, last 6 digits.
+    secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    assert admin_2fa.verify_code(secret, "287082", now=59)
+    assert not admin_2fa.verify_code(secret, "287083", now=59)
+    assert not admin_2fa.verify_code(secret, "abc", now=59)
+    assert admin_2fa.verify_code(secret, "287082", now=59 + 30)  # one step of drift is tolerated
+    assert not admin_2fa.verify_code(secret, "287082", now=59 + 90)
+
+
+def test_admin_two_factor_full_flow(client, admin_headers, unique_email):
+    from app.services import admin_2fa
+
+    admin_2fa.clear_failures(unique_email)
+    status = client.get("/api/v1/admin/2fa/status", headers=admin_headers).json()
+    assert status == {"enabled": False, "verified": True}
+
+    setup = client.post("/api/v1/admin/2fa/setup", headers=admin_headers).json()
+    assert setup["otpauth_uri"].startswith("otpauth://totp/")
+    with TestingSessionLocal() as db:
+        stored = db.query(User).filter(User.email == unique_email).first().totp_secret
+    assert stored and setup["secret"] not in stored  # encrypted at rest
+
+    bad = client.post("/api/v1/admin/2fa/enable", json={"code": "000000"}, headers=admin_headers)
+    assert bad.status_code == 400 and bad.json()["error"]["code"] == "ADMIN_2FA_INVALID"
+
+    good = client.post("/api/v1/admin/2fa/enable", json={"code": _current_code(setup["secret"])}, headers=admin_headers)
+    assert good.status_code == 200
+    token = good.json()["token"]
+
+    # Now every admin endpoint needs the step-up token.
+    blocked = client.get("/api/v1/admin/stats", headers=admin_headers)
+    assert blocked.status_code == 403 and blocked.json()["error"]["code"] == "ADMIN_2FA_REQUIRED"
+    assert client.get("/api/v1/admin/2fa/status", headers=admin_headers).json() == {"enabled": True, "verified": False}
+    assert client.get("/api/v1/admin/stats", headers={**admin_headers, "X-Admin-2FA": token}).status_code == 200
+    forged = client.get("/api/v1/admin/stats", headers={**admin_headers, "X-Admin-2FA": "not-a-token"})
+    assert forged.status_code == 403
+
+    # A normal access token is not a valid step-up token.
+    access = admin_headers["Authorization"].split(" ", 1)[1]
+    assert client.get("/api/v1/admin/stats", headers={**admin_headers, "X-Admin-2FA": access}).status_code == 403
+
+    # Signing in again requires a fresh code.
+    verified = client.post("/api/v1/admin/2fa/verify", json={"code": _current_code(setup["secret"])}, headers=admin_headers)
+    assert verified.status_code == 200
+
+    # Disabling needs a valid code too.
+    off = client.post("/api/v1/admin/2fa/disable", json={"code": _current_code(setup["secret"])}, headers=admin_headers)
+    assert off.status_code == 200
+    assert client.get("/api/v1/admin/stats", headers=admin_headers).status_code == 200
+
+    with TestingSessionLocal() as db:
+        actions = {r.action for r in db.query(AdminAuditLog).filter(AdminAuditLog.admin_email == unique_email)}
+    assert {"admin.2fa_enabled", "admin.2fa_disabled", "admin.2fa_failed"} <= actions
+
+
+def test_admin_two_factor_locks_out_after_repeated_failures(client, admin_headers, unique_email):
+    from app.services import admin_2fa
+
+    admin_2fa.clear_failures(unique_email)
+    client.post("/api/v1/admin/2fa/setup", headers=admin_headers)
+    for _ in range(admin_2fa.MAX_FAILURES):
+        assert client.post("/api/v1/admin/2fa/enable", json={"code": "000000"}, headers=admin_headers).status_code == 400
+    locked = client.post("/api/v1/admin/2fa/enable", json={"code": "000000"}, headers=admin_headers)
+    assert locked.status_code == 429
+    admin_2fa.clear_failures(unique_email)

@@ -13,6 +13,8 @@ import { DocumentsTab } from "@/features/admin/components/documents-tab";
 import { SettingsTab } from "@/features/admin/components/settings-tab";
 import { AuditTab } from "@/features/admin/components/audit-tab";
 import { SystemTab } from "@/features/admin/components/system-tab";
+import { TwoFactorGate } from "@/features/admin/components/two-factor-gate";
+import { AlertsBanner } from "@/features/admin/components/alerts-banner";
 import { AdminCommandPalette } from "@/features/admin/components/admin-command-palette";
 
 const TABS = [
@@ -101,6 +103,12 @@ function AdminPageInner() {
 
   const isForbidden = Boolean(me && !me.is_admin);
 
+  const { data: twoFactor } = useQuery({
+    queryKey: ["admin-2fa-status"],
+    queryFn: () => adminApi.twoFactorStatus(),
+    enabled: Boolean(me?.is_admin),
+  });
+
   useEffect(() => {
     if (isForbidden) router.replace("/chat");
   }, [isForbidden, router]);
@@ -170,6 +178,8 @@ function AdminPageInner() {
 
   if (isForbidden) return null;
 
+  if (twoFactor?.enabled && !twoFactor.verified) return <TwoFactorGate />;
+
   return (
     <div className="admin-console relative min-h-screen px-3 py-4 sm:px-6 sm:py-7">
       <AtmosphereBackground variant="calm" />
@@ -231,6 +241,8 @@ function AdminPageInner() {
             </button>
           </div>
         </header>
+
+        <AlertsBanner onOpenAudit={() => selectTab("audit")} />
 
         {/* Tab Navigation Pill Bar */}
         <nav

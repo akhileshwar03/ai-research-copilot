@@ -93,7 +93,7 @@ replies count their full duration). `app/services/runtime_settings.py` now suppo
 settings with categories: maintenance mode, sign-ups on/off, announcement banner, per-tool kill
 switches (`app/api/dependencies/tools.py` → `require_tool(...)` on every tool route → 503
 `TOOL_DISABLED`), follow-up suggestions toggle. Public `GET /app/config` exposes only those
-flags. Admin API (`app/api/routes/admin.py`): stats, `/analytics?days=`, users (filters, sort,
+flags. Admin API (`app/api/routes/admin/`): stats, `/analytics?days=`, users (filters, sort,
 CSV export, revoke sessions, verify email, activity), documents (list/delete/reingest), settings,
 audit log, usage events, `/system` (probe=true pings OpenAI/Ollama), `/retention/run`.
 `delete_account` now also purges humanizer runs, realtime sessions and usage events (PostgreSQL
@@ -110,6 +110,13 @@ follow-up chips + Regenerate on the last reply.
 Settings, Audit & activity, System). `useAppConfig()` + `PlatformNotices` (in `MainLayout`) show
 the announcement, maintenance and tool-disabled states; nav marks disabled tools. All React
 compiler lint rules pass (`npx eslint app features components services shared stores`).
+
+**Admin hardening (2026-09-26).** Admin sign-ins are audited (`admin.login`). Opt-in TOTP two-factor
+(`app/services/admin_2fa.py`, Settings tab): once enabled, every `require_admin` route also needs the
+`X-Admin-2FA` step-up token from `POST /admin/2fa/verify`. Lost authenticator = an operator sets
+`users.totp_enabled=false` in the database. `GET /admin/alerts` (last-hour error rate / failing tool)
+drives the banner in the admin console; thresholds are runtime settings `alert_error_rate_pct` and
+`alert_min_requests`. The admin API is a package, `app/api/routes/admin/`, one module per area.
 
 **Layout.** `backend/routes/` was merged into `backend/app/api/routes/`; Render starts
 `uvicorn app.main:app`. Local verification: `.claude/launch.json` has `backend-local`

@@ -320,10 +320,26 @@ function qs(params: Record<string, string | number | boolean | undefined>): stri
   return "?" + entries.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&");
 }
 
+export interface AdminAlert {
+  id: string;
+  severity: "warning" | "critical";
+  title: string;
+  detail: string;
+}
+
 export const adminApi = {
   me: () => apiRequest<MeResponse>("/auth/me"),
 
   stats: () => apiRequest<AdminStats>("/admin/stats"),
+  twoFactorStatus: () => apiRequest<{ enabled: boolean; verified: boolean }>("/admin/2fa/status"),
+  twoFactorSetup: () => apiRequest<{ secret: string; otpauth_uri: string }>("/admin/2fa/setup", { method: "POST" }),
+  twoFactorEnable: (code: string) =>
+    apiRequest<{ enabled: boolean; token: string }>("/admin/2fa/enable", { method: "POST", body: JSON.stringify({ code }) }),
+  twoFactorVerify: (code: string) =>
+    apiRequest<{ token: string }>("/admin/2fa/verify", { method: "POST", body: JSON.stringify({ code }) }),
+  twoFactorDisable: (code: string) =>
+    apiRequest<{ enabled: boolean }>("/admin/2fa/disable", { method: "POST", body: JSON.stringify({ code }) }),
+  alerts: () => apiRequest<{ alerts: AdminAlert[] }>("/admin/alerts"),
   analytics: (paramsOrDays: number | AnalyticsParams = 30) => {
     if (typeof paramsOrDays === "number") {
       return apiRequest<AdminAnalytics>(`/admin/analytics?days=${paramsOrDays}`);

@@ -88,6 +88,26 @@ async function parseError(response: Response, path: string, requestId: string): 
   throw error;
 }
 
+const ADMIN_STEP_UP_KEY = "querex_admin_2fa";
+
+/** Short-lived proof of a current authenticator code; kept per tab session, never across browser restarts. */
+export function getAdminStepUpToken(): string | null {
+  try {
+    return sessionStorage.getItem(ADMIN_STEP_UP_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAdminStepUpToken(token: string | null): void {
+  try {
+    if (token) sessionStorage.setItem(ADMIN_STEP_UP_KEY, token);
+    else sessionStorage.removeItem(ADMIN_STEP_UP_KEY);
+  } catch {
+    // storage unavailable (private mode): the prompt simply reappears on reload
+  }
+}
+
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { skipAuth, skipRefresh, headers, requestId: incomingRequestId, responseType, ...rest } = options;
   const requestId = incomingRequestId ?? newRequestId();
@@ -101,6 +121,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!skipAuth && accessToken) {
     requestHeaders.set("Authorization", `${tokenType} ${accessToken}`);
+  }
+  if (path.startsWith("/admin")) {
+    const stepUp = getAdminStepUpToken();
+    if (stepUp) requestHeaders.set("X-Admin-2FA", stepUp);
   }
 
   const response = await fetch(buildApiUrl(path), {

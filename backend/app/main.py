@@ -294,6 +294,17 @@ def _run_startup_migrations() -> None:
                 conn.commit()
                 logger.info("startup_migration: otp_tokens.code_hash added")
 
+            # ── users.totp_secret / totp_enabled (migration 0021) ──────────────
+            user_cols = {c["name"] for c in inspector.get_columns("users")}
+            if "totp_secret" not in user_cols:
+                logger.info("startup_migration: adding users.totp_secret")
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_secret VARCHAR"))
+                conn.commit()
+            if "totp_enabled" not in user_cols:
+                logger.info("startup_migration: adding users.totp_enabled")
+                conn.execute(text("ALTER TABLE users ADD COLUMN totp_enabled BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+
             # ── chat_messages.created_at (migration 0020) ──────────────────────
             message_cols = {c["name"] for c in inspector.get_columns("chat_messages")}
             if "created_at" not in message_cols:

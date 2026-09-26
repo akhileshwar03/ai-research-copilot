@@ -34,7 +34,7 @@ class StorageService(Protocol):
     def usage_summary(self) -> dict:
         """Real, live total size/object count, broken down by top-level key
         prefix (e.g. "branding/" background images vs. bare document uploads).
-        For the admin storage-usage panel -- see app/api/routes/admin.py."""
+        For the admin storage-usage panel -- see app/api/routes/admin/system.py."""
         ...
 
 

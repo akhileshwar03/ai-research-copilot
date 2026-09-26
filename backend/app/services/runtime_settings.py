@@ -230,6 +230,12 @@ def _defs() -> dict[str, SettingDef]:
             "embedded image, or unusually little extractable text) are ever sent, not every page.",
             "uploads",
         ),
+        "alert_error_rate_pct": SettingDef(
+            int, 1, 100, "Show an admin alert when the last hour's error rate reaches this percent", "platform"
+        ),
+        "alert_min_requests": SettingDef(
+            int, 1, 1000, "Minimum tool requests in the last hour before an error-rate alert can fire", "platform"
+        ),
         "retention_days": SettingDef(
             int, 0, 365, "Days documents and chats are kept before automatic cleanup (0 = keep forever)", "uploads"
         ),
@@ -378,6 +384,8 @@ def _env_defaults() -> dict[str, SettingValue]:
         "upload_rate_limit_per_minute": 10,
         "documents_rate_limit_per_minute": 60,
         "retention_days": s.retention_days,
+        "alert_error_rate_pct": 20,
+        "alert_min_requests": 10,
         "humanize_max_chars": 20000,
         "humanize_min_words": 30,
         "humanize_max_words": 3000,
