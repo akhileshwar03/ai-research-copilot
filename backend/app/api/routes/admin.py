@@ -399,8 +399,9 @@ def export_users_csv(
     buffer.seek(0)
     filename = f"querex-users-{_utcnow_naive().date().isoformat()}.csv"
     return StreamingResponse(
-        iter([buffer.getvalue()]),
-        media_type="text/csv",
+        # The BOM makes Excel read the file as UTF-8 (otherwise non-ASCII emails are garbled).
+        iter(["\ufeff" + buffer.getvalue()]),
+        media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

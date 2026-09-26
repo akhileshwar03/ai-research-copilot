@@ -903,6 +903,7 @@ def test_users_filters_export_revoke_and_activity(client, admin_headers, unique_
     csv_resp = client.get("/api/v1/admin/users/export", headers=admin_headers)
     assert csv_resp.status_code == 200
     assert csv_resp.headers["content-type"].startswith("text/csv")
+    assert csv_resp.content.startswith(b"\xef\xbb\xbf")
     assert unique_email in csv_resp.text
 
     other = "victim-" + unique_email
