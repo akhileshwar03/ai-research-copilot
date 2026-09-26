@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import relationship
 
@@ -11,7 +13,14 @@ class ChatSession(Base):
     title = Column(String, default="New Chat")
     pinned = Column(Boolean, default=False, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # `default` (Python side) as well as server_default: in production the column was added by migration 0006
+    # without a database default, so relying on server_default alone left every new session's created_at NULL.
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
     # JSON-encoded list of document stored_filenames this session's chat
     # retrieval is scoped to. Empty/null means "search all of the user's
     # documents" (the pre-existing default behaviour).

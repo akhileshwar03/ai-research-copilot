@@ -1420,3 +1420,25 @@ def test_admin_two_factor_locks_out_after_repeated_failures(client, admin_header
     locked = client.post("/api/v1/admin/2fa/enable", json={"code": "000000"}, headers=admin_headers)
     assert locked.status_code == 429
     admin_2fa.clear_failures(unique_email)
+
+
+def test_chat_session_gets_a_timestamp_without_a_database_default():
+    """Production's chat_sessions.created_at has no DB default (added by migration 0006), so the model
+    itself must supply the value or new sessions are NULL and never counted by analytics."""
+    from sqlalchemy import Column, DateTime, Integer, MetaData, Table
+    from sqlalchemy.orm import Session as OrmSession
+
+    assert ChatSession.__table__.c.created_at.default is not None
+    engine = TestingSessionLocal().get_bind()
+    meta = MetaData()
+    # Same table minus the server default, like production.
+    bare = Table("chat_sessions_bare", meta, Column("id", Integer, primary_key=True), Column("created_at", DateTime(timezone=True)))
+    meta.create_all(engine)
+    try:
+        with OrmSession(engine) as db:
+            value = ChatSession.__table__.c.created_at.default.arg(None)
+            db.execute(bare.insert().values(id=1, created_at=value))
+            db.commit()
+            assert db.execute(bare.select()).first().created_at is not None
+    finally:
+        meta.drop_all(engine)
