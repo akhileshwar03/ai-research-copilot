@@ -116,9 +116,8 @@ export async function exportChartPng({
 }: ChartPngExportOptions): Promise<void> {
   try {
     const chartSvg = container.querySelector<SVGSVGElement>("svg[data-chart-svg='true']");
-    const webglCanvas = chartSvg ? null : container.querySelector("canvas");
 
-    if (!webglCanvas && !chartSvg) {
+    if (!chartSvg) {
       toast.error("No visual chart found to export");
       return;
     }
@@ -189,21 +188,7 @@ export async function exportChartPng({
     const plotH = chartAreaHeight - 20;
 
     // Render chart graphic
-    if (webglCanvas) {
-      // 3D Canvas capture
-      const cw = webglCanvas.width;
-      const ch = webglCanvas.height;
-      const aspect = cw / ch;
-      let targetW = plotW;
-      let targetH = targetW / aspect;
-      if (targetH > plotH) {
-        targetH = plotH;
-        targetW = targetH * aspect;
-      }
-      const x = plotX + (plotW - targetW) / 2;
-      const y = headerHeight + (chartAreaHeight - targetH) / 2;
-      ctx.drawImage(webglCanvas, x, y, targetW, targetH);
-    } else if (chartSvg) {
+    if (chartSvg) {
       // 2D SVG capture
       const clonedSvg = chartSvg.cloneNode(true) as SVGSVGElement;
       clonedSvg.setAttribute("xmlns", "http://www.w3.org/2000/svg");

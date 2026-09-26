@@ -177,8 +177,8 @@ function NeonUsagePanel({ neon }: { neon: StorageUsage["neon"] }) {
           title="Table Storage Composition"
           subtitle="Relative byte weight by database table"
           data={neon.top_tables.map((t) => ({ label: t.name, value: t.bytes }))}
+          valueFormat="bytes"
           height={140}
-          allow3D={true}
           isComposition={true}
         />
       )}
@@ -225,8 +225,8 @@ function R2UsagePanel({ r2 }: { r2: StorageUsage["r2"] }) {
           title="Bucket Prefix Distribution"
           subtitle="Storage bytes by object namespace prefix"
           data={r2.by_prefix.map((p) => ({ label: p.prefix, value: p.bytes }))}
+          valueFormat="bytes"
           height={140}
-          allow3D={true}
           isComposition={true}
         />
       )}

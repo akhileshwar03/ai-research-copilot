@@ -31,5 +31,6 @@ class ChatMessage(Base):
     # Report B.pdf"), exactly as shown in the UI. Without this column, sources
     # only ever lived in-memory on the client and vanished on any reload.
     sources = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
 
     session = relationship("ChatSession", back_populates="messages")

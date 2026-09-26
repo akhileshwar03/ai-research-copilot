@@ -446,8 +446,6 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
           color="#059669"
           unit="users"
           height={140}
-          allow3D={false}
-          allowedViews={["bar", "line", "area"]}
         />
         <DynamicChart
           id="users-role-distribution"
@@ -462,7 +460,6 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
             },
           ]}
           height={140}
-          allow3D={true}
           isComposition={true}
         />
         <DynamicChart
@@ -474,7 +471,6 @@ export function UsersTab({ currentEmail }: { currentEmail: string | undefined })
             { label: "Suspended", value: stats?.suspended_users ?? 0, color: "#e11d48" },
           ]}
           height={140}
-          allow3D={true}
           isComposition={true}
         />
       </div>

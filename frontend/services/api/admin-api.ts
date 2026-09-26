@@ -1,6 +1,4 @@
-import { buildApiUrl } from "@/constants/config";
 import { apiRequest } from "@/services/api/client";
-import { getStoredTokens } from "@/shared/lib/token-storage";
 
 export interface MeResponse {
   email: string;
@@ -37,6 +35,25 @@ export interface AnalyticsDay {
   realtime_sessions: number;
   requests: number;
   errors: number;
+  active_users: number;
+}
+
+export interface AnalyticsHourlyCell {
+  weekday: number; // 0 = Monday, 6 = Sunday
+  hour: number; // 0..23 UTC
+  requests: number;
+  errors: number;
+}
+
+export interface AnalyticsEngagement {
+  window_days: number;
+  dau: number;
+  wau: number;
+  mau: number;
+  /** Days in the window with at least one active user. */
+  active_days: number;
+  avg_dau: number;
+  stickiness_pct: number;
 }
 
 export interface AnalyticsTool {
@@ -66,9 +83,12 @@ export interface AdminAnalytics {
   series: AnalyticsDay[];
   tools: AnalyticsTool[];
   top_users: { user_id: number; email: string; requests: number }[];
-  active_users_7d: number;
-  active_users_30d: number;
-  documents_by_status: Record<string, number>;
+  hourly: AnalyticsHourlyCell[];
+  latency: { avg_ms: number; p95_ms: number };
+  /** Distinct users with at least one request in the selected range. */
+  active_users: number;
+  /** DAU/WAU/MAU for the windows ending on the range's last day. */
+  engagement: AnalyticsEngagement;
   previous?: AdminAnalytics;
 }
 
@@ -151,6 +171,15 @@ export interface AdminDocumentList {
   total: number;
   skip: number;
   limit: number;
+}
+
+export type DocumentSizeClass = "all" | "small" | "medium" | "large";
+
+export interface AdminDocumentSummary {
+  count: number;
+  bytes: number;
+  by_status: Record<string, number>;
+  by_size: { small: number; medium: number; large: number };
 }
 
 export type SettingType = "int" | "float" | "bool" | "str";
@@ -313,15 +342,17 @@ export const adminApi = {
   users: (params: UserListParams = {}) =>
     apiRequest<AdminUserList>(`/admin/users${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, q: params.q, status: params.status, role: params.role, sort: params.sort })}`),
 
-  /** Download the (filtered) user list as CSV — returns a blob URL to trigger a browser download. */
-  exportUsers: async (params: Pick<UserListParams, "q" | "status" | "role"> = {}): Promise<Blob> => {
-    const { accessToken, tokenType } = getStoredTokens();
-    const response = await fetch(buildApiUrl(`/admin/users/export${qs({ q: params.q, status: params.status, role: params.role })}`), {
-      headers: accessToken ? { Authorization: `${tokenType} ${accessToken}` } : {},
-    });
-    if (!response.ok) throw new Error(`Export failed: ${response.status}`);
-    return response.blob();
-  },
+  /** Download the (filtered) user list as CSV. */
+  exportUsers: (params: Pick<UserListParams, "q" | "status" | "role"> = {}): Promise<Blob> =>
+    apiRequest<Blob>(`/admin/users/export${qs({ q: params.q, status: params.status, role: params.role })}`, {
+      responseType: "blob",
+    }),
+
+  /** Generate the narrative PDF report for a UTC date range (optionally for one user). */
+  downloadReport: (params: { start: string; end: string; user_id?: number }): Promise<Blob> =>
+    apiRequest<Blob>(`/admin/report.pdf${qs({ start: params.start, end: params.end, user_id: params.user_id })}`, {
+      responseType: "blob",
+    }),
 
   patchUser: (userId: number, patch: { is_active?: boolean; is_admin?: boolean; email_verified?: boolean }) =>
     apiRequest<{ message: string }>(`/admin/users/${userId}`, {
@@ -349,8 +380,13 @@ export const adminApi = {
 
   userActivity: (userId: number) => apiRequest<AdminUserActivity>(`/admin/users/${userId}/activity`),
 
-  documents: (params: { skip?: number; limit?: number; q?: string; status?: string } = {}) =>
-    apiRequest<AdminDocumentList>(`/admin/documents${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, q: params.q, status: params.status })}`),
+  documents: (params: { skip?: number; limit?: number; q?: string; status?: string; size?: DocumentSizeClass } = {}) =>
+    apiRequest<AdminDocumentList>(
+      `/admin/documents${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, q: params.q, status: params.status, size: params.size })}`,
+    ),
+
+  /** Whole-inventory totals, status breakdown and size classes (unaffected by list filters). */
+  documentSummary: () => apiRequest<AdminDocumentSummary>("/admin/documents/summary"),
 
   deleteDocument: (documentId: string) =>
     apiRequest<{ message: string }>(`/admin/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" }),

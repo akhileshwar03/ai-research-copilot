@@ -19,7 +19,7 @@ import {
   formatDuration,
 } from "@/features/admin/components/shared";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
-import { exportTableCsv } from "@/features/admin/lib/chart-export";
+import { useFullTableExport } from "@/features/admin/lib/use-table-export";
 
 const ACTION_FILTERS = [
   { value: "", label: "All actions" },
@@ -96,23 +96,18 @@ function AuditLog() {
   const entries = data?.entries ?? [];
   const total = data?.total ?? 0;
 
-  const handleExportAuditCsv = () => {
-    const headers = ["ID", "TimestampUTC", "AdminEmail", "Action", "Target", "Details"];
-    const rows = entries.map((e) => [
-      e.id,
-      e.created_at,
-      e.admin_email,
-      e.action,
-      e.target ?? "",
-      e.details ?? "",
-    ]);
-    exportTableCsv({
+  const { exporting, runExport } = useFullTableExport();
+  const handleExportAuditCsv = () =>
+    runExport({
+      fetchPage: async (skipRows, pageSize) => {
+        const result = await adminApi.auditLog({ action, skip: skipRows, limit: pageSize });
+        return { rows: result.entries, total: result.total };
+      },
+      headers: ["ID", "TimestampUTC", "AdminEmail", "Action", "Target", "Details"],
+      toRow: (e) => [e.id, e.created_at, e.admin_email, e.action, e.target ?? "", e.details ?? ""],
       filename: `querex-audit-log-${new Date().toISOString().slice(0, 10)}.csv`,
       title: "Admin Audit Trail",
-      headers,
-      rows,
     });
-  };
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
@@ -201,9 +196,10 @@ function AuditLog() {
           <Button
             size="sm"
             onClick={handleExportAuditCsv}
-            title="Export filtered audit logs to CSV"
+            disabled={exporting}
+            title="Export every audit entry matching the filter to CSV"
           >
-            CSV
+            {exporting ? "Exporting…" : "CSV"}
           </Button>
         </div>
       </div>
@@ -275,25 +271,27 @@ function UsageEvents() {
   const events = data?.events ?? [];
   const total = data?.total ?? 0;
 
-  const handleExportEventsCsv = () => {
-    const headers = ["ID", "TimestampUTC", "Tool", "UserEmail", "StatusCode", "Status", "DurationMs", "RequestID"];
-    const rows = events.map((e) => [
-      e.id,
-      e.created_at,
-      e.tool,
-      e.user_email ?? "anon",
-      e.status_code,
-      e.ok ? "SUCCESS" : "ERROR",
-      e.duration_ms,
-      e.request_id ?? "",
-    ]);
-    exportTableCsv({
+  const { exporting, runExport } = useFullTableExport();
+  const handleExportEventsCsv = () =>
+    runExport({
+      fetchPage: async (skipRows, pageSize) => {
+        const result = await adminApi.usageEvents({ tool, errors_only: errorsOnly, skip: skipRows, limit: pageSize });
+        return { rows: result.events, total: result.total };
+      },
+      headers: ["ID", "TimestampUTC", "Tool", "UserEmail", "StatusCode", "Status", "DurationMs", "RequestID"],
+      toRow: (e) => [
+        e.id,
+        e.created_at,
+        e.tool,
+        e.user_email ?? "anon",
+        e.status_code,
+        e.ok ? "SUCCESS" : "ERROR",
+        e.duration_ms,
+        e.request_id ?? "",
+      ],
       filename: `querex-usage-events-${new Date().toISOString().slice(0, 10)}.csv`,
       title: "Recent Tool Requests & Invocations",
-      headers,
-      rows,
     });
-  };
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
@@ -387,9 +385,10 @@ function UsageEvents() {
           <Button
             size="sm"
             onClick={handleExportEventsCsv}
-            title="Export filtered usage events to CSV"
+            disabled={exporting}
+            title="Export every tool request matching the filter to CSV"
           >
-            CSV
+            {exporting ? "Exporting…" : "CSV"}
           </Button>
         </div>
       </div>
@@ -513,7 +512,6 @@ export function AuditTab() {
           subtitle="Proportion of tool executions"
           data={toolData}
           height={140}
-          allow3D={true}
           isComposition={true}
         />
         <DynamicChart
@@ -524,8 +522,6 @@ export function AuditTab() {
           color="#e11d48"
           unit="errors"
           height={140}
-          allow3D={false}
-          allowedViews={["line", "bar", "area"]}
         />
         <DynamicChart
           id="audit-latency-benchmarks"
@@ -535,7 +531,6 @@ export function AuditTab() {
           color="#0284c7"
           unit="ms"
           height={140}
-          allow3D={false}
           allowedViews={["bar"]}
         />
       </div>

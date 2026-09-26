@@ -15,16 +15,15 @@ import platform
 import sys
 import time
 import uuid
-from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Query, UploadFile
 from PIL import Image
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy import case, extract, func, text
+from sqlalchemy import case, func, text
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import require_admin
@@ -41,11 +40,20 @@ from app.db.models.app_setting import AppSetting
 from app.db.models.chat_models import ChatMessage, ChatSession
 from app.db.models.document import Document
 from app.db.models.humanizer_run import HumanizerRun
-from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
+from app.db.models.realtime_models import RealtimeSession
 from app.db.models.usage_event import UsageEvent
 from app.db.models.user import RefreshToken, User
 from app.db.session import engine, get_db
+from app.services.admin_analytics import (
+    compute_analytics,
+    document_summary,
+    previous_range,
+    resolve_range,
+    resolve_user,
+    size_class_filter,
+)
 from app.services.admin_audit import record_admin_action
+from app.services.admin_report import build_report_pdf, collect_report_data, report_filename
 from app.services.ai_service import AIService
 from app.services.auth_service import AuthService
 from app.services.document_service import DocumentService
@@ -224,186 +232,6 @@ def get_stats(admin: User = Depends(require_admin), db: Session = Depends(get_db
 
 # ── Analytics ──────────────────────────────────────────────────────────────────
 
-def _daily_counts(db: Session, column, since: datetime, *filters, until: datetime | None = None) -> dict[str, int]:
-    """{YYYY-MM-DD: count} for rows whose *column* timestamp is >= since (and < until, if given)."""
-    bounds = [column >= since] + ([column < until] if until is not None else [])
-    rows = (
-        db.query(func.date(column), func.count())
-        .filter(*bounds, *filters)
-        .group_by(func.date(column))
-        .all()
-    )
-    out: dict[str, int] = {}
-    for day, n in rows:
-        key = day.isoformat() if isinstance(day, (date, datetime)) else str(day)[:10]
-        out[key] = int(n)
-    return out
-
-
-def _percentile(values: list[int], pct: float) -> int:
-    if not values:
-        return 0
-    ordered = sorted(values)
-    index = min(len(ordered) - 1, max(0, round(pct * (len(ordered) - 1))))
-    return int(ordered[index])
-
-
-def _hourly_activity(db: Session, since: datetime, until: datetime, user_id: int | None) -> list[dict]:
-    """Requests and errors bucketed by UTC weekday (Mon=0) and hour, non-empty cells only."""
-    column = UsageEvent.created_at
-    if db.get_bind().dialect.name == "postgresql":
-        column = func.timezone("UTC", column)
-    dow = extract("dow", column)
-    hour = extract("hour", column)
-    query = (
-        db.query(
-            dow,
-            hour,
-            func.count(UsageEvent.id),
-            func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)),
-        )
-        .filter(UsageEvent.created_at >= since, UsageEvent.created_at < until)
-        .group_by(dow, hour)
-    )
-    if user_id is not None:
-        query = query.filter(UsageEvent.user_id == user_id)
-    cells = [
-        {"weekday": (int(d) + 6) % 7, "hour": int(h), "requests": int(n), "errors": int(e or 0)}
-        for d, h, n, e in query.all()
-    ]
-    return sorted(cells, key=lambda c: (c["weekday"], c["hour"]))
-
-
-def _compute_analytics(db: Session, start: date, end: date, user_id: int | None, user_email: str | None) -> dict:
-    """Daily series and per-tool aggregates for the inclusive UTC day range
-    [start, end], optionally scoped to a single user."""
-    now = _utcnow_naive()
-    days = (end - start).days + 1
-    since = datetime(start.year, start.month, start.day)
-    until = since + timedelta(days=days)
-
-    def scoped(column, *extra):
-        return [*extra, column == user_id] if user_id is not None else list(extra)
-
-    signups = _daily_counts(db, User.created_at, since, *scoped(User.id), until=until)
-    documents = _daily_counts(
-        db, Document.created_at, since, *([Document.user_email == user_email] if user_id is not None else []), until=until
-    )
-    sessions = _daily_counts(db, ChatSession.created_at, since, *scoped(ChatSession.user_id), until=until)
-    humanizer_runs = _daily_counts(db, HumanizerRun.created_at, since, *scoped(HumanizerRun.user_id), until=until)
-    realtime_sessions = _daily_counts(
-        db, RealtimeSession.created_at, since, *scoped(RealtimeSession.user_id), until=until
-    )
-    requests = _daily_counts(db, UsageEvent.created_at, since, *scoped(UsageEvent.user_id), until=until)
-    errors = _daily_counts(
-        db, UsageEvent.created_at, since, *scoped(UsageEvent.user_id, UsageEvent.ok.is_(False)), until=until
-    )
-
-    # Chat messages have no timestamp of their own — attribute them to their
-    # session's creation day, which is exact for the (dominant) single-day
-    # conversations and a close approximation otherwise.
-    message_rows = (
-        db.query(func.date(ChatSession.created_at), func.count(ChatMessage.id))
-        .join(ChatMessage, ChatMessage.session_id == ChatSession.id)
-        .filter(ChatSession.created_at >= since, ChatSession.created_at < until, *scoped(ChatSession.user_id))
-        .group_by(func.date(ChatSession.created_at))
-        .all()
-    )
-    messages = {
-        (d.isoformat() if isinstance(d, (date, datetime)) else str(d)[:10]): int(n) for d, n in message_rows
-    }
-
-    series = []
-    for offset in range(days):
-        day = (since + timedelta(days=offset)).date().isoformat()
-        series.append(
-            {
-                "date": day,
-                "signups": signups.get(day, 0),
-                "documents": documents.get(day, 0),
-                "sessions": sessions.get(day, 0),
-                "messages": messages.get(day, 0),
-                "humanizer_runs": humanizer_runs.get(day, 0),
-                "realtime_sessions": realtime_sessions.get(day, 0),
-                "requests": requests.get(day, 0),
-                "errors": errors.get(day, 0),
-            }
-        )
-
-    # Per-tool aggregates. Durations are pulled for percentile math — capped
-    # so a very busy window can't turn this into a multi-megabyte fetch.
-    events = (
-        db.query(UsageEvent.tool, UsageEvent.ok, UsageEvent.duration_ms, UsageEvent.user_id)
-        .filter(UsageEvent.created_at >= since, UsageEvent.created_at < until, *scoped(UsageEvent.user_id))
-        .order_by(UsageEvent.created_at.desc())
-        .limit(20000)
-        .all()
-    )
-    by_tool: dict[str, dict] = defaultdict(lambda: {"requests": 0, "errors": 0, "durations": [], "users": set()})
-    per_user: dict[int, int] = defaultdict(int)
-    for tool, ok, duration_ms, event_user_id in events:
-        bucket = by_tool[tool]
-        bucket["requests"] += 1
-        if not ok:
-            bucket["errors"] += 1
-        bucket["durations"].append(int(duration_ms or 0))
-        if event_user_id is not None:
-            bucket["users"].add(event_user_id)
-            per_user[event_user_id] += 1
-
-    tools = []
-    for tool in sorted(by_tool, key=lambda t: -by_tool[t]["requests"]):
-        b = by_tool[tool]
-        durations = b["durations"]
-        tools.append(
-            {
-                "tool": tool,
-                "label": TOOL_LABELS.get(tool, tool),
-                "requests": b["requests"],
-                "errors": b["errors"],
-                "error_rate": round(b["errors"] / b["requests"], 4) if b["requests"] else 0.0,
-                "avg_ms": int(sum(durations) / len(durations)) if durations else 0,
-                "p95_ms": _percentile(durations, 0.95),
-                "users": len(b["users"]),
-            }
-        )
-
-    top_ids = sorted(per_user, key=lambda u: -per_user[u])[:10]
-    emails = dict(db.query(User.id, User.email).filter(User.id.in_(top_ids)).all()) if top_ids else {}
-    top_users = [
-        {"user_id": uid, "email": emails.get(uid, "(deleted)"), "requests": per_user[uid]} for uid in top_ids
-    ]
-
-    def active_since(delta: timedelta) -> int:
-        return int(
-            db.query(func.count(func.distinct(UsageEvent.user_id)))
-            .filter(UsageEvent.created_at >= now - delta, *scoped(UsageEvent.user_id, UsageEvent.user_id.isnot(None)))
-            .scalar()
-            or 0
-        )
-
-    doc_status_query = db.query(Document.upload_status, func.count(Document.id))
-    if user_id is not None:
-        doc_status_query = doc_status_query.filter(Document.user_email == user_email)
-
-    return {
-        "days": days,
-        "since": start.isoformat(),
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "user_id": user_id,
-        "series": series,
-        "hourly": _hourly_activity(db, since, until, user_id),
-        "tools": tools,
-        "top_users": top_users,
-        "active_users_7d": active_since(timedelta(days=7)),
-        "active_users_30d": active_since(timedelta(days=30)),
-        "documents_by_status": {
-            status: int(n) for status, n in doc_status_query.group_by(Document.upload_status).all()
-        },
-    }
-
-
 @router.get("/analytics")
 def get_analytics(
     days: int = Query(default=30, ge=1, le=365),
@@ -414,33 +242,49 @@ def get_analytics(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Daily time series and per-tool aggregates.
+    """Daily time series, per-tool aggregates, and engagement for a UTC day range.
 
     The window is [start, end] when either is given (a missing end defaults to
     today, a missing start to end - days + 1), otherwise the last *days* days.
     """
-    today = _utcnow_naive().date()
-    range_end = end or today
-    range_start = start or (range_end - timedelta(days=days - 1))
-    if range_start > range_end:
-        raise AppError(code="INVALID_RANGE", message="start must be on or before end.", status_code=400)
-    if (range_end - range_start).days + 1 > 366:
-        raise AppError(code="RANGE_TOO_LARGE", message="Date range cannot exceed 366 days.", status_code=400)
+    range_start, range_end = resolve_range(days, start, end, _utcnow_naive().date())
+    user_email = resolve_user(db, user_id)
 
-    user_email = None
-    if user_id is not None:
-        user_email = db.query(User.email).filter(User.id == user_id).scalar()
-        if user_email is None:
-            raise AppError(code="USER_NOT_FOUND", message="User not found", status_code=404)
-
-    result = _compute_analytics(db, range_start, range_end, user_id, user_email)
+    result = compute_analytics(db, range_start, range_end, user_id, user_email)
     if compare:
-        span = (range_end - range_start).days + 1
-        previous_end = range_start - timedelta(days=1)
-        result["previous"] = _compute_analytics(
-            db, previous_end - timedelta(days=span - 1), previous_end, user_id, user_email
-        )
+        previous_start, previous_end = previous_range(range_start, range_end)
+        result["previous"] = compute_analytics(db, previous_start, previous_end, user_id, user_email)
     return result
+
+
+@router.get("/report.pdf")
+def download_report(
+    days: int = Query(default=30, ge=1, le=365),
+    start: date | None = Query(default=None, description="Inclusive UTC start day, YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="Inclusive UTC end day, YYYY-MM-DD"),
+    user_id: int | None = Query(default=None, ge=1, description="Report on a single user instead of the platform"),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """A narrative PDF report (charts, tables, commentary) for a UTC date range."""
+    range_start, range_end = resolve_range(days, start, end, _utcnow_naive().date())
+    data = collect_report_data(db, range_start, range_end, user_id, admin.email)
+    pdf = build_report_pdf(data)
+    record_admin_action(
+        db,
+        admin_email=admin.email,
+        action="report.export",
+        target=data["user_email"],
+        details={"start": range_start.isoformat(), "end": range_end.isoformat(), "bytes": len(pdf)},
+    )
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{report_filename(range_start, range_end, user_id)}"',
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 # ── User management ────────────────────────────────────────────────────────────
@@ -837,12 +681,19 @@ def get_user_activity(
 
 # ── Document management ────────────────────────────────────────────────────────
 
+@router.get("/documents/summary")
+def get_documents_summary(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Totals, status breakdown and size classes for every stored document (unaffected by list filters)."""
+    return document_summary(db)
+
+
 @router.get("/documents", response_model=AdminDocumentList)
 def list_all_documents(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
     q: str = Query(default="", description="Filter by document name or owner email"),
     status: str = Query(default="all", description="all | ready | processing | failed | empty"),
+    size: Literal["all", "small", "medium", "large"] = Query(default="all", description="Size class"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -852,6 +703,9 @@ def list_all_documents(
         query = query.filter((Document.original_filename.ilike(pattern)) | (Document.user_email.ilike(pattern)))
     if status != "all":
         query = query.filter(Document.upload_status == status)
+    size_clause = size_class_filter(size)
+    if size_clause is not None:
+        query = query.filter(size_clause)
     total = query.count()
     docs = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
     return AdminDocumentList(

@@ -9,6 +9,8 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 type RequestOptions = RequestInit & {
   skipAuth?: boolean;
   skipRefresh?: boolean;
+  /** "blob" returns the raw response body (file downloads) instead of parsing JSON. */
+  responseType?: "json" | "blob";
   /** Internal — set on the recursive retry-after-refresh call so the retry
    *  is tagged with the same request_id as the original attempt, matching
    *  the backend's own view that this is one logical request, not two.
@@ -87,7 +89,7 @@ async function parseError(response: Response, path: string, requestId: string): 
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { skipAuth, skipRefresh, headers, requestId: incomingRequestId, ...rest } = options;
+  const { skipAuth, skipRefresh, headers, requestId: incomingRequestId, responseType, ...rest } = options;
   const requestId = incomingRequestId ?? newRequestId();
   const { accessToken, tokenType } = getStoredTokens();
 
@@ -119,6 +121,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (response.status === 204) {
     return undefined as T;
+  }
+
+  if (responseType === "blob") {
+    return (await response.blob()) as T;
   }
 
   return (await response.json()) as T;

@@ -35,4 +35,4 @@ slowapi==0.1.9
 
 pytest
 pytest-asyncio
-reportlab==4.2.5  # test-only: generates PDFs with known geometry for paper-analyzer tests
+reportlab==4.2.5  # admin PDF report; also generates PDFs with known geometry for paper-analyzer tests

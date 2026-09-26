@@ -88,15 +88,33 @@ export function generateCommandInsights(
       tone: "warn",
       metric: `${(overallErrorRate * 100).toFixed(1)}% err rate`,
     });
+  } else if (totalRequests > 0 && overallErrorRate > 0.05) {
+    insights.push({
+      id: "error-rate-action",
+      category: "action",
+      title: "Error Rate Above 5%",
+      description: `${totalErrors.toLocaleString()} of ${totalRequests.toLocaleString()} requests failed, spread across tools with too little volume to flag individually. Check the Audit tab.`,
+      tone: "warn",
+      metric: `${(overallErrorRate * 100).toFixed(1)}% err rate`,
+    });
+  } else if (totalRequests > 0 && overallErrorRate > 0.02) {
+    insights.push({
+      id: "error-rate-watch",
+      category: "reliability",
+      title: "Error Rate Slightly Elevated",
+      description: `${totalErrors.toLocaleString()} of ${totalRequests.toLocaleString()} requests failed. No single tool is above the 5% threshold.`,
+      tone: "info",
+      metric: `${(overallErrorRate * 100).toFixed(1)}% err rate`,
+    });
   } else if (totalRequests > 0) {
     const successRate = ((1 - overallErrorRate) * 100).toFixed(1);
     insights.push({
       id: "system-reliability",
       category: "reliability",
-      title: "Clean Operational Scorecard",
-      description: `All AI models and ingestion pipelines are healthy with a ${successRate}% success rate across ${totalRequests.toLocaleString()} calls.`,
+      title: "Reliable Operations",
+      description: `${successRate}% of ${totalRequests.toLocaleString()} tool requests succeeded, with every tool under a 2% error rate.`,
       tone: "good",
-      metric: `${successRate}% uptime`,
+      metric: `${successRate}% success`,
     });
   }
 
@@ -105,16 +123,19 @@ export function generateCommandInsights(
     const prevRequests = previous.series.reduce((sum, d) => sum + d.requests, 0);
     const prevSignups = previous.series.reduce((sum, d) => sum + d.signups, 0);
 
-    const reqDelta = prevRequests > 0 ? Math.round(((totalRequests - prevRequests) / prevRequests) * 100) : 0;
-    const isPositive = reqDelta >= 0;
+    const reqDelta = prevRequests > 0 ? Math.round(((totalRequests - prevRequests) / prevRequests) * 100) : null;
+    const isPositive = reqDelta === null ? totalRequests > 0 : reqDelta >= 0;
 
     insights.push({
       id: "period-momentum",
       category: "growth",
-      title: `Momentum: ${isPositive ? "+" : ""}${reqDelta}% vs Previous Period`,
+      title:
+        reqDelta === null
+          ? "New Activity vs Previous Period"
+          : `Momentum: ${isPositive ? "+" : ""}${reqDelta}% vs Previous Period`,
       description: `${totalRequests.toLocaleString()} requests vs ${prevRequests.toLocaleString()} in the prior period. New accounts changed from ${prevSignups} to ${totalSignups}.`,
       tone: isPositive ? "good" : "neutral",
-      metric: `${isPositive ? "+" : ""}${reqDelta}%`,
+      metric: reqDelta === null ? "new" : `${isPositive ? "+" : ""}${reqDelta}%`,
     });
   } else if (totalSignups > 0) {
     insights.push({

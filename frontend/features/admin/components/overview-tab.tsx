@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import { adminApi } from "@/services/api/admin-api";
 import {
@@ -15,7 +16,6 @@ import {
 } from "@/features/admin/components/shared";
 import { DateRangePicker } from "@/features/admin/components/date-range-picker";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
-import { HourlyHeatmap } from "@/features/admin/components/hourly-heatmap";
 import { UserAnalyticsDrawer } from "@/features/admin/components/user-analytics-drawer";
 import {
   type DateRangePreset,
@@ -24,8 +24,7 @@ import {
   getPresetDateRange,
 } from "@/features/admin/lib/date-range-utils";
 import { generateCommandInsights } from "@/features/admin/lib/insights-generator";
-import { exportTableCsv } from "@/features/admin/lib/chart-export";
-import type { AdminAnalyticsWithHourly } from "@/features/admin/lib/types";
+import { downloadBlob } from "@/features/admin/lib/chart-export";
 
 function MiniSparkline({ data, color }: { data: number[]; color: string }) {
   if (data.length < 2) return null;
@@ -138,7 +137,7 @@ export function OverviewTab() {
     retry: false,
   });
 
-  const analytics = rawAnalytics as AdminAnalyticsWithHourly | undefined;
+  const analytics = rawAnalytics;
 
   // Track freshness timer derived from clock and query update time
   const secondsAgo = dataUpdatedAt ? Math.max(0, Math.floor((now - dataUpdatedAt) / 1000)) : 0;
@@ -183,55 +182,39 @@ export function OverviewTab() {
   const maxToolRequests = Math.max(1, ...(analytics?.tools ?? []).map((t) => t.requests));
   const maxUserRequests = Math.max(1, ...(analytics?.top_users ?? []).map((u) => u.requests));
 
-  // DAU / WAU / MAU Stickiness
-  const dau = stats?.active_users_24h ?? 0;
-  const wau = analytics?.active_users_7d ?? 0;
-  const mau = analytics?.active_users_30d ?? stats?.active_users ?? 0;
-  const stickinessPct = mau > 0 ? Math.round((dau / mau) * 1000) / 10 : 0;
+  // Active users (range-aware) and engagement (windows ending on the range's last day)
+  const activeUsers = analytics?.active_users ?? 0;
+  const activeDelta = calculateDelta(activeUsers, compare ? (analytics?.previous?.active_users ?? 0) : null);
+  const activeSeries = useMemo(() => series.map((d) => d.active_users), [series]);
+  const avgDailyActive = series.length > 0 ? activeSeries.reduce((a, b) => a + b, 0) / series.length : 0;
+  const peakDailyActive = Math.max(0, ...activeSeries);
+  const totalSessions = useMemo(() => series.reduce((s, d) => s + d.sessions, 0), [series]);
+  const engagement = analytics?.engagement;
 
-  // Platform Reliability Metrics
-  const avgToolDuration = useMemo(() => {
-    const tools = analytics?.tools ?? [];
-    if (tools.length === 0) return 0;
-    const weightedSum = tools.reduce((s, t) => s + t.avg_ms * t.requests, 0);
-    const sumReqs = tools.reduce((s, t) => s + t.requests, 0);
-    return sumReqs > 0 ? Math.round(weightedSum / sumReqs) : 0;
-  }, [analytics?.tools]);
-
-  const p95ToolDuration = useMemo(() => {
-    const tools = analytics?.tools ?? [];
-    if (tools.length === 0) return 0;
-    return Math.max(...tools.map((t) => t.p95_ms));
-  }, [analytics?.tools]);
+  // Latency comes from the backend (exact average, p95 over recent requests), not averaged client-side
+  const avgLatency = analytics?.latency.avg_ms ?? 0;
+  const p95Latency = analytics?.latency.p95_ms ?? 0;
+  const slowestTool = useMemo(
+    () => [...(analytics?.tools ?? [])].sort((a, b) => b.p95_ms - a.p95_ms)[0],
+    [analytics?.tools],
+  );
 
   const dateRangeLabel = formatRangeLabel(start, end);
   const userScopeLabel = scopedEmail || (scopedUserId ? `User #${scopedUserId}` : "All Users");
 
-  // Executive Telemetry Report Download
-  const handleDownloadExecutiveReport = () => {
-    const headers = ["Metric", "PeriodTotal", "PreviousTotal", "DeltaPct", "Notes"];
-    const rows = [
-      ["Tool Requests", totalRequests, prevRequests, reqDelta.pct !== null ? `${reqDelta.pct}%` : "—", "API and AI tool calls"],
-      ["Execution Errors", totalErrors, prevErrors, errDelta.pct !== null ? `${errDelta.pct}%` : "—", `${errorRate.toFixed(2)}% overall error rate`],
-      ["New Sign-ups", totalSignups, prevSignups, signupDelta.pct !== null ? `${signupDelta.pct}%` : "—", "New registered accounts"],
-      ["Chat Messages", totalMessages, prevMessages, msgDelta.pct !== null ? `${msgDelta.pct}%` : "—", "Copilot interactive queries"],
-      ["Document Uploads", totalDocuments, prevDocuments, docDelta.pct !== null ? `${docDelta.pct}%` : "—", "Ingested PDF documents"],
-      ["DAU (24h)", dau, "—", "—", "Active unique users in last 24h"],
-      ["WAU (7d)", wau, "—", "—", "Active unique users in last 7d"],
-      ["MAU (30d)", mau, "—", "—", "Active unique users in last 30d"],
-      ["DAU/MAU Stickiness", `${stickinessPct}%`, "—", "—", "Engagement retention ratio"],
-      ["Average Tool Latency", `${avgToolDuration}ms`, "—", "—", "Weighted avg latency"],
-      ["p95 Tool Latency", `${p95ToolDuration}ms`, "—", "—", "Peak 95th percentile latency"],
-    ];
-
-    exportTableCsv({
-      filename: `querex-executive-report-${new Date().toISOString().slice(0, 10)}.csv`,
-      title: "Executive Operations & Reliability Report",
-      dateRange: dateRangeLabel,
-      scope: userScopeLabel,
-      headers,
-      rows,
-    });
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const handleDownloadReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      const blob = await adminApi.downloadReport({ start, end, user_id: scopedUserId });
+      const scopeSuffix = scopedUserId ? `-user-${scopedUserId}` : "";
+      downloadBlob(blob, `querex-report-${start}_to_${end}${scopeSuffix}.pdf`);
+      toast.success("PDF report downloaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not generate the report");
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   return (
@@ -318,17 +301,18 @@ export function OverviewTab() {
             <option value="paused">Paused</option>
           </select>
 
-          {/* Download Executive Telemetry Report Button */}
+          {/* PDF report */}
           <button
             type="button"
-            onClick={handleDownloadExecutiveReport}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-1 font-data text-[11.5px] font-bold text-[var(--text-primary)] shadow-xs transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]"
-            title="Download executive telemetry summary CSV report"
+            onClick={handleDownloadReport}
+            disabled={isGeneratingReport}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-1 font-data text-[11.5px] font-bold text-[var(--text-primary)] shadow-xs transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] disabled:cursor-wait disabled:opacity-60"
+            title="Download a detailed PDF report (charts, tables and commentary) for the selected range and scope"
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
             </svg>
-            Export Report
+            {isGeneratingReport ? "Generating PDF…" : "Download PDF report"}
           </button>
         </div>
       </div>
@@ -359,22 +343,28 @@ export function OverviewTab() {
               {compare && reqDelta.pct !== null ? (
                 <DeltaBadge change={reqDelta.diff} amount={`${Math.abs(reqDelta.pct ?? 0)}%`} suffix="vs prior" />
               ) : (
-                <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.requests_24h ?? 0} in 24h</p>
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">
+                  avg {series.length > 0 ? Math.round(totalRequests / series.length).toLocaleString() : 0}/day
+                </p>
               )}
             </div>
 
-            {/* Active Users */}
+            {/* Active Users (distinct users with a request in the selected range) */}
             <div className="glass-card flex flex-col justify-between rounded-xl border border-[var(--border-subtle)] p-3.5 hover:border-[var(--border-strong)] transition-all">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Active (7d)</span>
-                <MiniSparkline data={series.map((d) => d.signups * 2 + (d.requests % 5))} color="#059669" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Active users</span>
+                <MiniSparkline data={activeSeries} color="#059669" />
               </div>
               <p className="mt-2 font-data text-2xl font-bold text-emerald-700 dark-theme:text-emerald-400">
-                {analytics?.active_users_7d ?? stats?.active_users_24h ?? 0}
+                {activeUsers.toLocaleString()}
               </p>
-              <p className="mt-1 text-[11px] text-zinc-500 font-data">
-                {analytics?.active_users_30d ?? 0} in 30d window
-              </p>
+              {compare && activeDelta.pct !== null ? (
+                <DeltaBadge change={activeDelta.diff} amount={`${Math.abs(activeDelta.pct ?? 0)}%`} suffix="vs prior" />
+              ) : (
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">
+                  avg {avgDailyActive.toFixed(1)}/day · peak {peakDailyActive}
+                </p>
+              )}
             </div>
 
             {/* Error Rate */}
@@ -402,7 +392,9 @@ export function OverviewTab() {
                   higherIsBetter={false}
                 />
               ) : (
-                <p className="mt-1 text-[11px] text-zinc-500 font-data">{totalErrors} errors logged</p>
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">
+                  {totalErrors.toLocaleString()} of {totalRequests.toLocaleString()} requests
+                </p>
               )}
             </div>
 
@@ -418,7 +410,9 @@ export function OverviewTab() {
               {compare && signupDelta.pct !== null ? (
                 <DeltaBadge change={signupDelta.diff} amount={`${Math.abs(signupDelta.pct ?? 0)}%`} suffix="growth" />
               ) : (
-                <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.total_users ?? 0} total users</p>
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">
+                  {scopedUserId ? "this account" : `${(stats?.total_users ?? 0).toLocaleString()} accounts in total`}
+                </p>
               )}
             </div>
 
@@ -434,7 +428,7 @@ export function OverviewTab() {
               {compare && msgDelta.pct !== null ? (
                 <DeltaBadge change={msgDelta.diff} amount={`${Math.abs(msgDelta.pct ?? 0)}%`} suffix="volume" />
               ) : (
-                <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.total_messages ?? 0} total msgs</p>
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">{totalSessions.toLocaleString()} sessions</p>
               )}
             </div>
 
@@ -450,40 +444,41 @@ export function OverviewTab() {
               {compare && docDelta.pct !== null ? (
                 <DeltaBadge change={docDelta.diff} amount={`${Math.abs(docDelta.pct ?? 0)}%`} suffix="uploads" />
               ) : (
-                <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats ? formatBytes(stats.total_storage_bytes) : "—"}</p>
+                <p className="mt-1 text-[11px] text-zinc-500 font-data">
+                  {scopedUserId ? "uploaded in range" : stats ? `${formatBytes(stats.total_storage_bytes)} stored` : "—"}
+                </p>
               )}
             </div>
           </div>
 
           {/* Retention & Reliability Command Scorecard Bar */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {/* DAU/MAU Stickiness Ratio */}
+            {/* Engagement: DAU/MAU stickiness (windows end on the range's last day) */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  DAU / MAU Stickiness
-                </span>
+                <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">Stickiness</span>
                 <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-data text-[10px] font-bold text-zinc-400">
-                  Engagement
+                  DAU / MAU
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="font-data text-2xl font-bold text-[var(--text-primary)]">
-                  {stickinessPct}%
+                  {(engagement?.stickiness_pct ?? 0).toFixed(1)}%
                 </span>
                 <span className="text-xs text-zinc-500 font-data">
-                  {dau} DAU · {mau} MAU
+                  avg {engagement?.avg_dau ?? 0} DAU · {engagement?.mau ?? 0} MAU
                 </span>
               </div>
               <div className="mt-2">
-                <HBar value={dau} max={Math.max(1, mau)} color="#059669" />
+                <HBar value={engagement?.stickiness_pct ?? 0} max={100} color="#059669" />
               </div>
               <p className="mt-2 text-[11px] text-zinc-500">
-                Measures daily recurring audience engagement across 30-day active population.
+                Average daily users divided by monthly users, over the 30 days ending {end}. {engagement?.wau ?? 0} users
+                were active in the final 7 days.
               </p>
             </div>
 
-            {/* Platform Tool Success Rate */}
+            {/* Tool success rate */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
@@ -494,11 +489,20 @@ export function OverviewTab() {
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
-                <span className="font-data text-2xl font-bold text-emerald-700 dark-theme:text-emerald-400">
-                  {totalRequests > 0 ? (((totalRequests - totalErrors) / totalRequests) * 100).toFixed(1) : "100.0"}%
+                <span
+                  className={`font-data text-2xl font-bold ${
+                    errorRate > 5
+                      ? "text-rose-700 dark-theme:text-rose-400"
+                      : errorRate > 2
+                        ? "text-amber-700 dark-theme:text-amber-400"
+                        : "text-emerald-700 dark-theme:text-emerald-400"
+                  }`}
+                >
+                  {totalRequests > 0 ? (100 - errorRate).toFixed(1) : "—"}
+                  {totalRequests > 0 && "%"}
                 </span>
                 <span className="text-xs text-zinc-500 font-data">
-                  {totalRequests - totalErrors} ok / {totalRequests} reqs
+                  {(totalRequests - totalErrors).toLocaleString()} ok / {totalRequests.toLocaleString()} reqs
                 </span>
               </div>
               <div className="mt-2">
@@ -509,55 +513,58 @@ export function OverviewTab() {
                 />
               </div>
               <p className="mt-2 text-[11px] text-zinc-500">
-                Inference, search, and transformation executions completed with zero exceptions.
+                {totalRequests === 0
+                  ? "No tool requests in this range."
+                  : totalErrors === 0
+                    ? "Every tool request in this range completed successfully."
+                    : `${totalErrors.toLocaleString()} tool request${totalErrors === 1 ? "" : "s"} failed. The Audit tab shows which tools and status codes.`}
               </p>
             </div>
 
-            {/* Average Response Latency */}
+            {/* Average latency (exact mean from the backend) */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
                   Average Latency
                 </span>
                 <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-data text-[10px] font-bold text-zinc-400">
-                  p50 Mean
+                  Mean
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="font-data text-2xl font-bold text-[var(--text-primary)]">
-                  {formatDuration(avgToolDuration)}
+                  {formatDuration(avgLatency)}
                 </span>
-                <span className="text-xs text-zinc-500 font-data">across tools</span>
+                <span className="text-xs text-zinc-500 font-data">per request</span>
               </div>
               <div className="mt-2">
-                <HBar value={avgToolDuration} max={3000} color="#0284c7" />
+                <HBar value={avgLatency} max={Math.max(1, p95Latency)} color="#0284c7" />
               </div>
               <p className="mt-2 text-[11px] text-zinc-500">
-                Weighted average execution latency across all AI tool invocations.
+                Mean time to finish a request, including streamed AI responses. The bar shows the mean against the p95.
               </p>
             </div>
 
-            {/* 95th Percentile Response Latency */}
+            {/* p95 latency */}
             <div className="glass-card rounded-xl border border-[var(--border-subtle)] p-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500">
-                  Tail Latency (p95)
+                  Slowest 5%
                 </span>
                 <span className="rounded bg-[var(--surface-2)] px-1.5 py-0.5 font-data text-[10px] font-bold text-zinc-400">
-                  SLA Ceiling
+                  p95
                 </span>
               </div>
               <div className="mt-2 flex items-baseline gap-2">
                 <span className="font-data text-2xl font-bold text-[var(--marketing-accent-text)]">
-                  {formatDuration(p95ToolDuration)}
+                  {formatDuration(p95Latency)}
                 </span>
-                <span className="text-xs text-zinc-500 font-data">max p95</span>
+                <span className="text-xs text-zinc-500 font-data">or longer</span>
               </div>
-              <div className="mt-2">
-                <HBar value={p95ToolDuration} max={8000} color="#f59e0b" />
-              </div>
-              <p className="mt-2 text-[11px] text-zinc-500">
-                95% of requests finish faster than this threshold even during peak load.
+              <p className="mt-3 text-[11px] text-zinc-500">
+                {slowestTool
+                  ? `95% of requests finished faster than this. Slowest tool: ${slowestTool.label} (p95 ${formatDuration(slowestTool.p95_ms)}).`
+                  : "No requests in this range."}
               </p>
             </div>
           </div>
@@ -607,14 +614,7 @@ export function OverviewTab() {
             </div>
           </div>
 
-          {/* 7x24 Weekday x Hour Heatmap Card */}
-          <HourlyHeatmap
-            hourly={analytics?.hourly}
-            dateRange={dateRangeLabel}
-            scope={userScopeLabel}
-          />
-
-          {/* 6 Dynamic 3D/2D Switchable Charts Grid */}
+          {/* 6 Switchable Charts Grid */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -622,7 +622,7 @@ export function OverviewTab() {
                   Operational Trajectory
                 </h2>
                 <p className="text-[12px] text-zinc-500 dark-theme:text-zinc-400">
-                  Interactive high-DPI 2D area/line/bars, GitHub activity calendar, and genuine 3D visualizers with click-to-pin and export capabilities
+                  Switch any chart between area, bars, donut and activity calendar; click to pin values and export as PNG or CSV
                 </p>
               </div>
             </div>
@@ -638,7 +638,7 @@ export function OverviewTab() {
                 </div>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <div className="grid items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
                 <DynamicChart
                   id="chart-requests"
                   metricKey="requests"

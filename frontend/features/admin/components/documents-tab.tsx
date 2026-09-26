@@ -20,7 +20,7 @@ import {
   statusTone,
 } from "@/features/admin/components/shared";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
-import { exportTableCsv } from "@/features/admin/lib/chart-export";
+import { useFullTableExport } from "@/features/admin/lib/use-table-export";
 
 const STATUSES = ["all", "ready", "processing", "failed", "empty"] as const;
 
@@ -39,7 +39,7 @@ export function DocumentsTab() {
   const [skip, setSkip] = useState(0);
   const limit = 50;
 
-  const params = { skip, limit, q: search, status };
+  const params = { skip, limit, q: search, status, size: sizeFilter };
   const { data, isLoading, isFetching, refetch } = useQuery({
     queryKey: ["admin-documents", params],
     queryFn: () => adminApi.documents(params),
@@ -53,8 +53,15 @@ export function DocumentsTab() {
     refetchInterval: 120_000,
   });
 
+  const { data: summary } = useQuery({
+    queryKey: ["admin-documents-summary"],
+    queryFn: () => adminApi.documentSummary(),
+    refetchInterval: 60_000,
+  });
+
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin-documents"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-documents-summary"] });
     queryClient.invalidateQueries({ queryKey: ["admin-stats"] });
     queryClient.invalidateQueries({ queryKey: ["admin-audit"] });
   };
@@ -90,38 +97,34 @@ export function DocumentsTab() {
   const rawDocuments = data?.documents ?? [];
   const total = data?.total ?? 0;
 
-  const documents = rawDocuments.filter((doc) => {
-    if (sizeFilter === "small") return doc.size_bytes < 1024 * 1024;
-    if (sizeFilter === "medium") return doc.size_bytes >= 1024 * 1024 && doc.size_bytes <= 10 * 1024 * 1024;
-    if (sizeFilter === "large") return doc.size_bytes > 10 * 1024 * 1024;
-    return true;
-  });
+  const documents = rawDocuments;
 
   const pageBytes = rawDocuments.reduce((acc, d) => acc + (d.size_bytes || 0), 0);
 
   const cellPy = density === "compact" ? "py-1.5" : "py-3";
 
-  const handleExportCsv = () => {
-    const headers = ["ID", "Filename", "OwnerEmail", "Status", "SizeBytes", "PageCount", "UploadedAt"];
-    const rows = documents.map((doc) => [
-      doc.id,
-      doc.name,
-      doc.owner_email ?? "",
-      doc.upload_status,
-      doc.size_bytes,
-      doc.page_count ?? "",
-      doc.created_at ?? "",
-    ]);
-    exportTableCsv({
+  const { exporting, runExport } = useFullTableExport();
+  const handleExportCsv = () =>
+    runExport({
+      fetchPage: async (skipRows, pageSize) => {
+        const result = await adminApi.documents({ skip: skipRows, limit: pageSize, q: search, status, size: sizeFilter });
+        return { rows: result.documents, total: result.total };
+      },
+      headers: ["ID", "Filename", "OwnerEmail", "Status", "SizeBytes", "PageCount", "UploadedAt"],
+      toRow: (doc) => [
+        doc.id,
+        doc.name,
+        doc.owner_email ?? "",
+        doc.upload_status,
+        doc.size_bytes,
+        doc.page_count ?? "",
+        doc.created_at ?? "",
+      ],
       filename: `querex-documents-${new Date().toISOString().slice(0, 10)}.csv`,
       title: "Documents & Embeddings Ingestion",
-      headers,
-      rows,
     });
-  };
 
-  const statusCounts = analytics?.documents_by_status ?? {};
-  const statusData = Object.entries(statusCounts).map(([k, v]) => ({
+  const statusData = Object.entries(summary?.by_status ?? {}).map(([k, v]) => ({
     label: k,
     value: v,
     color:
@@ -134,15 +137,10 @@ export function DocumentsTab() {
             : "#71717a",
   }));
 
-  const smallCount = rawDocuments.filter((d) => d.size_bytes < 1024 * 1024).length;
-  const medCount = rawDocuments.filter(
-    (d) => d.size_bytes >= 1024 * 1024 && d.size_bytes <= 10 * 1024 * 1024,
-  ).length;
-  const largeCount = rawDocuments.filter((d) => d.size_bytes > 10 * 1024 * 1024).length;
   const sizeData = [
-    { label: "< 1 MB", value: smallCount, color: "#059669" },
-    { label: "1 – 10 MB", value: medCount, color: "#d9793a" },
-    { label: "> 10 MB", value: largeCount, color: "#7c3aed" },
+    { label: "< 1 MB", value: summary?.by_size.small ?? 0, color: "#059669" },
+    { label: "1 – 10 MB", value: summary?.by_size.medium ?? 0, color: "#d9793a" },
+    { label: "> 10 MB", value: summary?.by_size.large ?? 0, color: "#7c3aed" },
   ];
 
   return (
@@ -157,16 +155,13 @@ export function DocumentsTab() {
           color="#7c3aed"
           unit="docs"
           height={140}
-          allow3D={false}
-          allowedViews={["bar", "line", "area"]}
         />
         <DynamicChart
           id="docs-status-donut"
           title="Ingestion Status"
           subtitle="Pipeline parsing breakdown"
-          data={statusData.length > 0 ? statusData : [{ label: "ready", value: total, color: "#059669" }]}
+          data={statusData}
           height={140}
-          allow3D={true}
           isComposition={true}
         />
         <DynamicChart
@@ -175,7 +170,6 @@ export function DocumentsTab() {
           subtitle="Document byte footprint classes"
           data={sizeData}
           height={140}
-          allow3D={true}
           isComposition={true}
         />
       </div>
@@ -252,7 +246,10 @@ export function DocumentsTab() {
           {/* Size Filter Dropdown */}
           <select
             value={sizeFilter}
-            onChange={(e) => setSizeFilter(e.target.value as "all" | "small" | "medium" | "large")}
+            onChange={(e) => {
+              setSizeFilter(e.target.value as "all" | "small" | "medium" | "large");
+              setSkip(0);
+            }}
             className={`${INPUT_CLASS} cursor-pointer text-[12px] font-medium text-zinc-300`}
             title="Filter by document file size"
           >
@@ -358,9 +355,10 @@ export function DocumentsTab() {
           <Button
             size="sm"
             onClick={handleExportCsv}
-            title="Export filtered documents to CSV"
+            disabled={exporting}
+            title="Export every document matching the filters to CSV"
           >
-            CSV
+            {exporting ? "Exporting…" : "CSV"}
           </Button>
         </div>
       </div>

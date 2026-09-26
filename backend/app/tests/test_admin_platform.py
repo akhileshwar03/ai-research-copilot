@@ -634,7 +634,7 @@ def test_analytics_series_and_tools(client, admin_headers, auth_headers, track_u
     tools = {t["tool"]: t for t in body["tools"]}
     assert tools["research_copilot"]["requests"] >= 1
     assert tools["research_copilot"]["label"] == "Research Copilot"
-    assert body["top_users"] and body["active_users_7d"] >= 1
+    assert body["top_users"] and body["active_users"] >= 1
 
 
 def _seed_usage(email: str, day: str, *, tool: str = "humanizer", ok: bool = True, count: int = 1) -> int:
@@ -744,6 +744,98 @@ def test_analytics_hourly_buckets_by_weekday_and_hour(client, admin_headers, uni
         f"/api/v1/admin/analytics?start=2024-11-11&end=2024-11-12&user_id={uid}", headers=admin_headers
     ).json()
     assert outside["hourly"] == []
+
+
+def _make_user(client, email: str) -> int:
+    _register_and_login(client, email)
+    db = TestingSessionLocal()
+    try:
+        return db.query(User).filter(User.email == email).first().id
+    finally:
+        db.close()
+
+
+def test_analytics_active_users_follow_the_selected_range(client, admin_headers, unique_email):
+    """Regression: 'active users' used to be a rolling window from *now*, so it ignored the range."""
+    other = "active-" + unique_email
+    other_id = _make_user(client, other)
+    _seed_usage(unique_email, "2023-05-10", count=1)
+    _seed_usage(unique_email, "2023-05-11", count=1)
+    _seed_usage(other, "2023-05-11", count=2)
+
+    one_day = client.get("/api/v1/admin/analytics?start=2023-05-10&end=2023-05-10", headers=admin_headers).json()
+    two_days = client.get("/api/v1/admin/analytics?start=2023-05-10&end=2023-05-11", headers=admin_headers).json()
+    scoped = client.get(
+        f"/api/v1/admin/analytics?start=2023-05-10&end=2023-05-11&user_id={other_id}", headers=admin_headers
+    ).json()
+
+    assert one_day["active_users"] == 1
+    assert two_days["active_users"] == 2
+    assert [d["active_users"] for d in two_days["series"]] == [1, 2]
+    assert scoped["active_users"] == 1
+
+
+def test_analytics_engagement_uses_average_daily_actives(client, admin_headers, unique_email):
+    other = "eng-" + unique_email
+    _make_user(client, other)
+    _seed_usage(unique_email, "2022-03-01")
+    _seed_usage(unique_email, "2022-03-02")
+    _seed_usage(other, "2022-03-02")
+
+    body = client.get("/api/v1/admin/analytics?start=2022-03-02&end=2022-03-02", headers=admin_headers).json()
+    engagement = body["engagement"]
+    assert engagement["window_days"] == 30
+    assert engagement["dau"] == 2
+    assert engagement["mau"] == 2
+    assert engagement["active_days"] == 2
+    # 3 user-days over a 30-day window / 2 distinct users = 0.1 avg DAU, 5% stickiness
+    assert engagement["avg_dau"] == 0.1
+    assert engagement["stickiness_pct"] == 5.0
+
+
+def test_analytics_tool_and_user_totals_are_exact_beyond_the_latency_sample(
+    client, admin_headers, unique_email, monkeypatch
+):
+    import app.services.admin_analytics as analytics_module
+
+    monkeypatch.setattr(analytics_module, "TOOL_DURATION_SAMPLE", 3)
+    _seed_usage(unique_email, "2023-07-04", tool="checker", count=8)
+    _seed_usage(unique_email, "2023-07-04", tool="checker", ok=False, count=2)
+
+    body = client.get("/api/v1/admin/analytics?start=2023-07-04&end=2023-07-04", headers=admin_headers).json()
+    (tool,) = body["tools"]
+    assert (tool["requests"], tool["errors"], tool["error_rate"]) == (10, 2, 0.2)
+    assert body["top_users"][0]["requests"] == 10
+    assert body["series"][0]["requests"] == 10
+    assert body["latency"]["avg_ms"] == 100
+
+
+def test_analytics_messages_use_their_own_timestamp(client, admin_headers, unique_email):
+    from datetime import datetime, timezone
+
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.email == unique_email).first()
+        session = ChatSession(user_id=user.id, title="long conversation")
+        session.created_at = datetime(2023, 8, 1, 10, tzinfo=timezone.utc)
+        db.add(session)
+        db.flush()
+        for day in (1, 3, 3):
+            db.add(
+                ChatMessage(
+                    session_id=session.id,
+                    role="user",
+                    content="hi",
+                    created_at=datetime(2023, 8, day, 12, tzinfo=timezone.utc),
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    body = client.get("/api/v1/admin/analytics?start=2023-08-01&end=2023-08-03", headers=admin_headers).json()
+    assert [d["messages"] for d in body["series"]] == [1, 0, 2]
+    assert [d["sessions"] for d in body["series"]] == [1, 0, 0]
 
 
 def test_analytics_rejects_bad_ranges_and_unknown_users(client, admin_headers):
@@ -1076,3 +1168,113 @@ def test_audit_rows_are_written_for_user_changes(client, admin_headers, unique_e
         assert json.loads(row.details) == {"is_admin": True}
     finally:
         db.close()
+
+
+# ── PDF report ─────────────────────────────────────────────────────────────────
+
+def _report_text(pdf_bytes: bytes) -> tuple[str, "pymupdf.Document"]:
+    import pymupdf
+
+    doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+    return "\n".join(page.get_text() for page in doc), doc
+
+
+def test_report_pdf_is_a_real_multi_page_document(client, admin_headers, unique_email):
+    _seed_usage(unique_email, "2021-04-05", tool="checker", count=6)
+    _seed_usage(unique_email, "2021-04-05", tool="checker", ok=False, count=2)
+    _seed_usage(unique_email, "2021-04-06", tool="humanizer", count=3)
+
+    resp = client.get("/api/v1/admin/report.pdf?start=2021-04-01&end=2021-04-07", headers=admin_headers)
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert 'filename="querex-report-2021-04-01_to_2021-04-07.pdf"' in resp.headers["content-disposition"]
+    assert resp.content.startswith(b"%PDF")
+
+    text, doc = _report_text(resp.content)
+    assert doc.page_count >= 8
+    for heading in ["Executive summary", "Traffic and growth", "Product usage", "Reliability", "Users and engagement",
+                    "Activity patterns", "Content and storage", "Platform operations", "Appendix A", "Appendix B"]:
+        assert heading in text
+    assert "11" in text and "AI Checker" in text and "Humanizer" in text  # 11 requests, both tools named
+    assert "2021-04-05" in text  # daily appendix rows
+    assert sum(len(page.get_drawings()) for page in doc) > 200  # vector charts, not text only
+    assert doc.metadata["title"] == "Querex report 2021-04-01 to 2021-04-07"
+
+
+def test_report_pdf_scopes_to_one_user_and_is_audited(client, admin_headers, unique_email):
+    other = "report-" + unique_email
+    bystander = "bystander-" + unique_email
+    other_id = _make_user(client, other)
+    _make_user(client, bystander)
+    _seed_usage(other, "2021-05-03", count=4)
+    _seed_usage(bystander, "2021-05-03", count=9)
+
+    resp = client.get(
+        f"/api/v1/admin/report.pdf?start=2021-05-01&end=2021-05-07&user_id={other_id}", headers=admin_headers
+    )
+    assert resp.status_code == 200
+    text, _ = _report_text(resp.content)
+    assert other in text
+    assert "Administrator activity is only reported for the whole platform" in text
+    assert bystander not in text
+
+    log = client.get("/api/v1/admin/audit-log?action=report.export", headers=admin_headers).json()["entries"]
+    assert any(entry["target"] == other for entry in log)
+
+
+def test_report_pdf_builds_for_a_period_with_no_activity(client, admin_headers):
+    resp = client.get("/api/v1/admin/report.pdf?start=2001-01-01&end=2001-01-03", headers=admin_headers)
+    assert resp.status_code == 200
+    text, doc = _report_text(resp.content)
+    assert "No tool requests were recorded" in text
+    assert doc.page_count >= 6
+
+
+def test_report_pdf_validates_range_and_unknown_user(client, admin_headers):
+    assert client.get("/api/v1/admin/report.pdf?start=2021-05-09&end=2021-05-01", headers=admin_headers).status_code == 400
+    assert client.get("/api/v1/admin/report.pdf?user_id=999999", headers=admin_headers).status_code == 404
+
+
+def test_report_pdf_requires_admin(client, auth_headers):
+    assert client.get("/api/v1/admin/report.pdf?start=2021-05-01&end=2021-05-07", headers=auth_headers).status_code == 403
+
+
+def test_document_summary_counts_the_whole_inventory_by_status_and_size(client, admin_headers, unique_email):
+    from app.services.admin_analytics import document_summary
+
+    owner = "docs-" + unique_email
+    db = TestingSessionLocal()
+    try:
+        for i, (size, status) in enumerate(
+            [(200, "ready"), (900_000, "ready"), (2 * 1024 * 1024, "failed"), (10 * 1024 * 1024, "ready"), (12 * 1024 * 1024, "empty")]
+        ):
+            db.add(
+                Document(
+                    user_email=owner,
+                    original_filename=f"f{i}.pdf",
+                    stored_filename=f"{owner}-{i}",
+                    content_type="application/pdf",
+                    size_bytes=size,
+                    checksum_sha256=f"sum-{owner}-{i}",
+                    upload_status=status,
+                )
+            )
+        db.commit()
+        summary = document_summary(db, owner)
+    finally:
+        db.close()
+
+    assert summary["count"] == 5
+    assert summary["bytes"] == 200 + 900_000 + 2 * 1024 * 1024 + 10 * 1024 * 1024 + 12 * 1024 * 1024
+    assert summary["by_status"] == {"ready": 3, "failed": 1, "empty": 1}
+    assert summary["by_size"] == {"small": 2, "medium": 2, "large": 1}  # 10 MB exactly counts as medium
+
+    def listed(size: str) -> int:
+        return client.get(
+            f"/api/v1/admin/documents?q={owner}&size={size}&status=all", headers=admin_headers
+        ).json()["total"]
+
+    assert [listed(s) for s in ("all", "small", "medium", "large")] == [5, 2, 2, 1]
+
+    everything = client.get("/api/v1/admin/documents/summary", headers=admin_headers).json()
+    assert everything["count"] >= 5 and set(everything["by_size"]) == {"small", "medium", "large"}

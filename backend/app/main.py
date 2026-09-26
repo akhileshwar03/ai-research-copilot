@@ -294,6 +294,21 @@ def _run_startup_migrations() -> None:
                 conn.commit()
                 logger.info("startup_migration: otp_tokens.code_hash added")
 
+            # ── chat_messages.created_at (migration 0020) ──────────────────────
+            message_cols = {c["name"] for c in inspector.get_columns("chat_messages")}
+            if "created_at" not in message_cols:
+                logger.info("startup_migration: adding chat_messages.created_at")
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN created_at DATETIME"))
+                conn.execute(
+                    text(
+                        "UPDATE chat_messages SET created_at = "
+                        "(SELECT created_at FROM chat_sessions WHERE chat_sessions.id = chat_messages.session_id)"
+                    )
+                )
+                conn.execute(text("UPDATE chat_messages SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_chat_messages_created_at ON chat_messages (created_at)"))
+                conn.commit()
+
     except Exception:
         logger.exception(
             "startup_migration failed — server will continue but document endpoints may be broken"
