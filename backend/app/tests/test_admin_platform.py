@@ -1600,24 +1600,56 @@ def test_ai_service_clients_all_request_usage_and_carry_the_callback(monkeypatch
         assert any(isinstance(cb, TokenUsageCallback) for cb in model.callbacks), name
 
 
-def test_admin_ai_usage_summary_totals_tokens_by_model_and_user(client, admin_headers, unique_email, track_usage):
+def test_pricing_math_and_model_matching():
+    from app.services.ai_pricing import cost_usd, price_for
+
+    # 800k normal input @ $0.40 + 200k cached @ $0.10 + 500k output @ $1.60 per 1M = 0.32 + 0.02 + 0.80
+    assert cost_usd("gpt-4.1-mini", 1_000_000, 500_000, 200_000) == pytest.approx(1.14)
+    assert cost_usd("text-embedding-ada-002", 2_000_000, 0) == pytest.approx(0.20)
+    # Dated snapshots resolve to their base model, and never to a shorter prefix that is a different model.
+    assert price_for("gpt-4.1-mini-2025-04-14") is price_for("gpt-4.1-mini")
+    assert price_for("gpt-4.1-nano-2025-04-14").input == 0.10
+    assert price_for("gpt-4.1-2025-04-14").input == 2.00
+    # Unknown models are unpriced, not free.
+    assert price_for("some-future-model") is None
+    assert cost_usd("some-future-model", 1000, 1000) is None
+    # Cached tokens can never exceed input tokens.
+    assert cost_usd("gpt-4.1-mini", 100, 0, 999) == pytest.approx(100 * 0.10 / 1_000_000)
+
+
+def test_admin_ai_cost_breakdown(client, admin_headers, unique_email, track_usage):
+    from datetime import datetime, timedelta, timezone
+
     from app.db.models.ai_usage_event import AIUsageEvent
 
+    now = datetime.now(timezone.utc)
     with TestingSessionLocal() as db:
         user = db.query(User).filter(User.email == unique_email).first()
         db.query(AIUsageEvent).delete()
         db.add_all(
             [
-                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="m-a", input_tokens=100, output_tokens=40, cached_input_tokens=10),
-                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="m-a", input_tokens=50, output_tokens=10),
-                AIUsageEvent(user_id=user.id, tool="upload", kind="embedding", model="m-emb", input_tokens=300),
+                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="gpt-4.1-mini-2025-04-14", input_tokens=1_000_000, output_tokens=500_000, cached_input_tokens=200_000, created_at=now),
+                AIUsageEvent(user_id=user.id, tool="upload", kind="embedding", model="text-embedding-ada-002", input_tokens=2_000_000, created_at=now - timedelta(days=1)),
+                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="mystery-model", input_tokens=500, output_tokens=500, created_at=now),
+                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="gpt-4.1-mini", input_tokens=1_000_000, created_at=now - timedelta(days=40)),  # outside the window
             ]
         )
         db.commit()
 
     body = client.get("/api/v1/admin/ai-usage?days=7", headers=admin_headers).json()
-    models = {(m["model"], m["kind"]): m for m in body["by_model"]}
-    assert models[("m-a", "chat")] == {"model": "m-a", "kind": "chat", "calls": 2, "input_tokens": 150, "output_tokens": 50, "cached_input_tokens": 10}
-    assert models[("m-emb", "embedding")]["input_tokens"] == 300
-    assert body["top_users"][0]["email"] == unique_email and body["top_users"][0]["input_tokens"] == 450
+    assert body["total"]["cost_usd"] == pytest.approx(1.14 + 0.20)  # the unpriced model adds nothing
+    assert body["total"]["unpriced_calls"] == 1 and body["unpriced_models"] == ["mystery-model"]
+    tools = {t["tool"]: t for t in body["by_tool"]}
+    assert tools["checker"]["cost_usd"] == pytest.approx(1.14) and tools["upload"]["cost_usd"] == pytest.approx(0.20)
+    assert tools["upload"]["label"] == "Document upload"
+    assert body["top_users"][0]["email"] == unique_email and body["top_users"][0]["cost_usd"] == pytest.approx(1.34)
+    assert [round(d["cost_usd"], 2) for d in body["daily"]] == [0.20, 1.14]
+    assert body["pricing"]["verified_on"] and body["pricing"]["source"].startswith("https://")
+
+    # A single-user filter and an explicit date range both narrow the result.
+    scoped = client.get(f"/api/v1/admin/ai-usage?days=7&user_id={body['top_users'][0]['user_id']}", headers=admin_headers).json()
+    assert scoped["total"]["cost_usd"] == pytest.approx(1.34)
+    wide = client.get("/api/v1/admin/ai-usage?days=90", headers=admin_headers).json()
+    assert wide["total"]["cost_usd"] == pytest.approx(1.34 + 0.40)  # now includes the 40-day-old call
     assert client.get("/api/v1/admin/ai-usage", headers={}).status_code in (401, 403)
+    assert client.get("/api/v1/admin/ai-usage?user_id=999999", headers=admin_headers).status_code == 404

@@ -122,8 +122,10 @@ drives the banner in the admin console; thresholds are runtime settings `alert_e
 input/output/cached tokens, model, user, tool, request id; no text, no prices). Chat models carry
 `TokenUsageCallback` (needs `stream_usage=True`, which langchain-openai defaults to off), embeddings go
 through `_MeteredEmbeddingsClient`, and `RequestContextMiddleware` sets the user/tool context
-(`app/services/ai_usage.py`). `GET /admin/ai-usage` totals tokens by model and user. Cost is deliberately
-not stored: compute it at read time from a *verified* pricing table. Ultra Human (local Ollama) and
+(`app/services/ai_usage.py`). `GET /admin/ai-usage` returns tokens and *estimated* cost (by model/tool/user/day) for a date range,
+shown as the "AI spend" section on the Overview. Cost is deliberately not stored: it is computed at read
+time from `app/services/ai_pricing.py` (OpenAI list prices, `PRICING_VERIFIED_ON`; re-verify before trusting;
+unknown models show as "unpriced", never as $0). Ultra Human (local Ollama) and
 Tavily searches are not token-metered.
 
 **Layout.** `backend/routes/` was merged into `backend/app/api/routes/`; Render starts

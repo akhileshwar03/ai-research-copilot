@@ -6,15 +6,14 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import require_admin
-from datetime import datetime, timedelta, timezone
-
-from sqlalchemy import func
+from datetime import date, datetime, timezone
 
 from app.db.models.admin_audit_log import AdminAuditLog
-from app.db.models.ai_usage_event import AIUsageEvent
 from app.db.models.usage_event import UsageEvent
 from app.db.models.user import User
 from app.db.session import get_db
+from app.services.admin_ai_cost import compute_ai_cost
+from app.services.admin_analytics import resolve_range, resolve_user
 from app.api.routes.admin._common import (
     AuditEntry,
     AuditLogResponse,
@@ -102,42 +101,14 @@ def get_usage_events(
 @router.get("/ai-usage")
 def get_ai_usage(
     days: int = Query(default=30, ge=1, le=365),
+    start: date | None = Query(default=None, description="Inclusive UTC start day, YYYY-MM-DD"),
+    end: date | None = Query(default=None, description="Inclusive UTC end day, YYYY-MM-DD"),
+    user_id: int | None = Query(default=None, ge=1, description="Restrict to one user"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    """Provider-reported token totals for the last `days` days, by model and by user. Tokens only: cost is
-    derived from a verified pricing table, never stored."""
-    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
-    totals = (
-        func.count(AIUsageEvent.id),
-        func.coalesce(func.sum(AIUsageEvent.input_tokens), 0),
-        func.coalesce(func.sum(AIUsageEvent.output_tokens), 0),
-        func.coalesce(func.sum(AIUsageEvent.cached_input_tokens), 0),
-    )
-    by_model = (
-        db.query(AIUsageEvent.model, AIUsageEvent.kind, *totals)
-        .filter(AIUsageEvent.created_at >= since)
-        .group_by(AIUsageEvent.model, AIUsageEvent.kind)
-        .order_by(func.sum(AIUsageEvent.input_tokens + AIUsageEvent.output_tokens).desc())
-        .all()
-    )
-    by_user = (
-        db.query(User.email, *totals)
-        .join(User, User.id == AIUsageEvent.user_id)
-        .filter(AIUsageEvent.created_at >= since)
-        .group_by(User.email)
-        .order_by(func.sum(AIUsageEvent.input_tokens + AIUsageEvent.output_tokens).desc())
-        .limit(20)
-        .all()
-    )
-    return {
-        "days": days,
-        "by_model": [
-            {"model": m, "kind": k, "calls": int(c), "input_tokens": int(i), "output_tokens": int(o), "cached_input_tokens": int(ca)}
-            for m, k, c, i, o, ca in by_model
-        ],
-        "top_users": [
-            {"email": e, "calls": int(c), "input_tokens": int(i), "output_tokens": int(o), "cached_input_tokens": int(ca)}
-            for e, c, i, o, ca in by_user
-        ],
-    }
+    """Token totals and *estimated* cost (list prices; see app/services/ai_pricing.py) for a UTC date range,
+    broken down by model, tool, top users and day."""
+    range_start, range_end = resolve_range(days, start, end, datetime.now(timezone.utc).date())
+    resolve_user(db, user_id)
+    return compute_ai_cost(db, range_start, range_end, user_id)

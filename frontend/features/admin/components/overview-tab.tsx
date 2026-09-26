@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { adminApi } from "@/services/api/admin-api";
 import { DeltaBadge, HBar, formatBytes, formatDuration } from "@/features/admin/components/shared";
+import { AiCostSection } from "@/features/admin/components/ai-cost-section";
 import { HighlightsPanel } from "@/features/admin/components/overview-highlights";
 import { ToolAndUserBreakdown } from "@/features/admin/components/overview-breakdown";
 import { DateRangePicker } from "@/features/admin/components/date-range-picker";
@@ -628,6 +629,8 @@ export function OverviewTab() {
               </div>
             )}
           </div>
+
+          <AiCostSection start={start} end={end} userId={scopedUserId} />
 
           <ToolAndUserBreakdown
             analytics={analytics}

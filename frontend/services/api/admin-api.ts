@@ -67,6 +67,28 @@ export interface AnalyticsTool {
   users: number;
 }
 
+export interface AiCostBucket {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cached_input_tokens: number;
+  cost_usd: number;
+  /** Calls whose model has no verified price; NOT included in cost_usd. */
+  unpriced_calls: number;
+}
+
+export interface AiCost {
+  start: string;
+  end: string;
+  total: AiCostBucket;
+  by_model: (AiCostBucket & { model: string; kind: string })[];
+  by_tool: (AiCostBucket & { tool: string | null; label: string })[];
+  top_users: (AiCostBucket & { user_id: number; email: string })[];
+  daily: (AiCostBucket & { date: string })[];
+  unpriced_models: string[];
+  pricing: { source: string; verified_on: string; note: string };
+}
+
 export interface AnalyticsParams {
   days?: number;
   start?: string;
@@ -340,6 +362,8 @@ export const adminApi = {
   twoFactorDisable: (code: string) =>
     apiRequest<{ enabled: boolean }>("/admin/2fa/disable", { method: "POST", body: JSON.stringify({ code }) }),
   alerts: () => apiRequest<{ alerts: AdminAlert[] }>("/admin/alerts"),
+  aiUsage: (params: { start?: string; end?: string; user_id?: number }) =>
+    apiRequest<AiCost>(`/admin/ai-usage${qs({ start: params.start, end: params.end, user_id: params.user_id })}`),
   analytics: (paramsOrDays: number | AnalyticsParams = 30) => {
     if (typeof paramsOrDays === "number") {
       return apiRequest<AdminAnalytics>(`/admin/analytics?days=${paramsOrDays}`);
