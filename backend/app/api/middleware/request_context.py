@@ -30,6 +30,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from app.core.config import get_settings
 from app.services.retention_service import maybe_run_cleanup
 from app.services.runtime_settings import runtime_settings
+from app.services.ai_usage import reset_usage_context, set_usage_context
 from app.services.usage_tracking import record_usage_event, tool_for_request
 
 logger = logging.getLogger("app.request")
@@ -160,7 +161,12 @@ class RequestContextMiddleware:
                 message = {**message, "headers": headers}
             await send(message)
 
-        await self.app(scope, receive, send_wrapper)
+        tool_for_usage = tool_for_request(method, path, api_prefix)
+        usage_token = set_usage_context(state, tool_for_usage)
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            reset_usage_context(usage_token)
 
         duration_ms = int((time.perf_counter() - started_at) * 1000)
         status_code = status_holder.get("status", 0)

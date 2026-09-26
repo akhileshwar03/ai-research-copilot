@@ -78,6 +78,7 @@ class AuthService:
         from app.db.models.document import Document
         from app.db.models.humanizer_run import HumanizerRun
         from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
+        from app.db.models.ai_usage_event import AIUsageEvent
         from app.db.models.usage_event import UsageEvent
         from app.db.repositories.document_repository import DocumentRepository
         from app.services.storage_service import get_storage_service
@@ -134,6 +135,7 @@ class AuthService:
             )
             db.query(RealtimeSession).filter(RealtimeSession.id.in_(realtime_ids)).delete(synchronize_session=False)
         db.query(UsageEvent).filter(UsageEvent.user_id == user.id).delete(synchronize_session=False)
+        db.query(AIUsageEvent).filter(AIUsageEvent.user_id == user.id).delete(synchronize_session=False)
 
         # 4. Delete user (cascade deletes UserIdentity and RefreshToken)
         db.delete(user)

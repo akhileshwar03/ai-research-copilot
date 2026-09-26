@@ -118,6 +118,14 @@ compiler lint rules pass (`npx eslint app features components services shared st
 drives the banner in the admin console; thresholds are runtime settings `alert_error_rate_pct` and
 `alert_min_requests`. The admin API is a package, `app/api/routes/admin/`, one module per area.
 
+**AI token logging (2026-09-27).** Every OpenAI call is recorded in `ai_usage_events` (raw provider-reported
+input/output/cached tokens, model, user, tool, request id; no text, no prices). Chat models carry
+`TokenUsageCallback` (needs `stream_usage=True`, which langchain-openai defaults to off), embeddings go
+through `_MeteredEmbeddingsClient`, and `RequestContextMiddleware` sets the user/tool context
+(`app/services/ai_usage.py`). `GET /admin/ai-usage` totals tokens by model and user. Cost is deliberately
+not stored: compute it at read time from a *verified* pricing table. Ultra Human (local Ollama) and
+Tavily searches are not token-metered.
+
 **Layout.** `backend/routes/` was merged into `backend/app/api/routes/`; Render starts
 `uvicorn app.main:app`. Local verification: `.claude/launch.json` has `backend-local`
 (SQLite in the scratchpad, port 8010) and `frontend-local` (port 3050) so nothing touches Neon.

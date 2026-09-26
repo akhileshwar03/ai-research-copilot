@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from openai import OpenAI
 
 from app.core.config import get_settings
+from app.services.ai_usage import TokenUsageCallback
 
 
 class AIService:
@@ -15,6 +16,8 @@ class AIService:
             model=settings.openai_chat_model,
             temperature=0.3,
             streaming=True,
+            stream_usage=True,
+            callbacks=[TokenUsageCallback(settings.openai_chat_model)],
         )
         # Separate, near-deterministic client for classification/analysis tasks
         # (AI Checker, Writing Feedback, image OCR transcription) — these want a
@@ -26,6 +29,8 @@ class AIService:
             api_key=settings.openai_api_key,
             model=settings.openai_chat_model,
             temperature=0,
+            stream_usage=True,
+            callbacks=[TokenUsageCallback(settings.openai_chat_model)],
         )
         self.client = OpenAI(
             api_key=settings.openai_api_key,
@@ -52,6 +57,8 @@ class AIService:
             "api_key": settings.openai_api_key,
             "model": settings.humanizer_rewrite_model,
             "streaming": True,
+            "stream_usage": True,
+            "callbacks": [TokenUsageCallback(settings.humanizer_rewrite_model)],
         }
         if settings.humanizer_rewrite_model.startswith("gpt-5"):
             rewrite_kwargs["temperature"] = 1.0  # confirmed live: gpt-5-mini accepts this; rejects the other 3
@@ -67,6 +74,8 @@ class AIService:
             api_key=settings.openai_api_key,
             model=settings.humanizer_classify_model,
             temperature=0,
+            stream_usage=True,
+            callbacks=[TokenUsageCallback(settings.humanizer_classify_model)],
         )
 
     async def stream_chat(self, messages: list[tuple[str, str]]):

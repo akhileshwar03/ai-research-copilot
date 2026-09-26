@@ -1442,3 +1442,182 @@ def test_chat_session_gets_a_timestamp_without_a_database_default():
             assert db.execute(bare.select()).first().created_at is not None
     finally:
         meta.drop_all(engine)
+
+
+# ── AI token usage logging ─────────────────────────────────────────────────────
+
+def _ai_usage_rows(email=None):
+    from app.db.models.ai_usage_event import AIUsageEvent
+
+    with TestingSessionLocal() as db:
+        query = db.query(AIUsageEvent)
+        if email:
+            user = db.query(User).filter(User.email == email).first()
+            query = query.filter(AIUsageEvent.user_id == user.id)
+        return query.order_by(AIUsageEvent.id).all()
+
+
+def test_langchain_callback_records_provider_usage(track_usage):
+    from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
+    from langchain_core.messages import AIMessage
+
+    from app.services.ai_usage import TokenUsageCallback, reset_usage_context, set_usage_context
+
+    reply = AIMessage(
+        content="ok",
+        usage_metadata={"input_tokens": 120, "output_tokens": 35, "total_tokens": 155, "input_token_details": {"cache_read": 20}},
+        response_metadata={"model_name": "gpt-test-1"},
+    )
+    llm = GenericFakeChatModel(messages=iter([reply]), callbacks=[TokenUsageCallback("fallback-model")])
+
+    async def run():
+        token = set_usage_context({"user_id": None, "request_id": "req-cb"}, "checker")
+        try:
+            await llm.ainvoke("hello")
+        finally:
+            reset_usage_context(token)
+
+    before = len(_ai_usage_rows())
+    asyncio.run(run())
+    row = _ai_usage_rows()[before]
+    assert (row.kind, row.model, row.input_tokens, row.output_tokens, row.cached_input_tokens) == ("chat", "gpt-test-1", 120, 35, 20)
+    assert (row.tool, row.request_id) == ("checker", "req-cb")
+
+
+def test_embedding_wrapper_records_exact_tokens(track_usage):
+    from app.services.ai_usage import _MeteredEmbeddingsClient
+
+    class Inner:
+        def create(self, **kwargs):
+            return {"data": [], "usage": {"prompt_tokens": 42, "total_tokens": 42}}
+
+        other = "passthrough"
+
+    client = _MeteredEmbeddingsClient(Inner(), "text-embedding-test")
+    before = len(_ai_usage_rows())
+    assert client.create(input=["a"], model="text-embedding-test")["usage"]["total_tokens"] == 42
+    assert client.other == "passthrough"
+    row = _ai_usage_rows()[before]
+    assert (row.kind, row.model, row.input_tokens, row.output_tokens) == ("embedding", "text-embedding-test", 42, 0)
+
+
+def test_ai_usage_is_attributed_to_the_requesting_user_and_tool(client, auth_headers, unique_email, track_usage, monkeypatch):
+    """The middleware's context must reach model calls made while a streamed response is generated."""
+    from app.api.dependencies import services as service_deps
+    from app.services.ai_usage import record_ai_usage
+    from app.tests.conftest import FakeChatService
+    from app.main import app
+
+    class MeteredChat(FakeChatService):
+        async def stream_response(self, *args, **kwargs):
+            record_ai_usage(model="gpt-e2e", kind="chat", input_tokens=10, output_tokens=5)
+            async for event in super().stream_response(*args, **kwargs):
+                yield event
+
+    previous = app.dependency_overrides[service_deps.get_chat_service]
+    app.dependency_overrides[service_deps.get_chat_service] = lambda: MeteredChat()
+    try:
+        client.post("/api/v1/chat", headers=auth_headers, json={"messages": [{"role": "user", "content": "hi"}]}).read()
+    finally:
+        app.dependency_overrides[service_deps.get_chat_service] = previous
+
+    rows = _ai_usage_rows(unique_email)
+    assert len(rows) == 1
+    assert (rows[0].tool, rows[0].model, rows[0].input_tokens, rows[0].output_tokens) == ("research_copilot", "gpt-e2e", 10, 5)
+    assert rows[0].request_id  # the request's id ties it to the usage event
+
+
+def test_zero_token_calls_are_not_recorded(track_usage):
+    from app.services.ai_usage import record_ai_usage
+
+    before = len(_ai_usage_rows())
+    record_ai_usage(model="m", kind="chat", input_tokens=0, output_tokens=0)
+    assert len(_ai_usage_rows()) == before
+
+
+def test_streaming_chat_openai_reports_usage_through_the_real_client_stack(track_usage):
+    """Drives the real langchain-openai streaming code against a fake OpenAI endpoint. Without
+    stream_usage=True the provider sends no usage chunk and nothing would ever be recorded."""
+    import httpx
+    from langchain_openai import ChatOpenAI
+
+    from app.services.ai_usage import TokenUsageCallback, reset_usage_context, set_usage_context
+
+    seen_bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        seen_bodies.append(body)
+        chunks = [
+            {"id": "c1", "object": "chat.completion.chunk", "model": "gpt-wire-1", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hi"}, "finish_reason": None}]},
+            {"id": "c1", "object": "chat.completion.chunk", "model": "gpt-wire-1", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+        if (body.get("stream_options") or {}).get("include_usage"):
+            chunks.append({"id": "c1", "object": "chat.completion.chunk", "model": "gpt-wire-1", "choices": [], "usage": {"prompt_tokens": 77, "completion_tokens": 9, "total_tokens": 86}})
+        sse = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + "data: [DONE]\n\n"
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse.encode())
+
+    llm = ChatOpenAI(
+        api_key="sk-test",
+        base_url="https://api.openai.com/v1",
+        model="gpt-wire-1",
+        streaming=True,
+        stream_usage=True,
+        callbacks=[TokenUsageCallback("gpt-wire-1")],
+        http_async_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+
+    async def run():
+        token = set_usage_context({"user_id": None, "request_id": "wire"}, "research_copilot")
+        try:
+            async for _ in llm.astream("hi"):
+                pass
+        finally:
+            reset_usage_context(token)
+
+    before = len(_ai_usage_rows())
+    asyncio.run(run())
+    assert seen_bodies[0]["stream_options"]["include_usage"] is True
+    row = _ai_usage_rows()[before]
+    assert (row.model, row.input_tokens, row.output_tokens, row.tool) == ("gpt-wire-1", 77, 9, "research_copilot")
+
+
+def test_ai_service_clients_all_request_usage_and_carry_the_callback(monkeypatch):
+    from app.services.ai_service import AIService
+    from app.services.ai_usage import TokenUsageCallback
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    try:
+        service = AIService()
+    finally:
+        get_settings.cache_clear()
+    for name in ("llm", "classifier_llm", "humanizer_rewrite_llm", "humanizer_classify_llm"):
+        model = getattr(service, name)
+        assert model.stream_usage is True, name
+        assert any(isinstance(cb, TokenUsageCallback) for cb in model.callbacks), name
+
+
+def test_admin_ai_usage_summary_totals_tokens_by_model_and_user(client, admin_headers, unique_email, track_usage):
+    from app.db.models.ai_usage_event import AIUsageEvent
+
+    with TestingSessionLocal() as db:
+        user = db.query(User).filter(User.email == unique_email).first()
+        db.query(AIUsageEvent).delete()
+        db.add_all(
+            [
+                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="m-a", input_tokens=100, output_tokens=40, cached_input_tokens=10),
+                AIUsageEvent(user_id=user.id, tool="checker", kind="chat", model="m-a", input_tokens=50, output_tokens=10),
+                AIUsageEvent(user_id=user.id, tool="upload", kind="embedding", model="m-emb", input_tokens=300),
+            ]
+        )
+        db.commit()
+
+    body = client.get("/api/v1/admin/ai-usage?days=7", headers=admin_headers).json()
+    models = {(m["model"], m["kind"]): m for m in body["by_model"]}
+    assert models[("m-a", "chat")] == {"model": "m-a", "kind": "chat", "calls": 2, "input_tokens": 150, "output_tokens": 50, "cached_input_tokens": 10}
+    assert models[("m-emb", "embedding")]["input_tokens"] == 300
+    assert body["top_users"][0]["email"] == unique_email and body["top_users"][0]["input_tokens"] == 450
+    assert client.get("/api/v1/admin/ai-usage", headers={}).status_code in (401, 403)

@@ -18,6 +18,7 @@ from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 from app.db.models import (  # noqa: F401
     admin_audit_log,
+    ai_usage_event,
     app_setting,
     chat_models,
     document,
