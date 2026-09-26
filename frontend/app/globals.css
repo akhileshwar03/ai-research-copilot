@@ -641,6 +641,22 @@ html.light-theme .text-zinc-200   { color: rgb(56 42 28); }
 html.light-theme .text-zinc-300   { color: rgb(74 57 40); }
 html.light-theme .text-zinc-400   { color: rgb(96 78 58); }
 
+/* Admin console: its status colors are the dark-theme 300/400 shades, which
+   are unreadable on light surfaces. Scoped to .admin-console so no other page
+   is affected. */
+html.light-theme .admin-console .text-rose-300,
+html.light-theme .admin-console .text-rose-400    { color: rgb(159 18 57); }
+html.light-theme .admin-console .text-emerald-400 { color: rgb(4 120 87); }
+html.light-theme .admin-console .text-sky-200,
+html.light-theme .admin-console .text-sky-400     { color: rgb(3 105 161); }
+html.light-theme .admin-console .text-amber-300,
+html.light-theme .admin-console .text-amber-400   { color: rgb(146 64 14); }
+html.light-theme .admin-console .text-purple-300  { color: rgb(126 34 206); }
+html.light-theme .admin-console .text-orange-300  { color: rgb(194 65 12); }
+html.light-theme .admin-console .text-zinc-50,
+html.light-theme .admin-console .text-zinc-100    { color: rgb(38 28 18); }
+html.light-theme .admin-console .text-zinc-500    { color: rgb(98 80 58); }
+
 /* The marketing page manages its own palette (incl. dark CTA panels) — the
    app-level text remaps above must not leak into it. */
 html.light-theme .marketing-light .text-white    { color: #ffffff; }

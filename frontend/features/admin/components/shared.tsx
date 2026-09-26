@@ -642,3 +642,29 @@ export function HBar({
     </div>
   );
 }
+
+export function DeltaBadge({
+  change,
+  amount,
+  suffix,
+  higherIsBetter = true,
+  className = "",
+}: {
+  change: number;
+  amount: string;
+  suffix: string;
+  higherIsBetter?: boolean;
+  className?: string;
+}) {
+  const flat = change === 0;
+  const up = change > 0;
+  const tone = flat ? "text-zinc-600" : up === higherIsBetter ? "text-emerald-700" : "text-red-700";
+  const arrow = flat ? "▬" : up ? "▲" : "▼";
+  const sign = flat ? "" : up ? "+" : "-";
+  return (
+    <p className={`mt-1 font-data text-[11px] font-bold ${tone} ${className}`}>
+      {arrow} {sign}
+      {amount} {suffix}
+    </p>
+  );
+}

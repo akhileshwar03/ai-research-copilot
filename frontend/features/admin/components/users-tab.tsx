@@ -101,7 +101,7 @@ function UserDetailDrawer({
       onClick={onClose}
     >
       <div
-        className="glass-panel flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface-1)] p-5 shadow-2xl scrollbar-thin sm:p-6"
+        className="glass-panel flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface-1)]! p-5 shadow-2xl scrollbar-thin sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Drawer Header */}

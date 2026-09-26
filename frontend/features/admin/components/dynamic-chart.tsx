@@ -2,7 +2,8 @@
 
 import { useId, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { forwardedQuery } from "@/features/admin/lib/admin-query";
 import { formatDay } from "@/features/admin/components/shared";
 
 const ThreeHudVisualizer = dynamic(
@@ -38,6 +39,7 @@ export function DynamicChart({
   allow3D?: boolean;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const autoId = useId();
   const chartId = id || autoId;
 
@@ -129,7 +131,7 @@ export function DynamicChart({
             {metricKey && (
               <button
                 type="button"
-                onClick={() => router.push(`/admin/analytics/${metricKey}`)}
+                onClick={() => router.push(`/admin/analytics/${metricKey}${forwardedQuery(searchParams)}`)}
                 className="rounded p-1 text-zinc-500 hover:bg-[var(--surface-2)] hover:text-zinc-200"
                 title="Open dedicated analytics drilldown"
               >

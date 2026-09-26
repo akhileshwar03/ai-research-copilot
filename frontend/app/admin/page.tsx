@@ -171,7 +171,7 @@ function AdminPageInner() {
   if (isForbidden) return null;
 
   return (
-    <div className="relative min-h-screen px-3 py-4 sm:px-6 sm:py-7">
+    <div className="admin-console relative min-h-screen px-3 py-4 sm:px-6 sm:py-7">
       <AtmosphereBackground variant="calm" />
       <div className="relative z-10 mx-auto max-w-7xl space-y-4 sm:space-y-6">
         {/* Top Header Card */}
@@ -198,7 +198,7 @@ function AdminPageInner() {
                   Live
                 </span>
               </div>
-              <p className="mt-0.5 truncate text-[12px] text-zinc-400">
+              <p className="mt-0.5 break-words text-[12px] text-zinc-400">
                 Signed in as <span className="font-semibold text-zinc-200">{me?.email}</span> · actions logged
               </p>
             </div>

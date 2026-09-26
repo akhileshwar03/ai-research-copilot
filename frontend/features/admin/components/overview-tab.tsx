@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "@/services/api/admin-api";
 import {
   Badge,
+  DeltaBadge,
   HBar,
   SectionCard,
   formatBytes,
@@ -102,7 +103,11 @@ export function OverviewTab() {
     refetchInterval: 60_000,
   });
 
-  const { data: analytics, isLoading } = useQuery({
+  const {
+    data: analytics,
+    isLoading,
+    error: analyticsError,
+  } = useQuery({
     queryKey: ["admin-analytics", { start, end, scopedUserId, compare }],
     queryFn: () =>
       adminApi.analytics({
@@ -112,6 +117,7 @@ export function OverviewTab() {
         compare,
       }),
     refetchInterval: 120_000,
+    retry: false,
   });
 
   const series = useMemo(() => analytics?.series ?? [], [analytics?.series]);
@@ -144,6 +150,8 @@ export function OverviewTab() {
   const docDelta = calculateDelta(totalDocuments, compare ? prevDocuments : null);
 
   const errorRate = totalRequests > 0 ? (totalErrors / totalRequests) * 100 : 0;
+  const prevErrorRate = prevRequests > 0 ? (prevErrors / prevRequests) * 100 : 0;
+  const errRatePts = Math.round((errorRate - prevErrorRate) * 10) / 10;
   const maxToolRequests = Math.max(1, ...(analytics?.tools ?? []).map((t) => t.requests));
   const maxUserRequests = Math.max(1, ...(analytics?.top_users ?? []).map((u) => u.requests));
 
@@ -189,6 +197,18 @@ export function OverviewTab() {
         </div>
       </div>
 
+      {analyticsError && (
+        <div role="alert" className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+          <p className="font-bold">Couldn&apos;t load analytics for this range</p>
+          <p className="mt-0.5 text-[12px]">
+            {analyticsError instanceof Error ? analyticsError.message : "Unexpected error."} Try a shorter range or
+            pick a preset.
+          </p>
+        </div>
+      )}
+
+      {!analyticsError && (
+        <>
       {/* Motivational Hero KPI Strip with Sparklines & Period Deltas */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* Total Requests */}
@@ -201,10 +221,7 @@ export function OverviewTab() {
             {totalRequests.toLocaleString()}
           </p>
           {compare && reqDelta.pct !== null ? (
-            <p className={`mt-1 text-[11px] font-bold font-data ${reqDelta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {reqDelta.positive ? "▲ +" : "▼ "}
-              {reqDelta.pct}% vs prior
-            </p>
+            <DeltaBadge change={reqDelta.diff} amount={`${Math.abs(reqDelta.pct ?? 0)}%`} suffix="vs prior" />
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.requests_24h ?? 0} in 24h</p>
           )}
@@ -234,10 +251,7 @@ export function OverviewTab() {
             {errorRate.toFixed(1)}%
           </p>
           {compare && errDelta.pct !== null ? (
-            <p className={`mt-1 text-[11px] font-bold font-data ${!errDelta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {errDelta.positive ? "▲ +" : "▼ "}
-              {errDelta.pct}% errors
-            </p>
+            <DeltaBadge change={errRatePts} amount={`${Math.abs(errRatePts).toFixed(1)} pts`} suffix="error rate vs prior" higherIsBetter={false} />
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500 font-data">{totalErrors} errors logged</p>
           )}
@@ -253,10 +267,7 @@ export function OverviewTab() {
             +{totalSignups.toLocaleString()}
           </p>
           {compare && signupDelta.pct !== null ? (
-            <p className={`mt-1 text-[11px] font-bold font-data ${signupDelta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {signupDelta.positive ? "▲ +" : "▼ "}
-              {signupDelta.pct}% growth
-            </p>
+            <DeltaBadge change={signupDelta.diff} amount={`${Math.abs(signupDelta.pct ?? 0)}%`} suffix="growth" />
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.total_users ?? 0} total users</p>
           )}
@@ -272,10 +283,7 @@ export function OverviewTab() {
             {totalMessages.toLocaleString()}
           </p>
           {compare && msgDelta.pct !== null ? (
-            <p className={`mt-1 text-[11px] font-bold font-data ${msgDelta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {msgDelta.positive ? "▲ +" : "▼ "}
-              {msgDelta.pct}% volume
-            </p>
+            <DeltaBadge change={msgDelta.diff} amount={`${Math.abs(msgDelta.pct ?? 0)}%`} suffix="volume" />
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats?.total_sessions ?? 0} sessions</p>
           )}
@@ -291,10 +299,7 @@ export function OverviewTab() {
             {totalDocuments.toLocaleString()}
           </p>
           {compare && docDelta.pct !== null ? (
-            <p className={`mt-1 text-[11px] font-bold font-data ${docDelta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-              {docDelta.positive ? "▲ +" : "▼ "}
-              {docDelta.pct}% uploads
-            </p>
+            <DeltaBadge change={docDelta.diff} amount={`${Math.abs(docDelta.pct ?? 0)}%`} suffix="uploads" />
           ) : (
             <p className="mt-1 text-[11px] text-zinc-500 font-data">{stats ? formatBytes(stats.total_storage_bytes) : "—"}</p>
           )}
@@ -531,6 +536,9 @@ export function OverviewTab() {
           </SectionCard>
         </div>
       </div>
+
+        </>
+      )}
 
       {/* User Analytics Drilldown Drawer */}
       {selectedUserId && (

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { forwardedQuery } from "@/features/admin/lib/admin-query";
 
 export interface PaletteItem {
   id: string;
@@ -22,6 +23,7 @@ export function AdminCommandPalette({
   onSelectTab: (tab: string) => void;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
 
@@ -98,7 +100,7 @@ export function AdminCommandPalette({
       title: "Analyze: Tool Requests Throughput",
       subtitle: "Deep-dive 3D charts, daily breakdowns, and request trends",
       onSelect: () => {
-        router.push("/admin/analytics/requests");
+        router.push(`/admin/analytics/requests${forwardedQuery(searchParams)}`);
         onClose();
       },
     },
@@ -108,7 +110,7 @@ export function AdminCommandPalette({
       title: "Analyze: Error Rates & Exceptions",
       subtitle: "Tool failure spikes, 5xx errors, rate-limiting triggers",
       onSelect: () => {
-        router.push("/admin/analytics/errors");
+        router.push(`/admin/analytics/errors${forwardedQuery(searchParams)}`);
         onClose();
       },
     },
@@ -118,7 +120,7 @@ export function AdminCommandPalette({
       title: "Analyze: User Growth & Sign-ups",
       subtitle: "Registration momentum and conversion trajectory",
       onSelect: () => {
-        router.push("/admin/analytics/signups");
+        router.push(`/admin/analytics/signups${forwardedQuery(searchParams)}`);
         onClose();
       },
     },
@@ -128,7 +130,7 @@ export function AdminCommandPalette({
       title: "Analyze: Chat Messages Volume",
       subtitle: "Research Copilot interactive query traffic",
       onSelect: () => {
-        router.push("/admin/analytics/messages");
+        router.push(`/admin/analytics/messages${forwardedQuery(searchParams)}`);
         onClose();
       },
     },

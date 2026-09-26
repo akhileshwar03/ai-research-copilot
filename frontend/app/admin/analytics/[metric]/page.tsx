@@ -2,12 +2,13 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { forwardedQuery } from "@/features/admin/lib/admin-query";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
 import { adminApi, type AnalyticsDay } from "@/services/api/admin-api";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
-import { TableShell, Th, formatDay } from "@/features/admin/components/shared";
+import { DeltaBadge, TableShell, Th, formatDay } from "@/features/admin/components/shared";
 import { DynamicChart } from "@/features/admin/components/dynamic-chart";
 import { calculateDelta, formatRangeLabel, getPresetDateRange } from "@/features/admin/lib/date-range-utils";
 
@@ -87,6 +88,7 @@ function AnalyticsDetailInner() {
   const compare = searchParams.get("compare") === "true";
   const userIdParam = searchParams.get("user_id");
   const userId = userIdParam ? parseInt(userIdParam, 10) : undefined;
+  const scopedEmail = searchParams.get("user_email");
 
   const [filterQuery, setFilterQuery] = useState("");
 
@@ -96,10 +98,11 @@ function AnalyticsDetailInner() {
     enabled: isReady && isAuthenticated,
   });
 
-  const { data: analytics } = useQuery({
+  const { data: analytics, error: analyticsError } = useQuery({
     queryKey: ["admin-analytics-detail", { start, end, userId, compare }],
     queryFn: () => adminApi.analytics({ start, end, user_id: userId, compare }),
     refetchInterval: 60_000,
+    retry: false,
   });
 
   const isForbidden = Boolean(me && !me.is_admin);
@@ -128,12 +131,8 @@ function AnalyticsDetailInner() {
   const delta = calculateDelta(total, prevTotal);
 
   const handleBack = () => {
-    const q = new URLSearchParams();
+    const q = new URLSearchParams(forwardedQuery(searchParams));
     q.set("tab", "overview");
-    if (start) q.set("start", start);
-    if (end) q.set("end", end);
-    if (compare) q.set("compare", "true");
-    if (userId) q.set("user_id", String(userId));
     router.push(`/admin?${q.toString()}`);
   };
 
@@ -157,7 +156,7 @@ function AnalyticsDetailInner() {
   if (isForbidden) return null;
 
   return (
-    <div className="relative min-h-screen px-3 py-4 sm:px-6 sm:py-7">
+    <div className="admin-console relative min-h-screen px-3 py-4 sm:px-6 sm:py-7">
       <AtmosphereBackground variant="calm" />
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">
         {/* Navigation Bar */}
@@ -183,12 +182,27 @@ function AnalyticsDetailInner() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {userId && (
+              <span className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1 text-[12px] font-bold text-sky-800">
+                Scoped to: {scopedEmail || `User #${userId}`}
+              </span>
+            )}
             <span className="rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)] px-3 py-1 text-[12px] font-bold font-data text-zinc-300">
               {formatRangeLabel(start, end)}
             </span>
           </div>
         </header>
+
+        {analyticsError && (
+          <div role="alert" className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-[13px] text-red-800">
+            <p className="font-bold">Couldn&apos;t load analytics for this range</p>
+            <p className="mt-0.5 text-[12px]">
+              {analyticsError instanceof Error ? analyticsError.message : "Unexpected error."} Go back and pick a
+              shorter range.
+            </p>
+          </div>
+        )}
 
         {/* Hero Telemetry Stat Strip */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -198,10 +212,7 @@ function AnalyticsDetailInner() {
               {total.toLocaleString()} {config.unit}
             </p>
             {prevTotal !== null && (
-              <p className={`mt-1 text-[11.5px] font-bold font-data ${delta.positive ? "text-emerald-400" : "text-rose-400"}`}>
-                {delta.positive ? "▲ +" : "▼ "}
-                {delta.pct}% vs prior window
-              </p>
+              <DeltaBadge change={delta.diff} amount={`${Math.abs(delta.pct ?? 0)}%`} suffix="vs prior window" higherIsBetter={config.field !== "errors"} />
             )}
           </div>
 

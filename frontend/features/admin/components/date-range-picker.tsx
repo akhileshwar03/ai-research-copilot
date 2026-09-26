@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   type DateRangePreset,
   formatRangeLabel,
@@ -20,6 +20,8 @@ const PRESET_OPTIONS: { id: DateRangePreset; label: string }[] = [
   { id: "custom", label: "Custom" },
 ];
 
+const MAX_RANGE_DAYS = 366;
+
 export function DateRangePicker({
   start,
   end,
@@ -38,6 +40,8 @@ export function DateRangePicker({
   const [open, setOpen] = useState(false);
   const [customStart, setCustomStart] = useState(start);
   const [customEnd, setCustomEnd] = useState(end);
+  const [rangeError, setRangeError] = useState<string | null>(null);
+  const uid = useId();
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -53,11 +57,16 @@ export function DateRangePicker({
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [open]);
 
+  const openCustomPopover = () => {
+    setCustomStart(start);
+    setCustomEnd(end);
+    setRangeError(null);
+    setOpen(true);
+  };
+
   const handleSelectPreset = (p: DateRangePreset) => {
     if (p === "custom") {
-      setCustomStart(start);
-      setCustomEnd(end);
-      setOpen(true);
+      openCustomPopover();
       return;
     }
     const range = getPresetDateRange(p);
@@ -66,13 +75,17 @@ export function DateRangePicker({
   };
 
   const handleApplyCustom = () => {
-    if (customStart && customEnd) {
-      if (customStart > customEnd) {
-        onRangeChange(customEnd, customStart, "custom");
-      } else {
-        onRangeChange(customStart, customEnd, "custom");
-      }
+    if (!customStart || !customEnd) {
+      setRangeError("Choose both a start and an end date.");
+      return;
     }
+    const [from, to] = customStart > customEnd ? [customEnd, customStart] : [customStart, customEnd];
+    const days = Math.round((parseYMD(to).getTime() - parseYMD(from).getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (days > MAX_RANGE_DAYS) {
+      setRangeError(`Ranges are limited to ${MAX_RANGE_DAYS} days (you chose ${days}).`);
+      return;
+    }
+    onRangeChange(from, to, "custom");
     setOpen(false);
   };
 
@@ -91,6 +104,7 @@ export function DateRangePicker({
             <button
               key={item.id}
               type="button"
+              aria-pressed={isActive}
               onClick={() => handleSelectPreset(item.id)}
               className={`rounded-lg px-2.5 py-1 text-[11.5px] font-bold transition-all duration-150 select-none ${
                 isActive
@@ -107,7 +121,7 @@ export function DateRangePicker({
       {/* Trigger Button showing currently active range */}
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => (open ? setOpen(false) : openCustomPopover())}
         className="inline-flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-1)] px-3 py-1.5 text-[12px] font-semibold text-zinc-200 transition hover:border-[var(--border-medium)] hover:bg-[var(--surface-2)]"
         title="Choose custom date range"
         aria-expanded={open}
@@ -142,6 +156,7 @@ export function DateRangePicker({
             <button
               type="button"
               onClick={() => setOpen(false)}
+              aria-label="Close custom range"
               className="text-zinc-500 hover:text-zinc-300"
             >
               ✕
@@ -150,10 +165,11 @@ export function DateRangePicker({
 
           <div className="mt-3.5 space-y-3">
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              <label htmlFor={`${uid}-start`} className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
                 Start Date (UTC)
               </label>
               <input
+                id={`${uid}-start`}
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
@@ -161,16 +177,23 @@ export function DateRangePicker({
               />
             </div>
             <div>
-              <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              <label htmlFor={`${uid}-end`} className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
                 End Date (UTC)
               </label>
               <input
+                id={`${uid}-end`}
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-2)] px-3 py-1.5 font-data text-[12.5px] text-zinc-200 focus:outline-none focus:ring-2 focus:ring-[var(--marketing-accent)]"
               />
             </div>
+
+            {rangeError && (
+              <p role="alert" className="text-[11.5px] font-semibold text-red-700">
+                {rangeError}
+              </p>
+            )}
 
             <div className="pt-2 flex items-center justify-between gap-2 border-t border-[var(--border-subtle)]">
               <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>

@@ -17,7 +17,7 @@ export function UserAnalyticsDrawer({
   onClose: () => void;
   onScopeUser?: (userId: number, email: string) => void;
 }) {
-  const { data: activity, isLoading: activityLoading } = useQuery({
+  const { data: activity } = useQuery({
     queryKey: ["admin-user-activity", userId],
     queryFn: () => adminApi.userActivity(userId),
   });
@@ -46,8 +46,9 @@ export function UserAnalyticsDrawer({
   }, [onClose]);
 
   const email = userEmail || activity?.identities[0] || `User #${userId}`;
-  const totalUserRequests = activity?.usage_30d.reduce((s, u) => s + u.requests, 0) ?? 0;
-  const totalUserErrors = activity?.usage_30d.reduce((s, u) => s + u.errors, 0) ?? 0;
+  const userTools = userAnalytics?.tools ?? [];
+  const totalUserRequests = userAnalytics?.series.reduce((s, d) => s + d.requests, 0) ?? 0;
+  const totalUserErrors = userAnalytics?.series.reduce((s, d) => s + d.errors, 0) ?? 0;
   const docs = docsData?.documents ?? [];
   const sessions = sessionsData?.sessions ?? [];
 
@@ -62,7 +63,7 @@ export function UserAnalyticsDrawer({
       onClick={onClose}
     >
       <div
-        className="glass-panel flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface-1)] p-5 shadow-2xl scrollbar-thin sm:p-6"
+        className="glass-panel flex h-full w-full max-w-xl flex-col overflow-y-auto border-l border-[var(--border-subtle)] bg-[var(--surface-1)]! p-5 shadow-2xl scrollbar-thin sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -142,13 +143,13 @@ export function UserAnalyticsDrawer({
           <h4 className="text-[12px] font-bold uppercase tracking-wider text-zinc-400">
             Tool Breakdown (Last 30 Days)
           </h4>
-          {activityLoading ? (
+          {!userAnalytics ? (
             <p className="py-4 text-center text-xs text-zinc-500">Loading tool telemetry…</p>
-          ) : !activity || activity.usage_30d.length === 0 ? (
+          ) : userTools.length === 0 ? (
             <p className="py-4 text-center text-xs text-zinc-500">No tool requests in this window.</p>
           ) : (
             <div className="divide-y divide-[var(--border-subtle)] rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-2)]/40 px-3">
-              {activity.usage_30d.map((u) => (
+              {userTools.map((u) => (
                 <div key={u.tool} className="py-2.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-semibold text-zinc-200">{u.label}</span>
