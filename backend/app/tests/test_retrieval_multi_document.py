@@ -2,7 +2,13 @@
 must use `$in` when a session is scoped to more than one document, and
 still combine correctly with the always-present user_email scope.
 """
+import asyncio
+
 from app.modules.rag.retrieval_service import RetrievalService
+
+
+def _run(coro):
+    return asyncio.run(coro)
 
 
 class FakeEmbeddingService:
@@ -27,19 +33,19 @@ def _make_service():
 
 def test_no_source_ids_scopes_to_user_only():
     service, store = _make_service()
-    service.retrieve_context("q", source_ids=None, user_email="a@example.com")
+    _run(service.retrieve_context("q", source_ids=None, user_email="a@example.com"))
     assert store.last_where == {"user_email": "a@example.com"}
 
 
 def test_single_source_id_uses_in_filter():
     service, store = _make_service()
-    service.retrieve_context("q", source_ids=["doc-a.pdf"], user_email="a@example.com")
+    _run(service.retrieve_context("q", source_ids=["doc-a.pdf"], user_email="a@example.com"))
     assert store.last_where == {"$and": [{"user_email": "a@example.com"}, {"source": {"$in": ["doc-a.pdf"]}}]}
 
 
 def test_multiple_source_ids_uses_in_filter():
     service, store = _make_service()
-    service.retrieve_context("q", source_ids=["doc-a.pdf", "doc-b.pdf", "doc-c.pdf"], user_email="a@example.com")
+    _run(service.retrieve_context("q", source_ids=["doc-a.pdf", "doc-b.pdf", "doc-c.pdf"], user_email="a@example.com"))
     assert store.last_where == {
         "$and": [{"user_email": "a@example.com"}, {"source": {"$in": ["doc-a.pdf", "doc-b.pdf", "doc-c.pdf"]}}]
     }
@@ -47,5 +53,5 @@ def test_multiple_source_ids_uses_in_filter():
 
 def test_empty_source_ids_list_treated_as_none():
     service, store = _make_service()
-    service.retrieve_context("q", source_ids=[], user_email="a@example.com")
+    _run(service.retrieve_context("q", source_ids=[], user_email="a@example.com"))
     assert store.last_where == {"user_email": "a@example.com"}

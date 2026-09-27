@@ -30,6 +30,13 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4.1-mini"
+    # Rewrites a follow-up question ("what about MUG?") into a standalone search query before retrieval.
+    # Deliberately the cheapest model: the input is ~500 tokens and the output ~20. Measured on the eval
+    # set of 42 Qs, it took follow-up retrieval from 5/7 to 7/7 hits (2026-09-27 eval).
+    openai_condense_model: str = "gpt-4.1-nano"
+    # Re-scores retrieved chunks before answering (RetrievalService). Same reasoning as
+    # openai_condense_model: cheap, deterministic, and this is a classification task, not a creative one.
+    openai_rerank_model: str = "gpt-4.1-nano"
     openai_healthcheck_timeout_seconds: float = 2.0
 
     # Humaniser pipeline models — deliberately separate from openai_chat_model

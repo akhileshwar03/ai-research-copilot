@@ -129,4 +129,4 @@ def test_full_document_context_truncates_at_max_chars():
 def test_full_document_context_empty_when_no_chunks():
     service = RetrievalService(embedding_service=FakeEmbeddingService(), vector_store=FakeVectorStore([]))
     result = service.get_full_document_context(["a.pdf"])
-    assert result == {"context": "", "truncated": False, "chunk_count": 0}
+    assert result == {"context": "", "truncated": False, "chunk_count": 0, "truncated_sources": []}

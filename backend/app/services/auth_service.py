@@ -79,6 +79,7 @@ class AuthService:
         from app.db.models.humanizer_run import HumanizerRun
         from app.db.models.realtime_models import RealtimeMessage, RealtimeSession
         from app.db.models.ai_usage_event import AIUsageEvent
+        from app.db.models.chat_quota import ChatQuotaUsage
         from app.db.models.usage_event import UsageEvent
         from app.db.repositories.document_repository import DocumentRepository
         from app.services.storage_service import get_storage_service
@@ -128,6 +129,7 @@ class AuthService:
         #     foreign keys are enforced, so leaving any of these behind would
         #     make the user delete itself fail with an IntegrityError.
         db.query(HumanizerRun).filter(HumanizerRun.user_id == user.id).delete(synchronize_session=False)
+        db.query(ChatQuotaUsage).filter(ChatQuotaUsage.user_id == user.id).delete(synchronize_session=False)
         realtime_ids = [r[0] for r in db.query(RealtimeSession.id).filter(RealtimeSession.user_id == user.id).all()]
         if realtime_ids:
             db.query(RealtimeMessage).filter(RealtimeMessage.session_id.in_(realtime_ids)).delete(

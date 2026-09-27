@@ -21,6 +21,7 @@ from app.db.models import (  # noqa: F401
     ai_usage_event,
     app_setting,
     chat_models,
+    chat_quota,
     document,
     document_chunk,
     finetune_sample,

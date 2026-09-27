@@ -91,6 +91,7 @@ def get_chat_service() -> ChatService:
     retrieval_service = RetrievalService(
         embedding_service=get_embedding_service(),
         vector_store=get_vector_store_manager(),
+        ai_service=get_ai_service(),
     )
     return ChatService(retrieval_service=retrieval_service, ai_service=get_ai_service())
 

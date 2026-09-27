@@ -388,3 +388,142 @@ def test_text_heavy_page_with_only_a_table_border_does_not_trigger_vision(monkey
     _run(service.process_pdf(content, source_id="table_border.pdf", user_email="a@example.com"))
 
     assert ai_service.calls == []
+
+
+def test_nul_characters_in_extracted_text_never_reach_the_database(monkeypatch):
+    """Regression: PostgreSQL rejects 0x00 in text columns, so a PDF whose extracted text contained one
+    (real GPT-4 Technical Report p.33, real LLM survey p.50) failed ingestion entirely in production."""
+    import app.modules.rag.ingestion_service as ingestion_module
+
+    class _Page:
+        images = []
+
+        def extract_text(self):
+            return "Results table\x00 with a stray NUL\x00 and normal words " * 30
+
+    class _Reader:
+        def __init__(self, *_a, **_k):
+            self.pages = [_Page(), _Page()]
+
+    monkeypatch.setattr(ingestion_module, "PdfReader", _Reader)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    result = _run(service.process_pdf(b"unused", source_id="nul.pdf", user_email="a@example.com"))
+
+    assert result.chunks_stored > 0
+    assert all("\x00" not in doc for doc in store.added["documents"])
+    assert "stray NUL and normal words" in " ".join(store.added["documents"])  # the text itself is preserved
+
+
+def _pdf_with_lines(*pages: list[str]) -> bytes:
+    """One page per list of lines, each line drawn separately so pypdf extracts it on its own line —
+    lets a test control exactly which lines look like a heading to _headings_in."""
+    _require_reportlab()
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(400, 400))
+    for lines in pages:
+        y = 380
+        for line in lines:
+            c.drawString(20, y, line)
+            y -= 20
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+_FILLER = "This paragraph contains many real words of genuine prose content for testing purposes here today."
+
+
+def test_chunks_are_stamped_with_title_and_page_when_no_heading_present():
+    content = _pdf_with_lines([_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="My Paper.pdf"))
+
+    doc = store.added["documents"][0]
+    assert doc.startswith("[My Paper.pdf | page 1]\n")
+    assert _FILLER in doc
+
+
+def test_chunks_are_stamped_with_the_nearest_preceding_heading():
+    content = _pdf_with_lines(["III. Model Architecture"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="My Paper.pdf"))
+
+    doc = store.added["documents"][0]
+    assert doc.startswith("[My Paper.pdf | III. Model Architecture | page 1]\n")
+
+
+def test_a_heading_carries_over_to_a_later_page_with_no_heading_of_its_own():
+    content = _pdf_with_lines(
+        ["III. Model Architecture"] + [_FILLER] * 6,
+        [_FILLER] * 6,  # page 2: no heading of its own
+    )
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="My Paper.pdf"))
+
+    page2_docs = [d for d in store.added["documents"] if "page 2]" in d.split("\n", 1)[0]]
+    assert page2_docs and all(d.startswith("[My Paper.pdf | III. Model Architecture | page 2]\n") for d in page2_docs)
+
+
+def test_a_new_heading_replaces_the_carried_one():
+    content = _pdf_with_lines(
+        ["III. Model Architecture"] + [_FILLER] * 6,
+        ["IV. Experiments"] + [_FILLER] * 6,
+    )
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="My Paper.pdf"))
+
+    page2_docs = [d for d in store.added["documents"] if "page 2]" in d.split("\n", 1)[0]]
+    assert all(d.startswith("[My Paper.pdf | IV. Experiments | page 2]\n") for d in page2_docs)
+    assert not any("Model Architecture" in d for d in page2_docs)
+
+
+def test_no_title_given_falls_back_to_a_page_only_stamp():
+    content = _pdf_with_lines([_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com"))  # title omitted
+
+    doc = store.added["documents"][0]
+    assert doc.startswith("[page 1]\n")
+    assert "None" not in doc.split("\n", 1)[0]
+
+
+def test_a_stray_short_line_is_not_mistaken_for_a_heading():
+    """A one-off short line (a page number, a stray fragment) must not be picked up as a heading —
+    _headings_in requires a plausible-looking pattern, not just brevity."""
+    content = _pdf_with_lines(["42", "and,"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    doc = store.added["documents"][0]
+    assert doc.startswith("[Doc | page 1]\n")
+
+
+def test_vision_chunks_are_not_title_stamped():
+    """Vision-caption chunks already carry their own "[Figure/diagram on page N ...]" marker (see
+    _describe_visual_pages) — stamping must apply only to real extracted text, not double up on those."""
+    content = _make_blank_pdf_bytes(num_pages=1)
+    ai_service = FakeAIService(response="A pie chart showing market share by quarter.")
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store, ai_service=ai_service)
+
+    _run(service.process_pdf(content, source_id="chart.pdf", user_email="a@example.com", title="Chart Doc"))
+
+    doc = store.added["documents"][0]
+    assert doc.startswith("[Figure/diagram on page 1")
+    assert "Chart Doc" not in doc

@@ -244,12 +244,57 @@ def _defs() -> dict[str, SettingDef]:
         "rag_similarity_threshold": SettingDef(
             float, 0.0, 2.0, "Cosine-distance cutoff for retrieved chunks (lower = stricter)", "research_copilot"
         ),
+        "rag_embedding_model": SettingDef(
+            str,
+            0,
+            40,
+            "OpenAI embedding model for new document ingestion and every query. Changing this does NOT "
+            "re-embed already-ingested chunks -- their old vectors are still compared against new-model "
+            "query vectors, which is meaningless. Only switch after running scripts/reembed_chunks.py "
+            "against this database, or existing documents' retrieval silently breaks.",
+            "research_copilot",
+            choices=frozenset({"text-embedding-ada-002", "text-embedding-3-small"}),
+        ),
+        "rag_rerank_enabled": SettingDef(
+            bool,
+            0,
+            1,
+            "Re-score retrieved chunks with a small LLM call before answering (measured +8-20pp retrieval "
+            "accuracy on a 152-question benchmark, ~$0.0003-0.0005/query). Falls back to plain distance "
+            "ranking if the call fails or is disabled.",
+            "research_copilot",
+        ),
+        "rag_rerank_pool_size": SettingDef(
+            int,
+            6,
+            100,
+            "Candidate chunks fetched from the vector store before reranking down to rag_top_k. Only used "
+            "when rag_rerank_enabled is on.",
+            "research_copilot",
+        ),
         "rag_full_document_max_chars": SettingDef(
             int,
             10000,
             400000,
             "Character budget for whole-document context on counting/aggregate questions and research "
             "actions (summaries, reports). Above this, the answer is presented as a lower bound, not exact.",
+            "research_copilot",
+        ),
+        "chat_full_document_daily_limit": SettingDef(
+            int,
+            0,
+            1000,
+            "Whole-document chat requests (research actions and counting/aggregate questions) each user may make "
+            "per UTC day. These send far more text to the model than a normal question, so they are the main cost "
+            "lever. 0 = unlimited.",
+            "research_copilot",
+        ),
+        "chat_history_max_chars": SettingDef(
+            int,
+            2000,
+            100000,
+            "Most recent conversation (characters) sent to the model with each chat message. Older turns are "
+            "dropped so a long conversation does not get more expensive with every message.",
             "research_copilot",
         ),
         "chat_rate_limit_per_minute": SettingDef(
@@ -377,6 +422,11 @@ def _env_defaults() -> dict[str, SettingValue]:
         "max_upload_size_mb": s.max_upload_size_mb,
         "rag_top_k": s.rag_top_k,
         "rag_similarity_threshold": s.rag_similarity_threshold,
+        "rag_embedding_model": "text-embedding-ada-002",
+        "rag_rerank_enabled": True,
+        "rag_rerank_pool_size": 20,
+        "chat_full_document_daily_limit": 10,
+        "chat_history_max_chars": 12000,
         "chat_rate_limit_per_minute": 20,
         "chat_max_chars": 4000,
         "rag_full_document_max_chars": 150000,

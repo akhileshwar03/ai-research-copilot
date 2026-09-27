@@ -96,6 +96,12 @@ class FakeChatService:
     def validate_latest_message(self, messages):
         pass
 
+    async def decide_full_document(self, messages, action, document_ids):
+        # The real routing decision (regex fallback only: no classifier is attached in route tests).
+        from app.services.chat_service import ChatService
+
+        return await ChatService(retrieval_service=None, ai_service=None).decide_full_document(messages, action, document_ids)
+
     def validate_action(self, action, document_ids):
         pass
 
@@ -108,6 +114,7 @@ class FakeChatService:
         vision_truncated_documents=None,
         user_email="",
         action=None,
+        full_document=None,
     ):
         # Mirrors the real ChatService contract: a sources event first,
         # then token events, then (optionally) follow-up suggestions.

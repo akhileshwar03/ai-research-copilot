@@ -1044,7 +1044,7 @@ class _Retrieval:
         self.full_document_called = False
         self.retrieve_called = False
 
-    def retrieve_context(self, query, source_ids=None, n_results=None, user_email="", source_names=None):
+    async def retrieve_context(self, query, source_ids=None, n_results=None, user_email="", source_names=None):
         self.retrieve_called = True
         return {"context": "[SOURCE: A.pdf | PAGE: 1]\nsome text", "sources": source_ids or []}
 
