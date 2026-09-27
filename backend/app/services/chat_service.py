@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -561,8 +562,17 @@ class ChatService:
 
         page_result: dict | None = None
         if target_pages:
-            page_result = self.retrieval_service.get_page_context(
-                document_ids, target_pages, user_email=user_email, source_names=document_names
+            # get_page_context is a plain sync method (a blocking DB call) -- run off the event
+            # loop via to_thread, same fix and same reason as retrieval_service.retrieve_context's
+            # embed_query/vector_store.query calls (see the comment there): called directly inside
+            # this `async def`, it would otherwise stall every other in-flight request on this
+            # worker for its own duration, not just add to this one's latency.
+            page_result = await asyncio.to_thread(
+                self.retrieval_service.get_page_context,
+                document_ids,
+                target_pages,
+                user_email=user_email,
+                source_names=document_names,
             )
 
         if target_pages:
@@ -608,8 +618,12 @@ class ChatService:
             use_full_document = full_document
             full_doc: dict | None = None
             if use_full_document:
-                full_doc = self.retrieval_service.get_full_document_context(
-                    document_ids, user_email=user_email, source_names=document_names
+                # Blocking DB call -- see the to_thread comment on get_page_context above.
+                full_doc = await asyncio.to_thread(
+                    self.retrieval_service.get_full_document_context,
+                    document_ids,
+                    user_email=user_email,
+                    source_names=document_names,
                 )
                 if not full_doc["context"].strip():
                     use_full_document = False
@@ -664,7 +678,9 @@ class ChatService:
         # see Document.page_count) is preferred whenever known; only documents
         # ingested before that field existed fall back to max_pages (the highest
         # page that produced an indexed chunk — a lower bound, phrased as such).
-        max_pages = self.retrieval_service.get_max_indexed_pages(document_ids, user_email=user_email)
+        # Blocking DB call, run on every single request regardless of retrieval mode -- see the
+        # to_thread comment on get_page_context above.
+        max_pages = await asyncio.to_thread(self.retrieval_service.get_max_indexed_pages, document_ids, user_email=user_email)
         scope_parts = []
         for d in document_ids:
             name = document_names.get(d, d)

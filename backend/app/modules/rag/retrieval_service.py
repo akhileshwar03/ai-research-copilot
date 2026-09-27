@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -57,7 +58,16 @@ class RetrievalService:
         verbatim when citing sources in its reply).
         """
         source_names = source_names or {}
-        query_embedding = self.embedding_service.embed_query(query)
+        # Both embed_query (a blocking HTTP call to OpenAI, measured ~0.8-2.6s) and
+        # vector_store.query (a blocking DB call) below are plain synchronous calls -- run directly
+        # inside this `async def` without `to_thread`, either one stalls the entire event loop for
+        # its full duration. Confirmed with a real, timed demo (2026-09-28): a concurrent coroutine
+        # made literally zero progress until the blocking call returned (total wall time equalled
+        # the SUM of both durations, not their max), which means every OTHER in-flight request on
+        # the same worker -- another user's chat message, a health check -- stalls too, not just
+        # this one's own latency. `asyncio.to_thread` moves the blocking call to a worker thread,
+        # confirmed by the same demo to restore real concurrency (total wall time drops to ~max).
+        query_embedding = await asyncio.to_thread(self.embedding_service.embed_query, query)
 
         source_filter: dict | None = {"source": {"$in": source_ids}} if source_ids else None
 
@@ -73,7 +83,9 @@ class RetrievalService:
         top_k = n_results or int(runtime_settings.get("rag_top_k"))
         rerank_on = self.ai_service is not None and bool(runtime_settings.get("rag_rerank_enabled"))
         pool_size = max(top_k, int(runtime_settings.get("rag_rerank_pool_size"))) if rerank_on else top_k
-        results = self.vector_store.query(query_embedding=query_embedding, n_results=pool_size, where=where)
+        results = await asyncio.to_thread(
+            self.vector_store.query, query_embedding=query_embedding, n_results=pool_size, where=where
+        )
 
         documents = results.get("documents", [[]])[0]
         metadatas = results.get("metadatas", [[]])[0]
