@@ -44,7 +44,15 @@ class AIService:
             api_key=settings.openai_api_key,
             model=settings.openai_rerank_model,
             temperature=0,
-            max_tokens=200,
+            # 200 was measured too tight (2026-09-28 eval): a real production-shaped rerank call
+            # (pool of 20, real passages) hit LengthFinishReasonError -- the model was cut off
+            # mid-JSON before listing all 20 ranked indices -- in 1 of 525 real calls during a
+            # retrieval-accuracy eval. RetrievalService._rerank already falls back to plain
+            # distance order on any failure, so this was silent, but it's still a real, avoidable
+            # quality loss for that ~0.2% of requests. 400 gives real headroom (a full 20-index
+            # JSON array plus the key is normally under 100 tokens) at negligible extra cost --
+            # this is a cap, not a target, so a well-behaved response is billed the same either way.
+            max_tokens=400,
             model_kwargs={"response_format": {"type": "json_object"}},
             stream_usage=True,
             callbacks=[TokenUsageCallback(settings.openai_rerank_model)],
