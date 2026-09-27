@@ -5,14 +5,37 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      # Patch/minor bumps are low-risk (confirmed 2026-09-27: 14 of 16 non-major bumps that week
+      # merged clean) — batch them into one PR/week instead of one branch per package. Majors are
+      # deliberately left out of the group: two majors that same week (openai, eslint) had real,
+      # CI-confirmed breakage, so those still need their own PR and individual review.
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "pip"
     directory: "/backend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    groups:
+      pip-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      # GitHub Actions version bumps (runner versions, not application code) carry negligible
+      # breakage risk even across majors, and there are only 3 actions in use — one PR for all of
+      # them, any bump size, is the sensible default here.
+      actions-all:
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
