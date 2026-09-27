@@ -97,7 +97,8 @@ def main() -> None:
         print(f"  {done}/{total} re-embedded ({time.time() - t0:.0f}s elapsed)", flush=True)
 
     print(f"\nDone: {done} chunks now embedded with {args.to_model}.")
-    print("Next: set the rag_embedding_model runtime setting to this model so new ingestion/queries match.")
+    print("Next: set EMBEDDING_MODEL in app/modules/rag/embedding_service.py to this model and redeploy --")
+    print("there is no runtime setting for this anymore; it is one fixed model, changed only by a real code change.")
 
 
 if __name__ == "__main__":

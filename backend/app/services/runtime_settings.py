@@ -244,17 +244,6 @@ def _defs() -> dict[str, SettingDef]:
         "rag_similarity_threshold": SettingDef(
             float, 0.0, 2.0, "Cosine-distance cutoff for retrieved chunks (lower = stricter)", "research_copilot"
         ),
-        "rag_embedding_model": SettingDef(
-            str,
-            0,
-            40,
-            "OpenAI embedding model for new document ingestion and every query. Changing this does NOT "
-            "re-embed already-ingested chunks -- their old vectors are still compared against new-model "
-            "query vectors, which is meaningless. Only switch after running scripts/reembed_chunks.py "
-            "against this database, or existing documents' retrieval silently breaks.",
-            "research_copilot",
-            choices=frozenset({"text-embedding-ada-002", "text-embedding-3-small"}),
-        ),
         "rag_rerank_enabled": SettingDef(
             bool,
             0,
@@ -422,7 +411,6 @@ def _env_defaults() -> dict[str, SettingValue]:
         "max_upload_size_mb": s.max_upload_size_mb,
         "rag_top_k": s.rag_top_k,
         "rag_similarity_threshold": s.rag_similarity_threshold,
-        "rag_embedding_model": "text-embedding-ada-002",
         "rag_rerank_enabled": True,
         "rag_rerank_pool_size": 20,
         "chat_full_document_daily_limit": 10,
