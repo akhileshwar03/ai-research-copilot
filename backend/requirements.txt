@@ -1,37 +1,37 @@
-fastapi==0.136.1
-uvicorn==0.47.0
+fastapi==0.141.1
+uvicorn==0.53.0
 sentry-sdk[fastapi]==2.70.0
 
 openai==2.37.0
 httpx==0.28.1
 
 python-dotenv==1.2.3
-python-multipart==0.0.29
+python-multipart==0.0.32
 
 langchain==1.4.2
-langchain-community==0.4.1
-langchain-openai==1.2.1
+langchain-community==0.4.2
+langchain-openai==1.6.6
 langchain-text-splitters==1.1.2
 
-pgvector==0.4.1
-pypdf==6.11.0
+pgvector==0.5.0
+pypdf==6.19.0
 pymupdf==1.28.2
-pdfplumber==0.11.4
-tiktoken==0.13.0
+pdfplumber==0.11.10
+tiktoken==0.14.0
 beautifulsoup4==4.15.0
 
 boto3==1.43.101
 Pillow==12.3.0  # admin background-image upload: resize/recompress to a size budget before storing
 
-SQLAlchemy==2.0.49
-psycopg2-binary==2.9.10
+SQLAlchemy==2.0.54
+psycopg2-binary==2.9.13
 bcrypt==4.0.1
 python-jose[cryptography]==3.5.0
 pydantic-settings==2.15.0
 email-validator==2.3.0
-alembic==1.18.4
+alembic==1.20.0
 
-slowapi==0.1.9
+slowapi==0.1.10
 
 pytest
 pytest-asyncio
