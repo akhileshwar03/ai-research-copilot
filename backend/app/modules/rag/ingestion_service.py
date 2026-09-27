@@ -48,6 +48,43 @@ _HEADING_RES = [
     re.compile(r"^[A-Z]\.\s+[A-Z][A-Za-z ,&\-]{2,60}$"),             # A. Network architecture
 ]
 
+# Confirmed false positives on a real (non-academic) document, 2026-09-27: a numbered interview
+# question ("36. What is BERT, and how is it different from traditional NLP") matches the "3.2 Dataset
+# Description"-style numbered pattern just as well as a real section does -- both are "<number>. <Capitalized
+# words>". Reject anything that reads as a question: ends in "?", or opens with an interrogative/imperative
+# word once the leading number/letter is stripped off.
+_QUESTION_MARK_RE = re.compile(r"\?\s*$")
+_QUESTION_START_RE = re.compile(
+    r"^(?:what|how|why|when|where|which|who|whom|whose|is|are|was|were|do|does|did|can|could|should|would|"
+    r"will|define|explain|describe|list|give|discuss|compare|state|write|derive|differentiate)\b",
+    re.IGNORECASE,
+)
+_LEADING_NUMBER_RE = re.compile(r"^(?:[IVX]{1,4}\.|[A-Z]\.|\d+(?:\.\d+)*\.?)\s+")
+
+# The bare ALL-CAPS pattern above (no digits, no "CHAPTER") is the one most prone to catching a single
+# stray capitalized word or acronym mid-sentence (confirmed: "CANDIDATE", "ONNX", "TF-IDF" on the same real
+# document) rather than an actual section heading. Real single-word section headings are a small, known
+# set; anything else needs to be at least two words to count.
+_KNOWN_SINGLE_WORD_HEADINGS = frozenset({
+    "ABSTRACT", "INTRODUCTION", "CONCLUSION", "CONCLUSIONS", "REFERENCES", "BIBLIOGRAPHY",
+    "ACKNOWLEDGEMENTS", "ACKNOWLEDGMENTS", "DISCUSSION", "RESULTS", "METHODOLOGY", "METHODS",
+    "BACKGROUND", "APPENDIX", "SUMMARY", "OVERVIEW", "MOTIVATION", "OBJECTIVES", "SCOPE",
+})
+
+
+def _is_plausible_heading(stripped: str) -> bool:
+    """Rejects a regex match that isn't actually a section heading -- see the false positives documented
+    above _QUESTION_MARK_RE and _KNOWN_SINGLE_WORD_HEADINGS. Applied uniformly to every _HEADING_RES match."""
+    if _QUESTION_MARK_RE.search(stripped):
+        return False
+    body = _LEADING_NUMBER_RE.sub("", stripped, count=1)
+    if _QUESTION_START_RE.match(body):
+        return False
+    if stripped.isupper() and not stripped[:1].isdigit() and not stripped.upper().startswith("CHAPTER"):
+        if len(body.split()) < 2 and body.strip(" .-") not in _KNOWN_SINGLE_WORD_HEADINGS:
+            return False
+    return True
+
 
 def _headings_in(page_text: str) -> list[tuple[int, str]]:
     """Every heading-looking line in *page_text*, as (character offset, heading text) pairs, in order."""
@@ -55,7 +92,7 @@ def _headings_in(page_text: str) -> list[tuple[int, str]]:
     pos = 0
     for line in page_text.split("\n"):
         stripped = line.strip()
-        if 3 < len(stripped) < 80 and any(r.match(stripped) for r in _HEADING_RES):
+        if 3 < len(stripped) < 80 and any(r.match(stripped) for r in _HEADING_RES) and _is_plausible_heading(stripped):
             found.append((pos, stripped))
         pos += len(line) + 1
     return found

@@ -527,3 +527,77 @@ def test_vision_chunks_are_not_title_stamped():
     doc = store.added["documents"][0]
     assert doc.startswith("[Figure/diagram on page 1")
     assert "Chart Doc" not in doc
+
+
+# ── Heading false positives, confirmed 2026-09-27 against a real production document ────────────────────
+# (an informal AI/DS interview-prep PDF, not an academic paper): re-ingesting it stamped "CANDIDATE",
+# "ONNX", "TF-IDF" (stray capitalized words/acronyms) and "36. What is BERT, and how is it different from
+# traditional NLP" (a numbered interview question) as if they were real section headings. Real headings on
+# that same document -- "3. Data Preparation", "5. Model Evaluation" -- must still be detected.
+def test_a_stray_all_caps_word_is_not_mistaken_for_a_heading():
+    content = _pdf_with_lines(["ONNX"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert store.added["documents"][0].startswith("[Doc | page 1]\n")
+
+
+def test_a_hyphenated_all_caps_acronym_is_not_mistaken_for_a_heading():
+    content = _pdf_with_lines(["TF-IDF"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert store.added["documents"][0].startswith("[Doc | page 1]\n")
+
+
+def test_a_numbered_interview_question_is_not_mistaken_for_a_numbered_section():
+    content = _pdf_with_lines(
+        ["36.  What is BERT, and how is it different from traditional NLP"] + [_FILLER] * 6
+    )
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert store.added["documents"][0].startswith("[Doc | page 1]\n")
+
+
+def test_a_real_numbered_section_heading_from_the_same_document_style_still_fires():
+    content = _pdf_with_lines(["3.  Data  Preparation"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert store.added["documents"][0].startswith("[Doc | 3.  Data  Preparation | page 1]\n")
+
+
+def test_a_known_single_word_heading_still_fires():
+    content = _pdf_with_lines(["ABSTRACT"] + [_FILLER] * 6)
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert store.added["documents"][0].startswith("[Doc | ABSTRACT | page 1]\n")
+
+
+def test_a_wrong_heading_no_longer_carries_forward_once_rejected():
+    """The exact real-document failure mode: a numbered question misread as a heading used to poison
+    every following chunk with that wrong label until the next real (or fake) heading appeared."""
+    content = _pdf_with_lines(
+        ["36.  What is BERT, and how is it different from traditional NLP"] + [_FILLER] * 6,
+        [_FILLER] * 6,  # a later page with no heading of its own
+    )
+    store = FakeVectorStore()
+    service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
+
+    _run(service.process_pdf(content, source_id="doc.pdf", user_email="a@example.com", title="Doc"))
+
+    assert all("BERT" not in d.split("\n", 1)[0] for d in store.added["documents"])  # never in the STAMP
+    page2 = [d for d in store.added["documents"] if "page 2]" in d.split("\n", 1)[0]]
+    assert page2 and all(d.startswith("[Doc | page 2]\n") for d in page2)
