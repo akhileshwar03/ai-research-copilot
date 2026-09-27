@@ -494,7 +494,7 @@ export function DynamicChart({
             </div>
 
             {/* Synchronized Donut Legend Table */}
-            <div className="max-h-48 w-full min-w-[11rem] max-w-xs flex-1 space-y-1.5 overflow-y-auto pr-2 scrollbar-thin">
+            <div className="max-h-48 w-full min-w-[15rem] max-w-sm flex-1 space-y-1.5 overflow-y-auto pr-2 scrollbar-thin">
               {isDateData && compositionSlices.length > 0 && (
                 <div className="flex items-center justify-between gap-2 px-2">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
@@ -532,11 +532,11 @@ export function DynamicChart({
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: s.color }} />
-                      <span className="break-words font-semibold leading-tight text-[var(--text-primary)]" title={s.label}>
+                      <span className="min-w-0 truncate font-semibold leading-tight text-[var(--text-primary)]" title={s.label}>
                         {s.label}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 font-data tabular-nums text-zinc-300">
+                    <div className="ml-3 flex shrink-0 items-center gap-2 whitespace-nowrap font-data tabular-nums text-zinc-300">
                       <span className="font-bold text-[var(--text-primary)]">{fmt(s.value)}</span>
                       <span className="text-[11px] text-zinc-500 w-11 text-right">{s.pct}%</span>
                     </div>
