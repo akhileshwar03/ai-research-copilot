@@ -77,6 +77,84 @@ def _looks_like_aggregate_query(text: str) -> bool:
     return bool(_AGGREGATE_QUERY_RE.search(text))
 
 
+# A narrower, code-level (not prompt-level) fix for the specific failure rule 11 above only
+# reduces the frequency of, not closes: a 2026-09-27 production test showed that even with
+# that rule in place, insistent phrasing ("Give me one final number: how many tables total,
+# exactly.") could still get gpt-4.1-mini to fabricate a confident count from a handful of
+# retrieved excerpts. A question that is ONLY asking to count references/figures/tables never
+# needs the LLM's judgement at all -- the real answer already exists in
+# document_structural_counts (or genuinely doesn't exist, in which case that absence IS the
+# answer) -- so this detects that narrow intent and answers deterministically in
+# stream_response, bypassing the model call entirely for those documents. No amount of
+# insistent phrasing can move a value that was never sent to an LLM.
+_FACT_LABELS: dict[str, str] = {"references": "references", "figures": "figures", "tables": "tables"}
+_FACT_TERM_RE: dict[str, re.Pattern[str]] = {
+    "references": re.compile(r"\b(?:references?|citations?|bibliography(?:\s+entries)?|works cited)\b", re.IGNORECASE),
+    "figures": re.compile(r"\bfigures?\b", re.IGNORECASE),
+    "tables": re.compile(r"\btables?\b", re.IGNORECASE),
+}
+_STRUCTURAL_COUNT_CUE_RE = re.compile(
+    r"\bhow many\b|\bnumber of\b|\btotal(?:\s+number)?\b|\bcount(?:\s+of)?\b|\bexactly\b", re.IGNORECASE
+)
+# Any of these means the question wants more than a bare number (titles, an explanation, a
+# broader answer the question happens to also mention a count in) -- deliberately biased
+# toward NOT intercepting when in doubt, since a false "intercept" would wrongly withhold an
+# answer the model could otherwise give from real context, while a false "don't intercept"
+# just falls back to the existing (already-hardened) prompt-level rule 11.
+_STRUCTURAL_MIXED_INTENT_RE = re.compile(
+    r"\blist\b|\btitles?\b|\bcaptions?\b|\bnames?\b|\bwhich\b|\bwhat are\b|\bsummar|\bexplain\b|\bdescribe\b"
+    r"|\bcompare\b|\boverview\b|\bfindings?\b|\banaly|\bdiscuss\b|\bmain point",
+    re.IGNORECASE,
+)
+
+
+def _structural_count_intent(text: str) -> set[str]:
+    """Which of references/figures/tables *text* is purely asking to count, or an empty set if
+    it isn't a pure count question (no count cue, or mixed with a broader ask)."""
+    if not text or _STRUCTURAL_MIXED_INTENT_RE.search(text) or not _STRUCTURAL_COUNT_CUE_RE.search(text):
+        return set()
+    return {fact for fact, pattern in _FACT_TERM_RE.items() if pattern.search(text)}
+
+
+def _join_english(items: list[str]) -> str:
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return f"{', '.join(items[:-1])}, and {items[-1]}"
+
+
+def _structural_count_answer(
+    facts: set[str],
+    document_ids: list[str],
+    document_names: dict[str, str],
+    document_structural_counts: dict[str, dict],
+) -> str:
+    """The full reply text for a pure references/figures/tables count question, built entirely
+    from real, pre-computed facts (see structure_detector.py) -- never from an LLM, so there is
+    nothing for insistent phrasing to talk it out of."""
+    fact_order = [f for f in ("references", "figures", "tables") if f in facts]
+    blocks = []
+    for d in document_ids:
+        counts = document_structural_counts.get(d) or {}
+        known, unknown = [], []
+        for fact in fact_order:
+            c = counts.get(fact)
+            label = _FACT_LABELS[fact]
+            if c:
+                known.append(f"exactly {c['count']} {label}" if c["exact"] else f"at least {c['count']} {label}")
+            else:
+                unknown.append(label)
+        sentences = []
+        if known:
+            sentences.append(f"This document has {_join_english(known)}.")
+        if unknown:
+            sentences.append(f"The number of {_join_english(unknown)} cannot be reliably determined for this document.")
+        body = " ".join(sentences)
+        blocks.append(f"**{document_names.get(d, d)}**\n{body}" if len(document_ids) > 1 else body)
+    return "\n\n".join(blocks)
+
+
 # Questions about specific page number(s) ("what's on page 25", "which
 # question is in 25 page", "compare page 3 and page 8"). A page number
 # carries no useful semantic meaning for embedding similarity search — "page
@@ -314,6 +392,12 @@ class ChatService:
         latest = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
         if _extract_page_numbers(latest):
             return False  # an explicit page question is an exact page lookup, never whole-document
+        if _structural_count_intent(latest):
+            # A pure references/figures/tables count question is answered directly from the
+            # document's already-known structural facts (see _structural_count_answer) --
+            # stream_response never fetches the whole document for it, so it must not be
+            # charged against the whole-document daily quota either, or count as a classifier call.
+            return False
         if _EXPLICIT_WHOLE_RE.search(latest):
             return True
         if not _ROUTER_CUE_RE.search(latest):
@@ -458,6 +542,23 @@ class ChatService:
         # ("cite the page, e.g. (page 4)") — that must never be mistaken for
         # a page-lookup question.
         target_pages = [] if action else _extract_page_numbers(latest_user_message)
+
+        # A pure "how many references/figures/tables" question never needs retrieval or the
+        # LLM at all -- see _structural_count_answer. Checked before the page/aggregate/default
+        # branching below (and skipped whenever a page number is also named, since this only
+        # answers whole-document totals, not a per-page count).
+        structural_intent = set() if (action or target_pages) else _structural_count_intent(latest_user_message)
+        if structural_intent:
+            answer = _structural_count_answer(structural_intent, document_ids, document_names, document_structural_counts)
+            logger.info(
+                "chat_stream_start scope=grounded mode=structural_count_direct document_ids=%s facts=%s",
+                document_ids,
+                sorted(structural_intent),
+            )
+            yield {"type": "sources", "sources": document_ids}
+            yield {"type": "token", "value": answer}
+            return
+
         page_result: dict | None = None
         if target_pages:
             page_result = self.retrieval_service.get_page_context(
