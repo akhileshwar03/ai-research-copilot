@@ -197,6 +197,12 @@ class DocumentService:
                 upload_status=upload_status,
                 page_count=result.total_pages,
                 vision_truncated=result.vision_truncated,
+                reference_count=result.reference_count,
+                reference_count_exact=result.reference_count_exact,
+                figure_count=result.figure_count,
+                figure_count_exact=result.figure_count_exact,
+                table_count=result.table_count,
+                table_count_exact=result.table_count_exact,
             )
             db.commit()
             logger.info(

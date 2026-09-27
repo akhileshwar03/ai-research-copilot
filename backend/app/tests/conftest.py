@@ -111,6 +111,7 @@ class FakeChatService:
         document_ids=None,
         document_names=None,
         document_page_counts=None,
+        document_structural_counts=None,
         vision_truncated_documents=None,
         user_email="",
         action=None,

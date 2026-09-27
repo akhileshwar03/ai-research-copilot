@@ -41,6 +41,7 @@ async def chat(
     # lower-bound guess.
     document_names: dict[str, str] = {}
     document_page_counts: dict[str, int] = {}
+    document_structural_counts: dict[str, dict] = {}
     vision_truncated_documents: set[str] = set()
     if body.document_ids:
         doc_repo = DocumentRepository(db)
@@ -53,6 +54,19 @@ async def chat(
                 document_page_counts[document_id] = doc.page_count
             if doc.vision_truncated:
                 vision_truncated_documents.add(document_id)
+            # Real structural facts (see structure_detector.py) — computed once at ingestion, never a
+            # model guess over truncated context. Only carried when the detector found something reliable.
+            counts = {}
+            for key, count_attr, exact_attr in (
+                ("references", "reference_count", "reference_count_exact"),
+                ("figures", "figure_count", "figure_count_exact"),
+                ("tables", "table_count", "table_count_exact"),
+            ):
+                count = getattr(doc, count_attr, None)
+                if count is not None:
+                    counts[key] = {"count": count, "exact": bool(getattr(doc, exact_attr, False))}
+            if counts:
+                document_structural_counts[document_id] = counts
 
     # Runs before the StreamingResponse is constructed, so an over-limit
     # message returns a normal 413 JSON error rather than an SSE frame after
@@ -88,6 +102,7 @@ async def chat(
                 document_ids=body.document_ids,
                 document_names=document_names,
                 document_page_counts=document_page_counts,
+                document_structural_counts=document_structural_counts,
                 vision_truncated_documents=vision_truncated_documents,
                 user_email=email,
                 action=body.action,

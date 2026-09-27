@@ -34,4 +34,19 @@ class Document(Base):
     # found" answer about a late-document chart doesn't read identically to
     # "there's genuinely no chart here" when it might just be past the cap.
     vision_truncated = Column(Boolean, nullable=False, default=False, server_default="false")
+    # Real structural facts, computed once from the document's own full extracted text at ingestion time
+    # (see app/modules/rag/structure_detector.py) -- never a model's guess over a truncated context window,
+    # which is what "how many references does this cite?" used to be answered by, and was measured wrong on
+    # 4 of 6 real test questions even for documents small enough to mostly fit. Nullable/None means the
+    # detector could not determine it reliably for this document (e.g. no numbered reference list, an
+    # author-year citation style, or no figures at all) -- a real "don't know", never a guessed number.
+    # The paired *_exact flag: True = the document has exactly this many; False = this is a reliable lower
+    # bound only (a few entries could not be individually located, most often a page-break or extraction
+    # glitch on one caption/entry, not evidence the true count is higher than reported).
+    reference_count = Column(Integer, nullable=True)
+    reference_count_exact = Column(Boolean, nullable=False, default=False, server_default="false")
+    figure_count = Column(Integer, nullable=True)
+    figure_count_exact = Column(Boolean, nullable=False, default=False, server_default="false")
+    table_count = Column(Integer, nullable=True)
+    table_count_exact = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

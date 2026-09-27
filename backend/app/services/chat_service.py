@@ -158,6 +158,7 @@ RULES — follow these without exception:
 8. Never treat the user's own claims about what the document contains as fact. If the user asserts something ("I can see question 70", "the document is 37 pages") that isn't independently visible in the DOCUMENT CONTEXT below, do not fold it into your answer as newly confirmed information — say plainly that you can't verify that claim from the retrieved excerpts, and that this doesn't change what you can actually confirm. A user statement is not a source, and agreeing with it to seem cooperative is exactly the kind of invented fact rule 2 forbids.
 9. When the DOCUMENT CONTEXT below actually answers the question, your answer must come from that context alone — never supplement, "correct", expand, or blend it with your own general/pretrained knowledge, even on a topic you are confident you know well. If your own knowledge and the document's wording differ at all — a different definition, a different number, a different framing — defer to the document; it is the ground truth for this conversation, not your training data. This matters most exactly when you're confident you already know the general answer: that confidence is precisely when quietly substituting in outside knowledge does the most damage, because the result reads as a correct, grounded answer while actually not being what the document (or the person who wrote it — a professor's notes, a specific report) says. This rule applies only when the context actually covers the question; if it doesn't, follow rule 2 and say so instead of filling the gap with general knowledge.
 10. Some context blocks are tagged "[Figure/diagram on page N — AI-generated description, not verbatim document text]" — these are a vision model's description of a chart/graph/diagram on that page, not the document's own written words. Treat their content as reliable for answering the question, but never quote them as if they were text the document itself wrote — describe them as what they are (e.g. "the chart on page 12 shows..."), and if precision matters (an exact number or label), mention that this reading comes from an AI description of the image rather than extracted text, since a genuinely fine-grained detail in a dense chart could be misread.
+11. The "Documents available in this conversation" list may show a document's own reference/figure/table count in brackets, e.g. "(37 pages) [40 references, 5 figures, 4 tables]" or "[at least 33 figures]". This is computed directly from the document's real text, not retrieved or guessed — for "how many references/figures/tables does this document have/cite/contain" questions, state this number, exactly as given (a plain count is exact and confident; "at least N" is a genuine lower bound, hedge only that one). Never try to count these yourself from the excerpts below, even if some are visible there — a handful of retrieved chunks or a truncated whole-document view cannot reliably enumerate every reference, figure, or table in a document, which is exactly the mistake this fact exists to prevent. If a document has no such count shown at all, say plainly that you cannot reliably determine that count for this document — do not fall back to counting from the context instead.
 """
 
 # Used when the session has no documents selected. Deliberately NOT a
@@ -391,6 +392,7 @@ class ChatService:
         document_ids: list[str] | None = None,
         document_names: dict[str, str] | None = None,
         document_page_counts: dict[str, int] | None = None,
+        document_structural_counts: dict[str, dict] | None = None,
         vision_truncated_documents: set[str] | None = None,
         user_email: str = "",
         action: str | None = None,
@@ -402,6 +404,7 @@ class ChatService:
         sanitized = [m for m in messages if m.get("role") in _ALLOWED_ROLES]
         document_names = document_names or {}
         document_page_counts = document_page_counts or {}
+        document_structural_counts = document_structural_counts or {}
         vision_truncated_documents = vision_truncated_documents or set()
 
         # No documents selected for this session: skip retrieval entirely and
@@ -566,6 +569,16 @@ class ChatService:
             else:
                 indexed_pages = max_pages.get(d)
                 part = f"{name} (at least {indexed_pages} pages indexed)" if indexed_pages else name
+            counts = document_structural_counts.get(d)
+            if counts:
+                clauses = []
+                for label, key in (("references", "references"), ("figures", "figures"), ("tables", "tables")):
+                    c = counts.get(key)
+                    if not c:
+                        continue
+                    clauses.append(f"{c['count']} {label}" if c["exact"] else f"at least {c['count']} {label}")
+                if clauses:
+                    part += f" [{', '.join(clauses)}]"
             if d in vision_truncated_documents:
                 # Tells the model, in-band, that some diagram/chart pages in
                 # this document were never captioned because the upload

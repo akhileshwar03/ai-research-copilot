@@ -87,6 +87,12 @@ class DocumentRepository:
         error_message: str | None = None,
         page_count: int | None = None,
         vision_truncated: bool | None = None,
+        reference_count: int | None = None,
+        reference_count_exact: bool = False,
+        figure_count: int | None = None,
+        figure_count_exact: bool = False,
+        table_count: int | None = None,
+        table_count_exact: bool = False,
     ) -> None:
         document.upload_status = upload_status
         document.error_message = error_message
@@ -94,6 +100,16 @@ class DocumentRepository:
             document.page_count = page_count
         if vision_truncated is not None:
             document.vision_truncated = vision_truncated
+        # These three are real facts about the document itself (see structure_detector.py) -- always
+        # written on a successful ingestion, including None, so a document with e.g. no numbered reference
+        # list is recorded as "not applicable" rather than silently keeping a stale value from a re-ingest.
+        if upload_status in ("ready", "empty"):
+            document.reference_count = reference_count
+            document.reference_count_exact = reference_count_exact
+            document.figure_count = figure_count
+            document.figure_count_exact = figure_count_exact
+            document.table_count = table_count
+            document.table_count_exact = table_count_exact
         self.db.flush()
 
     def set_pinned(self, document: Document, pinned: bool) -> None:

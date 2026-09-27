@@ -322,6 +322,19 @@ def _run_startup_migrations() -> None:
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_chat_messages_created_at ON chat_messages (created_at)"))
                 conn.commit()
 
+            # ── documents.{reference,figure,table}_count(_exact) (migration 0025) ──
+            doc_cols = {c["name"] for c in inspector.get_columns("documents")}
+            if "reference_count" not in doc_cols:
+                logger.info("startup_migration: adding documents structural-count columns")
+                conn.execute(text("ALTER TABLE documents ADD COLUMN reference_count INTEGER"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN reference_count_exact BOOLEAN NOT NULL DEFAULT 0"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN figure_count INTEGER"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN figure_count_exact BOOLEAN NOT NULL DEFAULT 0"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN table_count INTEGER"))
+                conn.execute(text("ALTER TABLE documents ADD COLUMN table_count_exact BOOLEAN NOT NULL DEFAULT 0"))
+                conn.commit()
+                logger.info("startup_migration: documents structural-count columns added")
+
     except Exception:
         logger.exception(
             "startup_migration failed — server will continue but document endpoints may be broken"

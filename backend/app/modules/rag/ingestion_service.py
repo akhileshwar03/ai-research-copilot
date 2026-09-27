@@ -12,6 +12,7 @@ from pypdf import PdfReader
 
 from app.core.config import get_settings
 from app.modules.rag.embedding_service import EmbeddingService
+from app.modules.rag.structure_detector import detect_figure_count, detect_reference_count, detect_table_count
 from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,14 @@ class IngestionResult:
     # can tell the model (and, transitively, the user) rather than a
     # skipped chart silently looking identical to "there's no chart there."
     vision_truncated: bool
+    # Real structural facts about the document itself -- see structure_detector.py. None means the
+    # detector couldn't reliably determine it for this document, not that the value is zero.
+    reference_count: int | None = None
+    reference_count_exact: bool = False
+    figure_count: int | None = None
+    figure_count_exact: bool = False
+    table_count: int | None = None
+    table_count_exact: bool = False
 
 
 class IngestionService:
@@ -204,6 +213,8 @@ class IngestionService:
         vision_candidates: list[int] = []
         carried_heading = ""  # the most recent heading seen, carried across a page boundary
 
+        full_text_parts: list[str] = []
+
         try:
             for page_number, page in enumerate(reader.pages, start=1):
                 extracted = _strip_nul(page.extract_text() or "")
@@ -213,6 +224,7 @@ class IngestionService:
                     if self._is_vision_candidate(page, extracted, mupdf_page):
                         vision_candidates.append(page_number)
 
+                full_text_parts.append(extracted)
                 if not extracted.strip():
                     continue
                 page_headings = _headings_in(extracted)
@@ -253,11 +265,22 @@ class IngestionService:
             ids = [str(uuid.uuid4()) for _ in chunks]
             self.vector_store.add(ids=ids, documents=chunks, embeddings=vectors, metadatas=metadatas)
 
+        full_text = "\n".join(full_text_parts)
+        refs = detect_reference_count(full_text)
+        figs = detect_figure_count(full_text)
+        tables = detect_table_count(full_text)
+
         return IngestionResult(
             total_pages=total_pages,
             chunks_stored=chunks_stored,
             vision_pages_captioned=vision_pages_captioned,
             vision_truncated=vision_truncated,
+            reference_count=refs.count,
+            reference_count_exact=refs.exact,
+            figure_count=figs.count,
+            figure_count_exact=figs.exact,
+            table_count=tables.count,
+            table_count_exact=tables.exact,
         )
 
     @staticmethod
