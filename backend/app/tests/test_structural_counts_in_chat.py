@@ -51,12 +51,16 @@ def _scope_line(structural_counts, message="what is the abstract about?"):
 
 def test_an_exact_count_is_shown_plainly():
     system = _scope_line({"d.pdf": {"references": {"count": 40, "exact": True}}})
-    assert "[40 references]" in system
+    assert "40 references" in system
+    # the other two facts are unknown here -- each must say so explicitly,
+    # not just be silently omitted (that's the whole point of the hardening).
+    assert "figures: not available for this document" in system
+    assert "tables: not available for this document" in system
 
 
 def test_a_lower_bound_count_is_shown_hedged():
     system = _scope_line({"d.pdf": {"figures": {"count": 33, "exact": False}}})
-    assert "[at least 33 figures]" in system
+    assert "at least 33 figures" in system
 
 
 def test_multiple_counts_for_one_document_are_all_shown():
@@ -66,11 +70,31 @@ def test_multiple_counts_for_one_document_are_all_shown():
     assert "[40 references, 5 figures, 4 tables]" in system
 
 
-def test_no_counts_at_all_means_no_bracket_shown():
+def test_no_counts_at_all_means_all_three_marked_not_available():
+    """No silent omission: a document with none of the three facts known must say so for
+    each one individually, so the model has something concrete to defer to no matter which
+    fact (or combination) the question asks about -- see the 2026-09-27 production finding
+    where an omitted bracket let the model quietly fall back to counting from excerpts for
+    figures/tables while correctly declining to guess for references, in the same reply."""
     system = _scope_line({})
     start = system.rindex("Documents available in this conversation:")
     scope_sentence = system[start:].split("\n\nDOCUMENT CONTEXT", 1)[0]
-    assert "[" not in scope_sentence
+    assert "references: not available for this document" in scope_sentence
+    assert "figures: not available for this document" in scope_sentence
+    assert "tables: not available for this document" in scope_sentence
+
+
+def test_a_partially_known_document_marks_only_the_missing_facts():
+    system = _scope_line({"d.pdf": {"references": {"count": 40, "exact": True}, "tables": {"count": 4, "exact": True}}})
+    # scoped to the real scope line -- rule 11's own explanatory prose uses
+    # "not available for this document" too, as a worked example.
+    start = system.rindex("Documents available in this conversation:")
+    scope_sentence = system[start:].split("\n\nDOCUMENT CONTEXT", 1)[0]
+    assert "40 references" in scope_sentence
+    assert "4 tables" in scope_sentence
+    assert "figures: not available for this document" in scope_sentence
+    assert "references: not available" not in scope_sentence
+    assert "tables: not available" not in scope_sentence
 
 
 def test_counts_are_carried_regardless_of_which_retrieval_mode_the_question_takes():
@@ -79,7 +103,7 @@ def test_counts_are_carried_regardless_of_which_retrieval_mode_the_question_take
     counts = {"d.pdf": {"references": {"count": 105, "exact": True}}}
     for message in ("what is the abstract about?", "how many references does this cite?"):
         system = _scope_line(counts, message=message)
-        assert "[105 references]" in system
+        assert "105 references" in system
 
 
 def test_the_system_prompt_tells_the_model_to_defer_to_the_fact_not_count_itself():

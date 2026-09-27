@@ -158,7 +158,11 @@ RULES — follow these without exception:
 8. Never treat the user's own claims about what the document contains as fact. If the user asserts something ("I can see question 70", "the document is 37 pages") that isn't independently visible in the DOCUMENT CONTEXT below, do not fold it into your answer as newly confirmed information — say plainly that you can't verify that claim from the retrieved excerpts, and that this doesn't change what you can actually confirm. A user statement is not a source, and agreeing with it to seem cooperative is exactly the kind of invented fact rule 2 forbids.
 9. When the DOCUMENT CONTEXT below actually answers the question, your answer must come from that context alone — never supplement, "correct", expand, or blend it with your own general/pretrained knowledge, even on a topic you are confident you know well. If your own knowledge and the document's wording differ at all — a different definition, a different number, a different framing — defer to the document; it is the ground truth for this conversation, not your training data. This matters most exactly when you're confident you already know the general answer: that confidence is precisely when quietly substituting in outside knowledge does the most damage, because the result reads as a correct, grounded answer while actually not being what the document (or the person who wrote it — a professor's notes, a specific report) says. This rule applies only when the context actually covers the question; if it doesn't, follow rule 2 and say so instead of filling the gap with general knowledge.
 10. Some context blocks are tagged "[Figure/diagram on page N — AI-generated description, not verbatim document text]" — these are a vision model's description of a chart/graph/diagram on that page, not the document's own written words. Treat their content as reliable for answering the question, but never quote them as if they were text the document itself wrote — describe them as what they are (e.g. "the chart on page 12 shows..."), and if precision matters (an exact number or label), mention that this reading comes from an AI description of the image rather than extracted text, since a genuinely fine-grained detail in a dense chart could be misread.
-11. The "Documents available in this conversation" list may show a document's own reference/figure/table count in brackets, e.g. "(37 pages) [40 references, 5 figures, 4 tables]" or "[at least 33 figures]". This is computed directly from the document's real text, not retrieved or guessed — for "how many references/figures/tables does this document have/cite/contain" questions, state this number, exactly as given (a plain count is exact and confident; "at least N" is a genuine lower bound, hedge only that one). Never try to count these yourself from the excerpts below, even if some are visible there — a handful of retrieved chunks or a truncated whole-document view cannot reliably enumerate every reference, figure, or table in a document, which is exactly the mistake this fact exists to prevent. If a document has no such count shown at all, say plainly that you cannot reliably determine that count for this document — do not fall back to counting from the context instead.
+11. The "Documents available in this conversation" list always shows a bracket with all three of a document's structural facts — references, figures, tables — computed directly from its real text, not retrieved or guessed, e.g. "(37 pages) [40 references, 5 figures, 4 tables]" or "[at least 33 figures, tables: not available for this document, references: not available for this document]". Each of the three is independent — treat every clause on its own, not as a group:
+   - A plain count ("40 references") is exact and confident — state it plainly, no hedging.
+   - An "at least N" count is a genuine lower bound — hedge only that one.
+   - "not available for this document" means exactly that fact was checked and could not be reliably determined for this specific document — it is itself the answer to "how many X does this document have", not an invitation to go find the real number elsewhere. For that fact, say plainly that you cannot reliably determine that count for this document.
+   For "how many references/figures/tables does this document have/cite/contain" questions, answer every fact type the question touches strictly from its own clause — a question asking about all three, or asking "exactly how many", is not a reason to try harder and produce a number for whichever ones say "not available". Never try to count these yourself from the excerpts below, even if some are visible there and even for a fact this bracket marks unavailable — a handful of retrieved chunks or a truncated whole-document view cannot reliably enumerate every reference, figure, or table in a document, which is exactly the mistake this fact exists to prevent.
 """
 
 # Used when the session has no documents selected. Deliberately NOT a
@@ -569,16 +573,26 @@ class ChatService:
             else:
                 indexed_pages = max_pages.get(d)
                 part = f"{name} (at least {indexed_pages} pages indexed)" if indexed_pages else name
-            counts = document_structural_counts.get(d)
-            if counts:
-                clauses = []
-                for label, key in (("references", "references"), ("figures", "figures"), ("tables", "tables")):
-                    c = counts.get(key)
-                    if not c:
-                        continue
+            # Always emit a structural-facts bracket, one clause per fact type,
+            # rather than only when at least one count is known. A silent
+            # omission ("no bracket at all") turned out not to be a reliable
+            # enough signal: gpt-4.1-mini followed the "say you can't
+            # determine it" instruction for references but ignored it for
+            # figures/tables in the same reply, on the same document, because
+            # nothing in the scope line told it those two were specifically
+            # unknown -- it just filled the gap by counting the excerpts
+            # itself. A positive "not available" clause per fact type gives it
+            # something concrete to defer to regardless of which count (or
+            # combination) the question asks about.
+            counts = document_structural_counts.get(d) or {}
+            clauses = []
+            for label, key in (("references", "references"), ("figures", "figures"), ("tables", "tables")):
+                c = counts.get(key)
+                if c:
                     clauses.append(f"{c['count']} {label}" if c["exact"] else f"at least {c['count']} {label}")
-                if clauses:
-                    part += f" [{', '.join(clauses)}]"
+                else:
+                    clauses.append(f"{label}: not available for this document")
+            part += f" [{', '.join(clauses)}]"
             if d in vision_truncated_documents:
                 # Tells the model, in-band, that some diagram/chart pages in
                 # this document were never captioned because the upload

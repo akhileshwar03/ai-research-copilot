@@ -145,7 +145,8 @@ def test_documents_selected_scopes_retrieval_and_names_are_resolved():
     assert retrieval.last_kwargs["source_names"] == {"uuid-a.pdf": "Report A.pdf", "uuid-b.pdf": "Report B.pdf"}
 
     system_prompt = ai.last_messages[0][1]
-    assert "Documents available in this conversation: Report A.pdf, Report B.pdf" in system_prompt
+    _na = "[references: not available for this document, figures: not available for this document, tables: not available for this document]"
+    assert f"Documents available in this conversation: Report A.pdf {_na}, Report B.pdf {_na}" in system_prompt
     # The raw stored-filename ids must never leak into the prompt the model sees.
     assert "uuid-a.pdf" not in system_prompt
     assert "uuid-b.pdf" not in system_prompt
@@ -456,7 +457,8 @@ def test_scope_line_notes_vision_truncation_for_flagged_documents():
     )
 
     system_prompt = ai.last_messages[0][1]
-    assert "Report A.pdf (40 pages) — note: this document has more diagrams/charts than could be indexed" in system_prompt
+    _na = "[references: not available for this document, figures: not available for this document, tables: not available for this document]"
+    assert f"Report A.pdf (40 pages) {_na} — note: this document has more diagrams/charts than could be indexed" in system_prompt
 
 
 def test_scope_line_omits_page_count_when_none_indexed():
@@ -479,7 +481,8 @@ def test_scope_line_omits_page_count_when_none_indexed():
     # The scope line itself must list the document with no page-count
     # suffix — checked precisely, since "pages indexed" also appears in the
     # rule text explaining the feature, not just in an actual scope line.
-    assert "Documents available in this conversation: Report A.pdf." in system_prompt
+    _na = "[references: not available for this document, figures: not available for this document, tables: not available for this document]"
+    assert f"Documents available in this conversation: Report A.pdf {_na}." in system_prompt
     assert "Report A.pdf (at least" not in system_prompt
 
 
@@ -507,7 +510,8 @@ def test_scope_line_states_confirmed_page_count_with_no_hedging():
     # Assert the exact scope line, not just a substring — rule 5's own
     # explanatory text legitimately contains "at least" too, so a loose
     # substring check across the whole prompt would be a false negative.
-    assert "\n\nDocuments available in this conversation: Report A.pdf (37 pages)." in system_prompt
+    _na = "[references: not available for this document, figures: not available for this document, tables: not available for this document]"
+    assert f"\n\nDocuments available in this conversation: Report A.pdf (37 pages) {_na}." in system_prompt
 
 
 def test_scope_line_falls_back_to_hedged_indexed_pages_when_no_confirmed_count():
