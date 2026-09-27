@@ -18,7 +18,7 @@ pypdf==6.11.0
 pymupdf==1.28.2
 pdfplumber==0.11.4
 tiktoken==0.13.0
-beautifulsoup4==4.14.2
+beautifulsoup4==4.15.0
 
 boto3==1.40.32
 Pillow==12.3.0  # admin background-image upload: resize/recompress to a size budget before storing
