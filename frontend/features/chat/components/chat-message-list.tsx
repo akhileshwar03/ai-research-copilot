@@ -1,15 +1,17 @@
 "use client";
 
-import { Children, cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 import type { Message } from "@/shared/types/chat";
+import type { DocumentItem } from "@/shared/types/api";
 import { Glare } from "@/features/shared/motion/motion";
 import { CopyButton } from "@/features/shared/components/copy-button";
 import { visibleChatMessages } from "@/features/chat/lib/messages";
+import { useDocumentStore } from "@/stores/document-store";
 
 interface ChatMessageListProps {
   messages: Message[];
@@ -27,6 +29,10 @@ interface ChatMessageListProps {
   /** Identifies which conversation `messages` belongs to (the session id, or "new" for an
    * unsaved one) — see the mount-scroll effect below for why this exists. */
   sessionKey?: string | number;
+  /** Resolves a reply's page citations ("(page 4)") to a real document id, so clicking one can
+   * open/scroll the PDF side panel to that page — see citationizeNode below. Optional: without
+   * it, citations render as plain text exactly as before. */
+  documents?: DocumentItem[];
 }
 
 /** Wraps every case-insensitive occurrence of `query` in `text` with <mark>.
@@ -80,6 +86,65 @@ function highlightNode(node: ReactNode, query: string): ReactNode {
     const props = node.props as { children?: ReactNode };
     if (props.children == null) return node;
     return cloneElement(node, undefined, highlightNode(props.children, query));
+  }
+  return node;
+}
+
+// Matches "(page 4)", "page 4", "Pages 8-9", "pages 33-34" etc. — every citation format the
+// grounded system prompt and research-action instructions actually produce (see rules 2 and 7
+// in chat_service.py's GROUNDED_SYSTEM_PROMPT and RESEARCH_ACTIONS's per-action instructions),
+// with or without surrounding parentheses since a numbered-list action ("Citation: Pages 1-3.")
+// doesn't use them. Deliberately does NOT match "page" alone with no following number, so
+// ordinary prose ("the next page") is left untouched.
+const PAGE_CITATION_RE = /\bpages?\s+(\d+)(?:\s*(?:[-–—]|to)\s*\d+)?\b/gi;
+
+/** Wraps every "(page N)"-style citation in *text* with a clickable span that jumps the PDF
+ * side panel to that page — see document-store.ts's jumpToPage. A range ("pages 8-9") jumps to
+ * its first page. `onJump` is undefined when this reply's document couldn't be resolved (no
+ * `sources`, or a source name not found in the caller's document list) — text is returned
+ * unchanged in that case rather than rendering dead-looking, unclickable "buttons". */
+function citationizeText(text: string, onJump: ((page: number) => void) | undefined): ReactNode {
+  if (!onJump) return text;
+  const re = new RegExp(PAGE_CITATION_RE);
+  const parts: ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(text))) {
+    if (match.index > last) parts.push(text.slice(last, match.index));
+    const page = Number(match[1]);
+    parts.push(
+      <button
+        key={key++}
+        type="button"
+        onClick={() => onJump(page)}
+        className="rounded underline decoration-dotted underline-offset-2 transition hover:text-[var(--marketing-accent-text)]"
+        title={`Jump to page ${page}`}
+      >
+        {match[0]}
+      </button>,
+    );
+    last = re.lastIndex;
+  }
+  if (last === 0) return text; // no citation found — skip the array wrapper entirely
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+/** Same tree-walk as highlightNode (leaves element structure untouched, transforms only string
+ * leaves) — kept as a separate pass rather than merged into it because the two need composing
+ * in both directions depending on the message (citations first, so a highlighted search match
+ * inside a citation still gets the click handler; see renderInline below). */
+function citationizeNode(node: ReactNode, onJump: ((page: number) => void) | undefined): ReactNode {
+  if (!onJump) return node;
+  if (typeof node === "string") return citationizeText(node, onJump);
+  if (Array.isArray(node) || (node && typeof node === "object" && Symbol.iterator in node)) {
+    return Children.map(node as ReactNode, (child) => citationizeNode(child, onJump));
+  }
+  if (isValidElement(node)) {
+    const props = node.props as { children?: ReactNode };
+    if (props.children == null) return node;
+    return cloneElement(node, undefined, citationizeNode(props.children, onJump));
   }
   return node;
 }
@@ -186,6 +251,7 @@ function MessageBubble({
   searchQuery,
   isActiveMatch,
   bubbleRef,
+  documentNameToId,
 }: {
   message: Message;
   userInitial: string;
@@ -195,9 +261,29 @@ function MessageBubble({
   searchQuery?: string;
   isActiveMatch?: boolean;
   bubbleRef?: (el: HTMLDivElement | null) => void;
+  documentNameToId?: Map<string, string>;
 }) {
   const isUser = message.role === "user";
   const isMatch = Boolean(searchQuery && message.content.toLowerCase().includes(searchQuery.toLowerCase()));
+  const jumpToPage = useDocumentStore((s) => s.jumpToPage);
+
+  // The document this reply's page citations refer to — resolved from its own source chip(s),
+  // never the currently-open panel document, since they can differ. A reply citing more than
+  // one document (e.g. a "Compare" action) is a known limitation: this targets only the first
+  // resolvable source, so a citation on a later document's fact still jumps to the first one's
+  // matching page number rather than being left unclickable or guessed some other way.
+  const citationDocumentId = message.sources
+    ?.split(", ")
+    .map((name) => documentNameToId?.get(name))
+    .find((id): id is string => Boolean(id));
+  const onCitationJump = useMemo(
+    () => (citationDocumentId ? (page: number) => jumpToPage(citationDocumentId, page) : undefined),
+    [citationDocumentId, jumpToPage],
+  );
+  const renderInline = useCallback(
+    (children: ReactNode) => highlightNode(citationizeNode(children, onCitationJump), searchQuery ?? ""),
+    [onCitationJump, searchQuery],
+  );
 
   return (
     <div
@@ -275,15 +361,15 @@ function MessageBubble({
                   // long research report can be many screens tall, and without
                   // this a search match only ever ringed the whole bubble with no
                   // way to see where inside it the word actually was.
-                  p: ({ children }) => <p className="mb-3 text-[14px] leading-relaxed last:mb-0">{highlightNode(children, searchQuery ?? "")}</p>,
+                  p: ({ children }) => <p className="mb-3 text-[14px] leading-relaxed last:mb-0">{renderInline(children)}</p>,
                   ul: ({ children }) => <ul className="mb-3 space-y-1 pl-4 text-[14px] last:mb-0">{children}</ul>,
                   ol: ({ children }) => <ol className="mb-3 space-y-1 pl-4 text-[14px] last:mb-0">{children}</ol>,
-                  li: ({ children }) => <li className="leading-relaxed">{highlightNode(children, searchQuery ?? "")}</li>,
-                  h1: ({ children }) => <h1 className="mb-3 text-[16px] font-bold">{highlightNode(children, searchQuery ?? "")}</h1>,
-                  h2: ({ children }) => <h2 className="mb-2 text-[15px] font-semibold">{highlightNode(children, searchQuery ?? "")}</h2>,
-                  h3: ({ children }) => <h3 className="mb-2 text-[14px] font-semibold">{highlightNode(children, searchQuery ?? "")}</h3>,
+                  li: ({ children }) => <li className="leading-relaxed">{renderInline(children)}</li>,
+                  h1: ({ children }) => <h1 className="mb-3 text-[16px] font-bold">{renderInline(children)}</h1>,
+                  h2: ({ children }) => <h2 className="mb-2 text-[15px] font-semibold">{renderInline(children)}</h2>,
+                  h3: ({ children }) => <h3 className="mb-2 text-[14px] font-semibold">{renderInline(children)}</h3>,
                   blockquote: ({ children }) => (
-                    <blockquote className="border-l-2 border-[var(--border-medium)] pl-4 italic text-zinc-400">{highlightNode(children, searchQuery ?? "")}</blockquote>
+                    <blockquote className="border-l-2 border-[var(--border-medium)] pl-4 italic text-zinc-400">{renderInline(children)}</blockquote>
                   ),
                   table: ({ children }) => (
                     <div className="mb-3 overflow-x-auto">
@@ -291,10 +377,10 @@ function MessageBubble({
                     </div>
                   ),
                   th: ({ children }) => (
-                    <th className="border border-[var(--border-subtle)] bg-[var(--surface-3)] px-3 py-1.5 text-left font-semibold">{highlightNode(children, searchQuery ?? "")}</th>
+                    <th className="border border-[var(--border-subtle)] bg-[var(--surface-3)] px-3 py-1.5 text-left font-semibold">{renderInline(children)}</th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-[var(--border-subtle)] px-3 py-1.5">{highlightNode(children, searchQuery ?? "")}</td>
+                    <td className="border border-[var(--border-subtle)] px-3 py-1.5">{renderInline(children)}</td>
                   ),
                 }}
               >
@@ -374,12 +460,17 @@ export function ChatMessageList({
   searchQuery = "",
   activeMatchIndex = null,
   sessionKey,
+  documents,
 }: ChatMessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const [showScrollFab, setShowScrollFab] = useState(false);
   const wasStreamingRef = useRef(false);
   const bubbleRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+
+  // message.sources holds display names (see backend document_names / DocumentSummary.name),
+  // not ids — this resolves a citation's document back to the id the PDF panel keys on.
+  const documentNameToId = useMemo(() => new Map((documents ?? []).map((d) => [d.name, d.id])), [documents]);
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
     bottomRef.current?.scrollIntoView({ behavior });
@@ -539,6 +630,7 @@ export function ChatMessageList({
                 if (el) bubbleRefs.current.set(index, el);
                 else bubbleRefs.current.delete(index);
               }}
+              documentNameToId={documentNameToId}
             />
           );
         })}

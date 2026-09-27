@@ -25,6 +25,7 @@ export default function ChatPage() {
   const email = useAuthStore((s) => s.email);
   const selectedDocument = useDocumentStore((s) => s.selectedDocument);
   const setSelectedDocument = useDocumentStore((s) => s.setSelectedDocument);
+  const pdfJumpRequest = useDocumentStore((s) => s.pdfJumpRequest);
   const sessions = useSessionStore((s) => s.sessions);
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
@@ -145,7 +146,16 @@ export default function ChatPage() {
               </div>
               <div className="min-h-0 flex-1">
                 {pdfBlobUrl ? (
-                  <PdfViewer file={pdfBlobUrl} />
+                  <PdfViewer
+                    file={pdfBlobUrl}
+                    // Only apply a pending jump if it was requested for the document that's
+                    // actually open right now — jumpToPage() also switches selectedDocument,
+                    // but that switch (and this panel re-fetching pdfBlobUrl for the new
+                    // document) happens asynchronously, so a stale request for a since-closed
+                    // document must not be replayed once some other document loads here.
+                    jumpToPage={pdfJumpRequest?.documentId === selectedDocument ? pdfJumpRequest.page : null}
+                    jumpNonce={pdfJumpRequest?.nonce}
+                  />
                 ) : (
                   <div className="flex h-full items-center justify-center text-[13px] text-zinc-500">
                     {isPdfLoading ? "Loading PDF…" : "Unable to load PDF"}

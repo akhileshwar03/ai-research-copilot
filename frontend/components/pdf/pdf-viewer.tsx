@@ -15,12 +15,18 @@ const PdfViewerClient =
 
 export default function PdfViewer({
   file,
+  jumpToPage,
+  jumpNonce,
 }: {
   file: string;
+  jumpToPage?: number | null;
+  jumpNonce?: number;
 }) {
   return (
     <PdfViewerClient
       file={file}
+      jumpToPage={jumpToPage}
+      jumpNonce={jumpNonce}
     />
   );
 }
