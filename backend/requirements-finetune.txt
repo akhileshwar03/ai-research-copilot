@@ -6,7 +6,7 @@ kaggle>=1.6,<2
 # Was pinned <1 when this file was first written; the actually-installed venv has
 # 1.5.3 (a real major-version jump past that upper bound). Loosening the pin to
 # match what's proven to work rather than leaving a stale, already-violated one.
-modal>=1.0,<2
+modal>=1.5.5,<2
 datasketch>=1.6,<2
 langdetect>=1.0.9,<2
 
