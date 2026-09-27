@@ -5,16 +5,18 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies.auth import get_current_user_email
+from app.api.dependencies.auth import get_current_user, get_current_user_email
 from app.api.dependencies.tools import require_tool
 from app.api.dependencies.services import get_chat_service
 from app.core.exceptions import AppError
 from app.core.rate_limit import limiter
 from app.db.repositories.document_repository import DocumentRepository
+from app.db.models.user import User
 from app.db.session import get_db
 from app.schemas.chat import ChatRequest
 from app.services.chat_service import ChatService
-from app.services.runtime_settings import chat_rate_limit
+from app.services import chat_quota
+from app.services.runtime_settings import chat_rate_limit, runtime_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -26,6 +28,7 @@ async def chat(
     request: Request,
     body: ChatRequest,
     email: str = Depends(get_current_user_email),
+    user: User = Depends(get_current_user),
     service: ChatService = Depends(get_chat_service),
     db: Session = Depends(get_db),
 ):
@@ -57,7 +60,28 @@ async def chat(
     service.validate_latest_message([message.model_dump() for message in body.messages])
     service.validate_action(body.action, body.document_ids)
 
+    # Whole-document requests (research actions, counting questions) are ~15x a normal question, so each
+    # user gets a daily allowance. Checked here, before the stream starts, so the user gets a normal 429
+    # with a readable message instead of a failure halfway through a 200 response.
+    quota_taken = False
+    full_document = await service.decide_full_document([m.model_dump() for m in body.messages], body.action, body.document_ids)
+    if full_document:
+        limit = int(runtime_settings.get("chat_full_document_daily_limit"))
+        allowed, _used = chat_quota.try_consume(db, user.id, chat_quota.FULL_DOCUMENT, limit)
+        if not allowed:
+            raise AppError(
+                code="FULL_DOCUMENT_LIMIT",
+                message=(
+                    f"You've used your {limit} whole-document analyses for today (summaries, reports, comparisons "
+                    "and counting questions). Ask a specific question instead, or try again after midnight UTC."
+                ),
+                status_code=429,
+                details={"limit": limit},
+            )
+        quota_taken = limit > 0
+
     async def event_stream():
+        answered = False
         try:
             async for event in service.stream_response(
                 messages=[message.model_dump() for message in body.messages],
@@ -67,19 +91,29 @@ async def chat(
                 vision_truncated_documents=vision_truncated_documents,
                 user_email=email,
                 action=body.action,
+                full_document=full_document,
             ):
                 if event["type"] == "sources":
                     yield f"event: sources\ndata: {json.dumps(event['sources'])}\n\n"
                 elif event["type"] == "suggestions":
                     yield f"event: suggestions\ndata: {json.dumps(event['suggestions'])}\n\n"
                 else:
+                    answered = True
                     # JSON-encode each token so newlines inside markdown don't break SSE framing.
                     yield f"data: {json.dumps(event['value'])}\n\n"
+        except AppError as exc:
+            # A deliberate, user-safe message (e.g. RETRIEVAL_UNAVAILABLE) -- forward it as-is instead of
+            # the generic text so the user learns the real reason and knows a retry is worthwhile.
+            logger.warning("stream_app_error code=%s document_ids=%s", exc.code, body.document_ids)
+            yield f"event: error\ndata: {json.dumps({'message': exc.message})}\n\n"
         except Exception:
             logger.exception("stream_error document_ids=%s", body.document_ids)
             error_payload = json.dumps({"message": "Stream processing failed. Please try again."})
             yield f"event: error\ndata: {error_payload}\n\n"
         finally:
+            if quota_taken and not answered:
+                # Nothing was returned (our outage, or the client left) -- don't charge the allowance.
+                chat_quota.refund(user.id, chat_quota.FULL_DOCUMENT)
             yield "event: done\ndata: \n\n"
 
     return StreamingResponse(

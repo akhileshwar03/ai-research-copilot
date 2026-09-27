@@ -14,24 +14,63 @@ logger = logging.getLogger(__name__)
 # injecting additional system-level instructions via the role field.
 _ALLOWED_ROLES = frozenset({"user", "assistant"})
 
-# Questions asking for a total/count/enumeration across the whole document.
-# Top-k similarity retrieval structurally cannot answer these: it ranks
-# chunks by similarity to the *query wording*, and a question like "how many
-# questions does it have" has no strong semantic similarity to the
-# individual numbered items it needs to count — so retrieval was surfacing
-# an arbitrary handful, and the model extrapolated a guess from them. These
-# queries get the whole document instead (see get_full_document_context).
+# Questions asking to count or list the document's OWN STRUCTURE (its questions, sections, chapters,
+# references...) or to enumerate across it. Top-k similarity retrieval structurally cannot answer these: it
+# ranks chunks by similarity to the *query wording*, and "how many questions does it have" has no strong
+# similarity to the individual numbered items it needs to count -- retrieval surfaced an arbitrary handful
+# and the model extrapolated a guess. These get the whole document instead (see get_full_document_context).
+#
+# It used to fire on ANY "how many", so "How many subjects are in the MUG database?" -- a number the text
+# simply states, which retrieval finds fine -- also sent the whole document to the model, costing ~15x and
+# (since 2026-09-27) using up the user's daily whole-document allowance. On a labelled set of 29 fact
+# lookups the old pattern misrouted 24; a count cue now has to be paired with a structure noun.
+_STRUCTURE_NOUN = (
+    r"(?:questions?|sections?|subsections?|chapters?|references?|citations?|exercises?|figures?|tables?|"
+    r"slides?|paragraphs?|headings?|equations?|appendices|appendix)"
+)
 _AGGREGATE_QUERY_RE = re.compile(
-    r"\bhow many\b"
-    r"|\btotal (?:number|count)\b"
-    r"|\bin total\b"
-    r"|\bcount (?:of|the)\b"
-    r"|\blist all\b"
-    r"|\ball (?:of )?the\b.{0,40}\b(?:questions?|items?|sections?|chapters?|topics?|references?|citations?)\b"
+    # "how many questions ...", "how many of the sections ...", "how many figures ..."
+    rf"\bhow many\s+(?:\w+\s+){{0,2}}?{_STRUCTURE_NOUN}\b"
+    # "total number of references", "count of questions"
+    rf"|\b(?:total\s+)?(?:number|count) of\s+(?:\w+\s+){{0,2}}?{_STRUCTURE_NOUN}\b"
+    # "count the questions", "count all sections"
+    rf"|\bcount\s+(?:the|all|every)\s+(?:\w+\s+){{0,2}}?{_STRUCTURE_NOUN}\b"
+    # explicit enumeration
+    r"|\blist (?:all|every)\b"
+    r"|\benumerate (?:all|every|the)\b"
+    rf"|\ball (?:of )?the\b.{{0,40}}\b(?:{_STRUCTURE_NOUN}|items?|topics?)\b"
     r"|\bevery (?:question|item|section|chapter)\b"
+    # occurrence counting across the whole text
+    r"|\bhow many times\b"
+    # the user explicitly asked for the whole document
     r"|\bin (?:the )?(?:full|entire|whole) (?:doc(?:ument)?|pdf)\b",
     re.IGNORECASE,
 )
+
+
+# Wording that MIGHT mean "count/list across the whole document". Only a question containing one of these is
+# ever sent to the router below; everything else is a normal lookup with zero extra cost or latency. (5 of 42
+# ordinary eval questions contain one.)
+_ROUTER_CUE_RE = re.compile(r"\b(?:how many|number of|count|total|list|enumerate|every|each|all)\b", re.IGNORECASE)
+
+# The user explicitly asked for the whole document: honoured directly, no classifier needed.
+_EXPLICIT_WHOLE_RE = re.compile(r"\bin (?:the )?(?:full|entire|whole) (?:doc(?:ument)?|pdf)\b", re.IGNORECASE)
+
+# A keyword pattern cannot tell "sections of the DOCUMENT" from "sections of the POPULATION". On 28 held-out
+# cases written to break it, the regex got 9 right and this classifier (gpt-4.1-mini) got 24; on 53 development
+# cases it was 50 vs the regex's (in-sample, tuned) 53 (2026-09-27 routing eval). The
+# classifier is only asked when a cue word is present; if it fails, the tightened regex decides.
+ROUTE_PROMPT = (
+    "You route a question about the user's uploaded document(s). Reply with exactly one word.\n"
+    "WHOLE = answering needs the entire document: counting or listing the document's OWN structural parts (its "
+    "questions, sections, chapters, references, figures, tables, headings), enumerating every instance of "
+    "something across the whole document, or counting how many times something is mentioned.\n"
+    "LOOKUP = the answer is a fact, value, name, passage, explanation or comparison that the text states "
+    "somewhere - including counts the text itself states (e.g. 'how many participants were surveyed', "
+    "'how many layers does the network have')."
+)
+_ROUTE_CACHE_MAX = 256
+_route_cache: dict[str, bool] = {}
 
 
 def _looks_like_aggregate_query(text: str) -> bool:
@@ -80,6 +119,29 @@ def _extract_page_numbers(text: str) -> list[int]:
         if len(seen) >= _MAX_PAGES_PER_QUERY:
             break
     return list(seen.keys())
+
+
+def _trim_history(messages: list[dict], max_chars: int) -> list[dict]:
+    """The most recent messages that fit in *max_chars*, oldest dropped first.
+
+    Every turn used to send the entire conversation back to the model, so each message in a long chat cost
+    more than the one before it. The newest message is always kept (it is already capped by chat_max_chars),
+    and the window never starts on an orphaned assistant reply whose question was cut off.
+    """
+    kept: list[dict] = []
+    used = 0
+    for message in reversed(messages):
+        size = len(message["content"])
+        if kept and used + size > max_chars:
+            break
+        kept.append(message)
+        used += size
+    kept.reverse()
+    while len(kept) > 1 and kept[0]["role"] == "assistant":
+        kept.pop(0)
+    if len(kept) < len(messages):
+        logger.info("chat_history_trimmed kept=%d dropped=%d", len(kept), len(messages) - len(kept))
+    return kept
 
 
 GROUNDED_SYSTEM_PROMPT = """You are Querex, a strictly document-grounded research assistant. \
@@ -193,6 +255,18 @@ answerable from a document (not general knowledge). Return ONLY a JSON array of 
 
 _MAX_FOLLOW_UP_ANSWER_CHARS = 3000
 
+# Retrieval embeds one string. For a follow-up like "And what about MUG?" that string carries no topic, so
+# top-k returned unrelated chunks and the answer was "not in the document" or a guess. This rewrites it into
+# a standalone query using the recent conversation. Wording matches what was measured in the 2026-09-27 eval.
+CONDENSE_PROMPT = (
+    "Rewrite the user's latest question as one standalone search query that names the specific entities, "
+    "datasets, models and numbers it refers to, using the chat history to resolve pronouns and references "
+    "like 'it', 'that', 'the last one'. Output ONLY the query, no quotes, no explanation."
+)
+_CONDENSE_HISTORY_MESSAGES = 4
+_CONDENSE_MESSAGE_CHARS = 600
+_CONDENSE_MAX_QUERY_CHARS = 500
+
 
 class ChatService:
     def __init__(self, retrieval_service: RetrievalService, ai_service: AIService):
@@ -223,6 +297,36 @@ class ChatService:
                     )
                 break
 
+    async def decide_full_document(self, messages: list[dict], action: str | None, document_ids: list[str] | None) -> bool:
+        """Whether this request sends the WHOLE selected document(s) to the model (a research action, or a
+        count/list-across-the-document question) instead of a handful of retrieved chunks. That path costs
+        roughly 15x a normal question, so the route meters it (see chat_quota). Decided once, before
+        streaming, and passed into stream_response so the two can never disagree."""
+        if not document_ids:
+            return False
+        if action:
+            return True
+        latest = next((m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), "")
+        if _extract_page_numbers(latest):
+            return False  # an explicit page question is an exact page lookup, never whole-document
+        if _EXPLICIT_WHOLE_RE.search(latest):
+            return True
+        if not _ROUTER_CUE_RE.search(latest):
+            return False
+        key = latest.strip().lower()
+        if key in _route_cache:
+            return _route_cache[key]
+        try:
+            raw = await self.ai_service.classify([("system", ROUTE_PROMPT), ("user", latest[:1000])])
+            verdict = (raw or "").strip().upper().startswith("WHOLE")
+        except Exception:
+            logger.warning("chat_route_classifier_failed", exc_info=True)
+            return _looks_like_aggregate_query(latest)  # not cached: retry the classifier next time
+        if len(_route_cache) >= _ROUTE_CACHE_MAX:
+            _route_cache.pop(next(iter(_route_cache)))
+        _route_cache[key] = verdict
+        return verdict
+
     def validate_action(self, action: str | None, document_ids: list[str] | None) -> None:
         """Research actions run over the whole selected document set, so
         they are meaningless (and would silently degrade to a general-chat
@@ -237,6 +341,31 @@ class ChatService:
                 message="Select at least one document to run a research action.",
                 status_code=400,
             )
+
+    async def _standalone_query(self, history: list[dict], question: str) -> str:
+        """The string to embed for retrieval. Only a real follow-up (an earlier assistant turn exists) is
+        rewritten; a first question is used as typed. Any failure or unusable output falls back to the
+        user's own words -- rewriting is an improvement, never a reason to fail or block a reply."""
+        if not any(m["role"] == "assistant" for m in history):
+            return question
+        try:
+            convo = "\n".join(
+                f"{m['role']}: {m['content'][:_CONDENSE_MESSAGE_CHARS]}" for m in history[-_CONDENSE_HISTORY_MESSAGES:]
+            )
+            raw = await self.ai_service.condense_query(
+                [
+                    ("system", CONDENSE_PROMPT),
+                    ("user", f"Chat history:\n{convo}\n\nLatest question: {question}"),
+                ]
+            )
+            rewritten = (raw or "").strip().strip("\"'").strip()
+            if not rewritten or len(rewritten) > _CONDENSE_MAX_QUERY_CHARS:
+                return question
+            logger.info("chat_query_condensed original_chars=%d rewritten_chars=%d", len(question), len(rewritten))
+            return rewritten
+        except Exception:
+            logger.warning("chat_query_condense_failed", exc_info=True)
+            return question
 
     async def _follow_up_suggestions(self, question: str, answer: str) -> list[str]:
         """Three follow-up questions for the answer just streamed. One cheap,
@@ -265,6 +394,7 @@ class ChatService:
         vision_truncated_documents: set[str] | None = None,
         user_email: str = "",
         action: str | None = None,
+        full_document: bool | None = None,
     ):
         # Strip any message whose role is not user or assistant.
         # This closes the prompt injection vector where a caller sends
@@ -280,7 +410,8 @@ class ChatService:
         if not document_ids:
             logger.info("chat_stream_start scope=general messages=%d", len(sanitized))
             formatted_messages = [("system", GENERAL_SYSTEM_PROMPT)]
-            formatted_messages.extend((msg["role"], msg["content"]) for msg in sanitized)
+            history_limit = int(runtime_settings.get("chat_history_max_chars"))
+            formatted_messages.extend((msg["role"], msg["content"]) for msg in _trim_history(sanitized, history_limit))
             yield {"type": "sources", "sources": []}
             async for token in self.ai_service.stream_chat(formatted_messages):
                 yield {"type": "token", "value": token}
@@ -364,7 +495,9 @@ class ChatService:
             # get_full_document_context. Falls back to normal retrieval if the
             # document turns out to have no ingested chunks at all (e.g.
             # still processing).
-            use_full_document = bool(action) or _looks_like_aggregate_query(latest_user_message)
+            if full_document is None:
+                full_document = await self.decide_full_document(sanitized, action, document_ids)
+            use_full_document = full_document
             full_doc: dict | None = None
             if use_full_document:
                 full_doc = self.retrieval_service.get_full_document_context(
@@ -376,12 +509,20 @@ class ChatService:
             if use_full_document:
                 context = full_doc["context"]
                 sources = document_ids
-                completeness = (
-                    "LARGE-DOCUMENT CONTEXT (truncated to fit — most, but not necessarily all, of the "
-                    "selected document(s); a count from this is a reliable lower bound, not guaranteed exact)"
-                    if full_doc["truncated"]
-                    else "NEAR-COMPLETE DOCUMENT (covers the full text of the selected document(s))"
-                )
+                if full_doc["truncated"]:
+                    cut = ", ".join(document_names.get(d, d) for d in full_doc.get("truncated_sources", []))
+                    completeness = (
+                        "LARGE-DOCUMENT CONTEXT (truncated to fit — most, but not necessarily all, of the "
+                        "selected document(s); a count from this is a reliable lower bound, not guaranteed exact"
+                        + (
+                            f". The middle of these was omitted, keeping only their beginning and end: {cut}"
+                            if cut
+                            else ""
+                        )
+                        + ")"
+                    )
+                else:
+                    completeness = "NEAR-COMPLETE DOCUMENT (covers the full text of the selected document(s))"
                 logger.info(
                     "chat_stream_start scope=grounded mode=full_document document_ids=%s chunks=%d truncated=%s",
                     document_ids,
@@ -389,8 +530,10 @@ class ChatService:
                     full_doc["truncated"],
                 )
             else:
-                retrieval = self.retrieval_service.retrieve_context(
-                    latest_user_message,
+                last_user_index = max((i for i, m in enumerate(sanitized) if m["role"] == "user"), default=0)
+                search_query = await self._standalone_query(sanitized[:last_user_index], latest_user_message)
+                retrieval = await self.retrieval_service.retrieve_context(
+                    search_query,
                     source_ids=document_ids,
                     user_email=user_email,
                     source_names=document_names,
@@ -461,7 +604,8 @@ class ChatService:
             context_block = "\n\nDOCUMENT CONTEXT: No relevant content found for this specific question."
 
         formatted_messages = [("system", GROUNDED_SYSTEM_PROMPT + scope_line + context_block)]
-        formatted_messages.extend((msg["role"], msg["content"]) for msg in sanitized)
+        history_limit = int(runtime_settings.get("chat_history_max_chars"))
+        formatted_messages.extend((msg["role"], msg["content"]) for msg in _trim_history(sanitized, history_limit))
 
         # First event carries the retrieval sources so the client can render
         # citations; subsequent events are LLM tokens.

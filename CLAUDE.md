@@ -132,3 +132,46 @@ free plan's 1,000 credits/month make real spend lower).
 **Layout.** `backend/routes/` was merged into `backend/app/api/routes/`; Render starts
 `uvicorn app.main:app`. Local verification: `.claude/launch.json` has `backend-local`
 (SQLite in the scratchpad, port 8010) and `frontend-local` (port 3050) so nothing touches Neon.
+
+## Research Copilot cost guards + correctness fixes (2026-09-27)
+
+Three bugs fixed (tests: `backend/app/tests/test_research_copilot_correctness.py`): follow-up questions are rewritten
+into a standalone search query by `gpt-4.1-nano` (`openai_condense_model`, `ChatService._standalone_query`); whole-document
+mode splits its character budget fairly across documents and keeps each long document's beginning AND end
+(`RetrievalService.get_full_document_context`); vector-store read failures raise `RETRIEVAL_UNAVAILABLE` (503) instead of
+returning "no chunks", which the model then reported as "not in the document".
+
+Cost guards (tests: `test_chat_cost_guards.py`): each user gets `chat_full_document_daily_limit` (default 10, 0 = unlimited)
+whole-document requests per UTC day — research actions and "how many / list all" questions, ~15x a normal question. Atomic
+upsert counter in `chat_quota_usage` (migration `20260927_0024`, `app/services/chat_quota.py`), checked in the chat route
+BEFORE streaming (429 `FULL_DOCUMENT_LIMIT`), refunded if no answer was produced. `chat_history_max_chars` (default 12000)
+trims old turns sent to the model. Both are admin runtime settings. `ChatService.uses_full_document` must stay in step with
+the routing inside `stream_response` (a parametrised test pins the parity).
+
+Retrieval eval harness: `backend/scripts/rag_eval/` — refuses to run except against the throwaway local Postgres on
+127.0.0.1:54329/evaldb. See the memory note for measured results before changing retrieval.
+
+**Whole-document routing (2026-09-27).** The old bare `how many` trigger sent ordinary fact lookups ("how many subjects are
+in MUG?") down the whole-document path (24 of 29 labelled fact lookups misrouted). `ChatService.decide_full_document` now
+decides once, in the route, before streaming: actions, explicit "in the entire document", and page questions are handled
+directly; otherwise only a question containing a count/list cue word (`_ROUTER_CUE_RE`) is sent to a `gpt-4.1-mini`
+classifier (`ROUTE_PROMPT`, ~$0.00006/call, ~0.45 s), with the tightened regex `_looks_like_aggregate_query` as fallback if it
+fails. Measured on `backend/scripts/rag_eval/routing_cases.json`: classifier 74/81 overall and 24/28 on the held-out
+adversarial set vs the regex's 9/28 (its 53/53 dev score is in-sample). Real 43-page test: 5 fact questions went from
+20.3k to ~2.6k billed input tokens each with identical correct answers. A router miss on a structural question yields a
+hedged "at least N" lower bound, not a fabricated count.
+
+**NUL-character ingestion fix (2026-09-27).** `IngestionService` strips 0x00 from extracted text: PostgreSQL rejects it, so 2 of 7 real research PDFs failed to ingest in production (SQLite in tests/dev hides this). Large-document eval harness: `backend/scripts/rag_eval_big/`.
+
+## Research Copilot retrieval upgrade (2026-09-27): stamping + reranker + embedding-model support
+
+Ingestion now stamps every text chunk with its document title and nearest section heading before embedding
+(`IngestionService._headings_in`, `process_pdf(..., title=...)`; vision chunks untouched). `RetrievalService.retrieve_context`
+is now `async` and, when `rag_rerank_enabled` (default on), fetches a candidate pool (`rag_rerank_pool_size`, default 20)
+and has `gpt-4.1-nano` (`AIService.rerank`) re-score it down to `rag_top_k`, falling back to plain distance order on any
+failure. `EmbeddingService` reads the model from the new `rag_embedding_model` runtime setting on every call (default
+stays `text-embedding-ada-002` — changing it requires re-embedding existing chunks first: `scripts/reembed_chunks.py`,
+dry-run by default, must be pointed explicitly at a database via `--database-url`, never reads `.env`).
+Verified end-to-end against a 152-question/7-document/5,966-chunk benchmark: answerable accuracy 79.1% → 93.7%
+(sign-test p<0.001), cost (caching-adjusted) down 36-44% on plain fact questions. See the memory note for full numbers
+and the one known regression (structural reference/table counts, n=6, unreliable sample).

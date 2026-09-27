@@ -32,6 +32,23 @@ class AIService:
             stream_usage=True,
             callbacks=[TokenUsageCallback(settings.openai_chat_model)],
         )
+        self.condense_llm = ChatOpenAI(
+            api_key=settings.openai_api_key,
+            model=settings.openai_condense_model,
+            temperature=0,
+            max_tokens=80,
+            stream_usage=True,
+            callbacks=[TokenUsageCallback(settings.openai_condense_model)],
+        )
+        self.rerank_llm = ChatOpenAI(
+            api_key=settings.openai_api_key,
+            model=settings.openai_rerank_model,
+            temperature=0,
+            max_tokens=200,
+            model_kwargs={"response_format": {"type": "json_object"}},
+            stream_usage=True,
+            callbacks=[TokenUsageCallback(settings.openai_rerank_model)],
+        )
         self.client = OpenAI(
             api_key=settings.openai_api_key,
             http_client=httpx.Client(timeout=settings.openai_healthcheck_timeout_seconds),
@@ -113,6 +130,18 @@ class AIService:
         classification/analysis tasks (AI Checker, Writing Feedback) where a
         stable answer matters more than creative variation."""
         response = await self.classifier_llm.ainvoke(messages)
+        return response.content
+
+    async def condense_query(self, messages: list[tuple[str, str]]) -> str:
+        """Cheap, deterministic completion used to turn a follow-up question into a standalone
+        search query (see ChatService._standalone_query)."""
+        response = await self.condense_llm.ainvoke(messages)
+        return response.content
+
+    async def rerank(self, messages: list[tuple[str, str]]) -> str:
+        """Cheap, deterministic completion used to re-score retrieved chunks before answering
+        (see RetrievalService._rerank). JSON-mode: the prompt asks for {"ranked": [...]}."""
+        response = await self.rerank_llm.ainvoke(messages)
         return response.content
 
     async def describe_image(self, prompt: str, data_url: str, detail: str = "auto") -> str:

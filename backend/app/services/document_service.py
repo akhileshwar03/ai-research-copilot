@@ -182,6 +182,7 @@ class DocumentService:
                 content=content,
                 source_id=stored_filename,
                 user_email=doc.user_email or "",
+                title=doc.original_filename or "",
             )
             # "empty" (not "ready") when ingestion ran to completion without
             # erroring but produced zero searchable chunks — a scanned/

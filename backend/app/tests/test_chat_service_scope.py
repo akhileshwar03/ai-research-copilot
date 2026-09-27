@@ -69,7 +69,7 @@ class RecordingRetrievalService:
         self._context = context
         self._page_context = page_context
 
-    def retrieve_context(self, query, source_ids=None, n_results=None, user_email="", source_names=None):
+    async def retrieve_context(self, query, source_ids=None, n_results=None, user_email="", source_names=None):
         self.called = True
         self.last_kwargs = {"source_ids": source_ids, "user_email": user_email, "source_names": source_names}
         return {"context": self._context, "sources": []}
@@ -99,6 +99,17 @@ class RecordingAIService:
     async def stream_chat(self, messages):
         self.last_messages = messages
         yield "ok"
+
+    async def classify(self, messages):
+        # The routing classifier (decide_full_document) and the follow-up-suggestions call share this same
+        # method. Defer the routing decision to the same tightened regex the real classifier falls back to
+        # on failure, so these fakes don't have to duplicate the router's judgment call by call.
+        from app.services.chat_service import ROUTE_PROMPT, _looks_like_aggregate_query
+
+        if messages and messages[0][1] == ROUTE_PROMPT:
+            question = messages[-1][1]
+            return "WHOLE" if _looks_like_aggregate_query(question) else "LOOKUP"
+        return "[]"
 
 
 def test_no_documents_skips_retrieval_and_uses_general_prompt():

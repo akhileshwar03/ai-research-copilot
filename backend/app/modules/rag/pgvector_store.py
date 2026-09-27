@@ -11,11 +11,25 @@ import logging
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import AppError
 from app.db.models.document_chunk import DocumentChunk
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_RESULT = {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+def _search_unavailable() -> AppError:
+    """A failed read must surface as an error, never as an empty result.
+
+    These methods used to swallow every exception and return "no chunks", which the chat layer then
+    reported to the user as "the document does not contain the answer" (or "no content is indexed for page
+    N") -- a confident, false statement caused by a database outage. Raising lets the chat stream send an
+    honest error the user can retry.
+    """
+    return AppError(
+        code="RETRIEVAL_UNAVAILABLE",
+        message="Document search is temporarily unavailable. Please try again in a moment.",
+        status_code=503,
+    )
 
 
 def _where_to_filters(where: dict | None) -> list[dict]:
@@ -97,9 +111,9 @@ class PgVectorStore:
             ]
             distances = [float(row.distance) for row in rows]
             return {"documents": [documents], "metadatas": [metadatas], "distances": [distances]}
-        except Exception:
+        except Exception as exc:
             logger.exception("vector_store_query_failed n_results=%s", n_results)
-            return _EMPTY_RESULT
+            raise _search_unavailable() from exc
         finally:
             db.close()
 
@@ -128,6 +142,8 @@ class PgVectorStore:
             rows = db.execute(stmt).all()
             return {source: page for source, page in rows if page is not None}
         except Exception:
+            # Deliberately still best-effort: this only feeds an optional "at least N pages" hint in the
+            # prompt, so losing it degrades the wording, never the correctness of an answer.
             logger.exception("vector_store_max_pages_failed source_ids=%s", source_ids)
             return {}
         finally:
@@ -161,9 +177,9 @@ class PgVectorStore:
                 {"source": row.source, "page": row.page, "chunk": row.chunk, "content": row.content}
                 for row in rows
             ]
-        except Exception:
+        except Exception as exc:
             logger.exception("vector_store_get_all_chunks_failed source_ids=%s", source_ids)
-            return []
+            raise _search_unavailable() from exc
         finally:
             db.close()
 
@@ -201,9 +217,9 @@ class PgVectorStore:
                 {"source": row.source, "page": row.page, "chunk": row.chunk, "content": row.content}
                 for row in rows
             ]
-        except Exception:
+        except Exception as exc:
             logger.exception("vector_store_get_chunks_by_pages_failed source_ids=%s pages=%s", source_ids, pages)
-            return []
+            raise _search_unavailable() from exc
         finally:
             db.close()
 

@@ -1,4 +1,5 @@
 import base64
+import re
 import dataclasses
 import io
 import logging
@@ -34,6 +35,38 @@ _SPARSE_TEXT_WORD_THRESHOLD = 40
 _DRAWING_PATH_THRESHOLD = 10
 
 _NO_VISUAL_CONTENT_MARKER = "NO_VISUAL_CONTENT"
+
+# Detects a section heading line so each chunk can be stamped with "where in the document it sits" before
+# embedding -- measured on a 152-question / 7-document benchmark (2026-09-27): stamping alone took
+# retrieval hit rate from 71.1% to 87.5% (dense, k=6), the single largest lever found. Deliberately a plain
+# regex, not a layout model: it only has to catch an obvious heading line, and a missed one just means that
+# chunk carries the previous heading (or none) instead of a wrong one -- never actively misleading.
+_HEADING_RES = [
+    re.compile(r"^[IVX]{1,4}\.\s+[A-Z][A-Za-z ,&\-]{2,60}$"),        # I. INTRODUCTION
+    re.compile(r"^\d+(\.\d+)*\.?\s+[A-Z][A-Za-z ,&/\-]{2,70}$"),     # 3.2 Dataset Description
+    re.compile(r"^(CHAPTER\s*-?\s*\d+.*|[A-Z][A-Z &\-]{3,50})$"),    # CHAPTER - 1 / ABSTRACT
+    re.compile(r"^[A-Z]\.\s+[A-Z][A-Za-z ,&\-]{2,60}$"),             # A. Network architecture
+]
+
+
+def _headings_in(page_text: str) -> list[tuple[int, str]]:
+    """Every heading-looking line in *page_text*, as (character offset, heading text) pairs, in order."""
+    found: list[tuple[int, str]] = []
+    pos = 0
+    for line in page_text.split("\n"):
+        stripped = line.strip()
+        if 3 < len(stripped) < 80 and any(r.match(stripped) for r in _HEADING_RES):
+            found.append((pos, stripped))
+        pos += len(line) + 1
+    return found
+
+
+def _strip_nul(text: str) -> str:
+    """PostgreSQL text columns reject the NUL character (0x00) outright -- the insert raises and the whole
+    document's ingestion fails, leaving the user's upload "failed". Real PDFs produce NULs from some embedded
+    fonts (2 of 7 large real papers tried: the GPT-4 Technical Report p.33 and an LLM survey p.50). SQLite,
+    which the tests and local dev use, accepts them, so this only ever surfaced against real Postgres."""
+    return text.replace("\x00", "")
 
 _VISION_PROMPT = (
     "You are analyzing one page of a document for a retrieval system. Describe ONLY genuinely "
@@ -82,7 +115,7 @@ class IngestionService:
         self.ai_service = ai_service
         self.settings = get_settings()
 
-    async def process_pdf(self, content: bytes, source_id: str, user_email: str = "") -> IngestionResult:
+    async def process_pdf(self, content: bytes, source_id: str, user_email: str = "", title: str = "") -> IngestionResult:
         """Ingest a PDF and store chunks in the vector store.
 
         Text is split per page so every chunk carries its page number — the
@@ -132,10 +165,11 @@ class IngestionService:
         metadatas: list[dict] = []
         chunk_index = 0
         vision_candidates: list[int] = []
+        carried_heading = ""  # the most recent heading seen, carried across a page boundary
 
         try:
             for page_number, page in enumerate(reader.pages, start=1):
-                extracted = page.extract_text() or ""
+                extracted = _strip_nul(page.extract_text() or "")
 
                 if vision_enabled:
                     mupdf_page = mupdf_doc[page_number - 1]
@@ -144,8 +178,13 @@ class IngestionService:
 
                 if not extracted.strip():
                     continue
+                page_headings = _headings_in(extracted)
                 for piece in splitter.split_text(extracted):
-                    chunks.append(piece)
+                    offset = extracted.find(piece[:40])
+                    preceding = [h for pos, h in page_headings if offset >= 0 and pos <= offset]
+                    section = preceding[-1] if preceding else carried_heading
+                    prefix_bits = [b for b in (title, f"{section} | page {page_number}" if section else f"page {page_number}") if b]
+                    chunks.append(f"[{' | '.join(prefix_bits)}]\n{piece}")
                     metadatas.append(
                         {
                             "source": source_id,
@@ -155,6 +194,8 @@ class IngestionService:
                         }
                     )
                     chunk_index += 1
+                if page_headings:
+                    carried_heading = page_headings[-1][1]
 
             vision_pages_captioned = 0
             vision_truncated = False
@@ -245,7 +286,7 @@ class IngestionService:
                 logger.exception("ingestion_vision_describe_failed source=%s page=%s", source_id, page_number)
                 continue
 
-            description = (description or "").strip()
+            description = _strip_nul(description or "").strip()
             if not description or _NO_VISUAL_CONTENT_MARKER in description:
                 continue
 
