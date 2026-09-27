@@ -13,6 +13,7 @@ import logging
 import httpx
 
 from app.core.config import get_settings
+from app.services.ai_usage import record_search_usage
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,7 @@ class WebSearchService:
                 )
                 response.raise_for_status()
                 data = response.json()
+            record_search_usage("tavily-search-basic")  # only successful searches are billed
         except Exception:
             logger.warning("tavily_search_failed query_len=%d", len(query), exc_info=True)
             return []

@@ -75,6 +75,8 @@ export interface AiCostBucket {
   cost_usd: number;
   /** Calls whose model has no verified price; NOT included in cost_usd. */
   unpriced_calls: number;
+  /** Web-search credits (Tavily) consumed; 0 for model calls. */
+  search_credits: number;
 }
 
 export interface AiCost {
@@ -87,6 +89,7 @@ export interface AiCost {
   daily: (AiCostBucket & { date: string })[];
   unpriced_models: string[];
   pricing: { source: string; verified_on: string; note: string };
+  search_pricing: { source: string; usd_per_credit: number; free_credits_per_month: number; note: string };
 }
 
 export interface AnalyticsParams {

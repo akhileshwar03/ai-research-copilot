@@ -125,8 +125,9 @@ through `_MeteredEmbeddingsClient`, and `RequestContextMiddleware` sets the user
 (`app/services/ai_usage.py`). `GET /admin/ai-usage` returns tokens and *estimated* cost (by model/tool/user/day) for a date range,
 shown as the "AI spend" section on the Overview. Cost is deliberately not stored: it is computed at read
 time from `app/services/ai_pricing.py` (OpenAI list prices, `PRICING_VERIFIED_ON`; re-verify before trusting;
-unknown models show as "unpriced", never as $0). Ultra Human (local Ollama) and
-Tavily searches are not token-metered.
+unknown models show as "unpriced", never as $0). Ultra Human (local Ollama) is not metered. Tavily web searches are recorded
+(`kind="search"`, 1 credit each for basic depth) and priced at the pay-as-you-go rate ($0.008/credit; the
+free plan's 1,000 credits/month make real spend lower).
 
 **Layout.** `backend/routes/` was merged into `backend/app/api/routes/`; Render starts
 `uvicorn app.main:app`. Local verification: `.claude/launch.json` has `backend-local`

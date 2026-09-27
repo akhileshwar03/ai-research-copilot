@@ -8,20 +8,31 @@ from sqlalchemy.orm import Session
 from app.db.models.ai_usage_event import AIUsageEvent
 from app.db.models.user import User
 from app.services.admin_analytics import _day_key, _utc, day_bounds
-from app.services.ai_pricing import PRICING_SOURCE, PRICING_VERIFIED_ON, cost_usd
+from app.services.ai_pricing import (
+    PRICING_SOURCE,
+    PRICING_VERIFIED_ON,
+    SEARCH_FREE_CREDITS_PER_MONTH,
+    SEARCH_SOURCE,
+    SEARCH_USD_PER_CREDIT,
+    cost_usd,
+    search_cost_usd,
+    search_credits,
+)
 from app.services.usage_tracking import TOOL_LABELS
 
 TOP_USERS_LIMIT = 20
 
 
 class _Bucket:
-    __slots__ = ("calls", "input_tokens", "output_tokens", "cached_input_tokens", "cost", "unpriced_calls")
+    __slots__ = ("calls", "input_tokens", "output_tokens", "cached_input_tokens", "cost", "unpriced_calls", "search_credits")
 
     def __init__(self) -> None:
         self.calls = self.input_tokens = self.output_tokens = self.cached_input_tokens = self.unpriced_calls = 0
+        self.search_credits = 0
         self.cost = 0.0
 
-    def add(self, calls: int, inp: int, out: int, cached: int, cost: float | None) -> None:
+    def add(self, calls: int, inp: int, out: int, cached: int, cost: float | None, credits: int = 0) -> None:
+        self.search_credits += credits
         self.calls += calls
         self.input_tokens += inp
         self.output_tokens += out
@@ -40,6 +51,8 @@ class _Bucket:
             "cost_usd": round(self.cost, 6),
             # Calls whose model has no verified price; their cost is NOT included in cost_usd.
             "unpriced_calls": self.unpriced_calls,
+            # Web-search credits consumed (Tavily); 0 for model calls.
+            "search_credits": self.search_credits,
         }
 
 
@@ -75,15 +88,20 @@ def compute_ai_cost(db: Session, start: date, end: date, user_id: int | None = N
 
     for day, model, kind, tool, uid, calls, inp, out, cached in query.all():
         calls, inp, out, cached = int(calls), int(inp), int(out), int(cached)
-        cost = cost_usd(model, inp, out, cached)
+        if kind == "search":
+            credits = search_credits(model, calls) or 0
+            cost = search_cost_usd(model, calls)
+        else:
+            credits = 0
+            cost = cost_usd(model, inp, out, cached)
         if cost is None:
             unpriced.add(model)
-        total.add(calls, inp, out, cached, cost)
-        by_model.setdefault((model, kind), _Bucket()).add(calls, inp, out, cached, cost)
-        by_tool.setdefault(tool, _Bucket()).add(calls, inp, out, cached, cost)
-        daily.setdefault(_day_key(day), _Bucket()).add(calls, inp, out, cached, cost)
+        total.add(calls, inp, out, cached, cost, credits)
+        by_model.setdefault((model, kind), _Bucket()).add(calls, inp, out, cached, cost, credits)
+        by_tool.setdefault(tool, _Bucket()).add(calls, inp, out, cached, cost, credits)
+        daily.setdefault(_day_key(day), _Bucket()).add(calls, inp, out, cached, cost, credits)
         if uid is not None:
-            by_user.setdefault(uid, _Bucket()).add(calls, inp, out, cached, cost)
+            by_user.setdefault(uid, _Bucket()).add(calls, inp, out, cached, cost, credits)
 
     emails = {}
     if by_user:
@@ -106,5 +124,11 @@ def compute_ai_cost(db: Session, start: date, end: date, user_id: int | None = N
         "top_users": [{"user_id": uid, "email": emails.get(uid, "(deleted)"), **b.out()} for uid, b in top_users],
         "daily": [{"date": d, **b.out()} for d, b in sorted(daily.items())],
         "unpriced_models": sorted(unpriced),
+        "search_pricing": {
+            "source": SEARCH_SOURCE,
+            "usd_per_credit": SEARCH_USD_PER_CREDIT,
+            "free_credits_per_month": SEARCH_FREE_CREDITS_PER_MONTH,
+            "note": "Shown at the pay-as-you-go rate; the free plan covers the first credits each month, so real spend may be lower.",
+        },
         "pricing": {"source": PRICING_SOURCE, "verified_on": PRICING_VERIFIED_ON, "note": "List-price estimate; OpenAI's invoice is authoritative."},
     }

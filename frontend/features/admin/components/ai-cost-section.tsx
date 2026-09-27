@@ -32,7 +32,7 @@ function Rows({
   rows,
   maxCost,
 }: {
-  rows: { key: string; label: string; sub?: string; bucket: AiCostBucket }[];
+  rows: { key: string; label: string; sub?: string; searchOnly?: boolean; bucket: AiCostBucket }[];
   maxCost: number;
 }) {
   if (rows.length === 0) return <p className="py-4 text-center text-xs text-zinc-500">No AI calls logged in this range.</p>;
@@ -50,7 +50,10 @@ function Rows({
             <HBar value={r.bucket.cost_usd} max={maxCost} />
           </div>
           <p className="mt-0.5 text-[11px] text-zinc-500 font-data">
-            {r.bucket.calls.toLocaleString()} calls · {tokens(r.bucket.input_tokens)} in · {tokens(r.bucket.output_tokens)} out
+            {r.searchOnly
+              ? `${r.bucket.calls.toLocaleString()} searches · ${r.bucket.search_credits.toLocaleString()} credits`
+              : `${r.bucket.calls.toLocaleString()} calls · ${tokens(r.bucket.input_tokens)} in · ${tokens(r.bucket.output_tokens)} out`}
+            {!r.searchOnly && r.bucket.search_credits > 0 && ` · ${r.bucket.search_credits.toLocaleString()} search credits`}
             {r.bucket.unpriced_calls > 0 && ` · ${r.bucket.unpriced_calls} unpriced`}
           </p>
         </li>
@@ -84,6 +87,19 @@ export function AiCostSection({ start, end, userId }: { start: string; end: stri
             <Stat label="Output tokens" value={tokens(data.total.output_tokens)} />
           </div>
 
+          {data.total.search_credits > 0 && (
+            <p className="text-[12px] text-zinc-500">
+              Includes {data.total.search_credits.toLocaleString()} web-search credit(s) at{" "}
+              {formatUsd(data.search_pricing.usd_per_credit)} each. Tavily&apos;s free plan covers the first{" "}
+              {data.search_pricing.free_credits_per_month.toLocaleString()} credits a month, so real spend on searches may be lower
+              (see{" "}
+              <a href={data.search_pricing.source} target="_blank" rel="noreferrer" className="underline">
+                Tavily pricing
+              </a>
+              ).
+            </p>
+          )}
+
           {data.unpriced_models.length > 0 && (
             <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-[var(--text-primary)]">
               {data.total.unpriced_calls} call(s) used a model with no verified price ({data.unpriced_models.join(", ")}) and are
@@ -103,7 +119,12 @@ export function AiCostSection({ start, end, userId }: { start: string; end: stri
               <h4 className="mb-2 text-[12px] font-bold uppercase tracking-wider text-zinc-500">By model</h4>
               <Rows
                 maxCost={Math.max(0.000001, ...data.by_model.map((m) => m.cost_usd))}
-                rows={data.by_model.map((m) => ({ key: `${m.model}/${m.kind}`, label: `${m.model} (${m.kind})`, bucket: m }))}
+                rows={data.by_model.map((m) => ({
+                  key: `${m.model}/${m.kind}`,
+                  label: `${m.model} (${m.kind})`,
+                  searchOnly: m.kind === "search",
+                  bucket: m,
+                }))}
               />
             </div>
             <div>
@@ -120,7 +141,7 @@ export function AiCostSection({ start, end, userId }: { start: string; end: stri
             <a href={data.pricing.source} target="_blank" rel="noreferrer" className="underline">
               OpenAI&apos;s pricing page
             </a>
-            . Only calls made after token logging was deployed are counted.
+            {data.total.search_credits > 0 && " and Tavily's"}. Only calls made after token logging was deployed are counted.
           </p>
         </div>
       )}

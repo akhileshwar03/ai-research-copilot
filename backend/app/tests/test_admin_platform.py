@@ -1653,3 +1653,78 @@ def test_admin_ai_cost_breakdown(client, admin_headers, unique_email, track_usag
     assert wide["total"]["cost_usd"] == pytest.approx(1.34 + 0.40)  # now includes the 40-day-old call
     assert client.get("/api/v1/admin/ai-usage", headers={}).status_code in (401, 403)
     assert client.get("/api/v1/admin/ai-usage?user_id=999999", headers=admin_headers).status_code == 404
+
+
+# ── Tavily search cost ─────────────────────────────────────────────────────────
+
+def _tavily_service(monkeypatch, handler, api_key="tvly-test"):
+    import httpx
+
+    from app.core.config import get_settings
+    from app.services import web_search_service as module
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kw: real_client(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(get_settings(), "tavily_api_key", api_key)
+    return module.WebSearchService()
+
+
+def test_successful_search_is_recorded_as_one_billed_search(track_usage, monkeypatch):
+    import httpx
+
+    from app.services.ai_usage import reset_usage_context, set_usage_context
+
+    service = _tavily_service(monkeypatch, lambda req: httpx.Response(200, json={"results": [{"title": "t", "url": "https://x.example", "content": "c"}]}))
+
+    async def run():
+        token = set_usage_context({"user_id": None, "request_id": "r-search"}, "realtime")
+        try:
+            return await service.search("what is new")
+        finally:
+            reset_usage_context(token)
+
+    before = len(_ai_usage_rows())
+    assert len(asyncio.run(run())) == 1
+    row = _ai_usage_rows()[before]
+    assert (row.kind, row.model, row.tool, row.request_id, row.input_tokens) == ("search", "tavily-search-basic", "realtime", "r-search", 0)
+
+
+def test_failed_or_disabled_search_is_not_recorded(track_usage, monkeypatch):
+    import httpx
+
+    failing = _tavily_service(monkeypatch, lambda req: httpx.Response(500, json={"error": "boom"}))
+    before = len(_ai_usage_rows())
+    assert asyncio.run(failing.search("q")) == []
+    keyless = _tavily_service(monkeypatch, lambda req: httpx.Response(200, json={"results": []}), api_key="")
+    assert asyncio.run(keyless.search("q")) == []
+    assert len(_ai_usage_rows()) == before
+
+
+def test_search_credits_and_cost_are_added_to_the_tool_total(client, admin_headers, unique_email, track_usage):
+    from datetime import datetime, timezone
+
+    from app.db.models.ai_usage_event import AIUsageEvent
+    from app.services.ai_pricing import search_cost_usd
+
+    assert search_cost_usd("tavily-search-basic", 10) == pytest.approx(0.08)  # 10 credits x $0.008
+    assert search_cost_usd("tavily-search-advanced", 10) == pytest.approx(0.16)  # advanced = 2 credits each
+    assert search_cost_usd("tavily-unknown", 10) is None
+
+    now = datetime.now(timezone.utc)
+    with TestingSessionLocal() as db:
+        user = db.query(User).filter(User.email == unique_email).first()
+        db.query(AIUsageEvent).delete()
+        db.add_all(
+            [AIUsageEvent(user_id=user.id, tool="realtime", kind="search", model="tavily-search-basic", created_at=now) for _ in range(5)]
+            + [AIUsageEvent(user_id=user.id, tool="realtime", kind="chat", model="gpt-4.1-mini", input_tokens=1_000_000, created_at=now)]
+        )
+        db.commit()
+
+    body = client.get("/api/v1/admin/ai-usage?days=7", headers=admin_headers).json()
+    realtime = next(t for t in body["by_tool"] if t["tool"] == "realtime")
+    assert realtime["cost_usd"] == pytest.approx(0.40 + 5 * 0.008)
+    assert realtime["search_credits"] == 5 and body["total"]["search_credits"] == 5
+    search_row = next(m for m in body["by_model"] if m["kind"] == "search")
+    assert (search_row["model"], search_row["calls"], search_row["search_credits"]) == ("tavily-search-basic", 5, 5)
+    assert body["search_pricing"]["usd_per_credit"] == 0.008 and body["search_pricing"]["free_credits_per_month"] == 1000
+    assert body["unpriced_models"] == []

@@ -59,6 +59,35 @@ def record_ai_usage(
         db.close()
 
 
+def record_search_usage(model: str = "tavily-search-basic") -> None:
+    """Record one billed web search (see ai_pricing.SEARCH_CREDITS_PER_CALL). Never raises."""
+    from app.db.models.ai_usage_event import AIUsageEvent
+    from app.db.session import SessionLocal
+
+    ctx = _context.get()
+    state, tool = ctx if ctx else ({}, None)
+    db = SessionLocal()
+    try:
+        db.add(
+            AIUsageEvent(
+                user_id=state.get("user_id"),
+                tool=tool,
+                request_id=state.get("request_id"),
+                kind="search",
+                model=model,
+                input_tokens=0,
+                output_tokens=0,
+                cached_input_tokens=0,
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.debug("search_usage_write_failed model=%s", model, exc_info=True)
+    finally:
+        db.close()
+
+
 class TokenUsageCallback(BaseCallbackHandler):
     """LangChain callback: reads `usage_metadata` off each finished LLM call and records it."""
 

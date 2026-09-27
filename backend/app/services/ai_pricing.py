@@ -52,3 +52,24 @@ def cost_usd(model: str, input_tokens: int, output_tokens: int, cached_input_tok
     cached = min(max(cached_input_tokens, 0), input_tokens)
     cached_rate = price.cached_input if price.cached_input is not None else price.input
     return ((input_tokens - cached) * price.input + cached * cached_rate + output_tokens * price.output) / 1_000_000
+
+
+# ── Web search (Tavily) ────────────────────────────────────────────────────────
+# Read from https://docs.tavily.com/documentation/api-credits on PRICING_VERIFIED_ON: a basic-depth search costs
+# 1 credit, advanced costs 2; pay-as-you-go is $0.008 per credit; the free plan includes 1,000 credits a month.
+# The app only issues basic searches. Cost is shown at the pay-as-you-go rate, which overstates spend while the
+# monthly free allowance is not used up -- check Tavily's billing page for what is actually charged.
+SEARCH_SOURCE = "https://docs.tavily.com/documentation/api-credits"
+SEARCH_USD_PER_CREDIT = 0.008
+SEARCH_FREE_CREDITS_PER_MONTH = 1000
+SEARCH_CREDITS_PER_CALL: dict[str, int] = {"tavily-search-basic": 1, "tavily-search-advanced": 2}
+
+
+def search_credits(model: str, calls: int) -> int | None:
+    per_call = SEARCH_CREDITS_PER_CALL.get(model)
+    return None if per_call is None else per_call * calls
+
+
+def search_cost_usd(model: str, calls: int) -> float | None:
+    credits = search_credits(model, calls)
+    return None if credits is None else credits * SEARCH_USD_PER_CREDIT
