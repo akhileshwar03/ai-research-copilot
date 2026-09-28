@@ -546,6 +546,27 @@ class CheckerService:
             # still pull the blend up via the weighted average above.
             if heuristic_probability < llm_probability and llm_probability >= 0.9:
                 blended_probability = max(blended_probability, llm_probability * 0.9)
+
+            # Mirror-image guardrail, found for real (2026-09-28): a purely
+            # descriptive, mood-driven human paragraph (a "cozy rainy
+            # afternoon" essay — no first-person voice, but also zero
+            # deterministic AI-tells: no banned phrases, no stock transition
+            # openers, no repeated-trigram thinness, natural burstiness)
+            # scored heuristic_score=10 (genuinely clean) while the LLM was
+            # only MODERATELY confident it was AI (0.7, well under the 0.9
+            # "genuine conviction" gate above) — and the 70/30 blend still
+            # dragged the result into "uncertain"/borderline-AI territory.
+            # Two independent free market AI detectors called that same text
+            # 93%+ human; our own deterministic checks agreed; only the LLM's
+            # moderate, non-decisive number disagreed. A moderate-confidence
+            # LLM call (< 0.85) should not be able to override heuristics
+            # that are THIS clean (< 0.15) — that combination is exactly the
+            # "genuinely ambiguous" case the LLM prompt itself says to use
+            # sparingly, not a case for the LLM to carry alone. This does NOT
+            # touch the >=0.85 tier: a genuinely confident LLM AI call still
+            # wins per the guardrail above.
+            if heuristic_probability < 0.15 and llm_probability < 0.85:
+                blended_probability = min(blended_probability, 0.3 * llm_probability + 0.7 * heuristic_probability)
         else:
             blended_probability = heuristic_probability
         final_probability = _sharpen(blended_probability)

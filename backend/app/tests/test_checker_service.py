@@ -295,6 +295,45 @@ def test_signals_dict_exposes_all_new_heuristics():
         assert key in result["signals"]
 
 
+# 2026-09-28: real false positive found live in production — a purely descriptive,
+# mood-driven human paragraph (no first-person voice, but also genuinely clean of every
+# deterministic AI-tell: no banned phrases, no stock transition openers, natural
+# burstiness) scored heuristic_score ~10 (correctly clean) while the LLM was only
+# MODERATELY confident it was AI (0.7, well under the existing 0.9 "genuine conviction"
+# gate) — and the 70/30 blend still dragged the result into "uncertain"/borderline-AI
+# territory. Two independent free market AI detectors called the real text 93%+ human.
+_DESCRIPTIVE_HUMAN_PARAGRAPH = (
+    "Late autumn mornings have a particular stillness to them. Outside, frost clings to "
+    "the fence posts, and the garden looks almost silver in the early light. The kitchen "
+    "smells of woodsmoke and toast, and the old radiator ticks as it warms up in the "
+    "corner. Wrapped in a thick sweater, it is easy to sit by the window and watch steam "
+    "rise off a mug of tea. The cat stretches out on the warm floorboards near the stove, "
+    "in no hurry to go outside. Somewhere down the lane a dog barks twice and then falls "
+    "quiet again. The whole street feels slower than usual, as though the cold has asked "
+    "everyone to wait a little before starting the day."
+)
+
+
+def test_moderate_llm_ai_call_does_not_override_genuinely_clean_heuristics():
+    llm_response = json.dumps(
+        {
+            "ai_probability": 0.7,
+            "reasoning": "Smooth, predictable rhythm with generic cozy imagery typical of AI writing.",
+            "ai_sentences": [],
+        }
+    )
+    service = CheckerService(ai_service=_FakeAIService(llm_response))
+
+    result = _run(service.check_text(_DESCRIPTIVE_HUMAN_PARAGRAPH))
+
+    # Heuristics are genuinely clean here (no banned phrases, no stock openers, no
+    # trigram thinness) — a moderate (not decisive) LLM call must not drag this into
+    # "uncertain" or "likely_ai".
+    assert result["signals"]["heuristic_score"] < 15
+    assert result["verdict"] == "likely_human"
+    assert result["ai_probability"] < 0.4
+
+
 def test_advanced_scan_skipped_for_short_single_segment_text():
     llm_response = json.dumps({"ai_probability": 0.7, "reasoning": "x", "ai_sentences": []})
     service = CheckerService(ai_service=_FakeAIServiceSequence([llm_response]))
