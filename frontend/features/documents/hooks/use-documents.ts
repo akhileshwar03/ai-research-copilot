@@ -5,6 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { documentsApi } from "@/services/api/documents-api";
 import type { DocumentItem, DocumentsResponse } from "@/shared/types/api";
 import { useDocumentStore } from "@/stores/document-store";
+import { useAppConfig } from "@/features/shared/hooks/use-app-config";
+import { oversizeMessage } from "@/shared/lib/upload-limits";
 
 const PROCESSING_POLL_INTERVAL_MS = 3000;
 
@@ -12,6 +14,7 @@ export function useDocuments(email: string | null) {
   const queryClient = useQueryClient();
   const selectedDocument = useDocumentStore((s) => s.selectedDocument);
   const setSelectedDocument = useDocumentStore((s) => s.setSelectedDocument);
+  const { config } = useAppConfig();
 
   const query = useQuery({
     queryKey: ["documents"],
@@ -32,7 +35,16 @@ export function useDocuments(email: string | null) {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => documentsApi.upload(file),
+    // Single chokepoint for every upload entry point (the picker, drag-drop, and the command
+    // palette all funnel through uploadDocument) -- checked here once instead of duplicated at
+    // each call site. Instant, pre-upload feedback instead of waiting through a whole upload
+    // just to be rejected at the end (a real production case: a real user waited 6.5s for a
+    // 413 that a client-side size check could have caught immediately).
+    mutationFn: (file: File) => {
+      const oversize = oversizeMessage(file, config.max_upload_size_mb);
+      if (oversize) return Promise.reject(new Error(oversize));
+      return documentsApi.upload(file);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["documents"] }),
   });
 

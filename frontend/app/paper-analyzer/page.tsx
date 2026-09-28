@@ -5,6 +5,8 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { useAppConfig } from "@/features/shared/hooks/use-app-config";
+import { oversizeMessage } from "@/shared/lib/upload-limits";
 import { paperAnalyzerApi, type PaperAnalysisResult, type StyleGuide } from "@/services/api/paper-analyzer-api";
 import { StylePicker } from "@/features/paper-analyzer/components/style-picker";
 import { CheckRow } from "@/features/paper-analyzer/components/check-row";
@@ -61,6 +63,7 @@ function ResultRail({ result }: { result: PaperAnalysisResult }) {
 
 export default function PaperAnalyzerPage() {
   const { isReady, isAuthenticated } = useAuthGuard();
+  const { config } = useAppConfig();
   const [style, setStyle] = useState<StyleGuide | null>(null);
   const [result, setResult] = useState<PaperAnalysisResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -90,6 +93,11 @@ export default function PaperAnalyzerPage() {
     }
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       toast.error("Only PDF files are supported");
+      return;
+    }
+    const oversize = oversizeMessage(file, config.max_upload_size_mb);
+    if (oversize) {
+      toast.error(oversize);
       return;
     }
     setResult(null);

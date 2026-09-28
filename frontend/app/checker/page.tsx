@@ -6,6 +6,8 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { useAppConfig } from "@/features/shared/hooks/use-app-config";
+import { oversizeMessage } from "@/shared/lib/upload-limits";
 import { setHumanizerPrefill } from "@/shared/lib/humanizer-handoff";
 import { checkerApi, type CheckResult } from "@/services/api/checker-api";
 import { ScanningPanel } from "@/features/checker/components/scanning-panel";
@@ -214,6 +216,7 @@ function IdleRail() {
 export default function CheckerPage() {
   const router = useRouter();
   const { isReady, isAuthenticated } = useAuthGuard();
+  const { config } = useAppConfig();
   const [mode, setMode] = useState<Mode>("detect");
   const [tab, setTab] = useState<"text" | "document">("text");
   const [advancedScan, setAdvancedScan] = useState(false);
@@ -253,6 +256,13 @@ export default function CheckerPage() {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       toast.error("Only PDF files are supported");
+      return;
+    }
+    // Instant, pre-upload feedback instead of waiting through a whole upload just to be
+    // rejected at the end (a real production case: 6.5s for a real oversized file, over a 413).
+    const oversize = oversizeMessage(file, config.max_upload_size_mb);
+    if (oversize) {
+      toast.error(oversize);
       return;
     }
     setResult(null);

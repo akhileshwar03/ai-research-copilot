@@ -74,6 +74,14 @@ def test_public_app_config_is_unauthenticated_and_minimal(client):
     assert all(bg["mode"] == "dynamic" and bg["image_url"] is None for bg in body["backgrounds"].values())
     # Nothing that only an admin should see leaks out.
     assert "rag_similarity_threshold" not in json.dumps(body)
+    # 2026-09-28: a real gap this fixes -- no upload flow (Research Copilot documents, AI
+    # Checker, Paper Analyzer) could check a file's size before uploading it, because the limit
+    # was never exposed here; a user could wait through an entire large-file upload just to be
+    # rejected at the end. Same class of info as checker_max_chars, safe for an unauthenticated
+    # visitor to know. Compared against the live setting, not a hardcoded default -- another
+    # test in this suite (test_admin_runtime_settings_roundtrip) legitimately changes this value
+    # and shares the same test database, with no per-test reset.
+    assert body["max_upload_size_mb"] == int(runtime_settings.get("max_upload_size_mb"))
 
 
 def test_github_link_toggle_round_trips_to_public_config(client, admin_headers):

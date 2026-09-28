@@ -40,6 +40,7 @@ class PublicAppConfig(BaseModel):
     chat_max_chars: int
     humanize_max_words: int
     checker_max_chars: int
+    max_upload_size_mb: int
     github_link_enabled: bool
     github_repo_url: str
     support_email: str
@@ -90,6 +91,7 @@ def public_app_config(db: Session = Depends(get_db)):
         chat_max_chars=int(runtime_settings.get("chat_max_chars")),
         humanize_max_words=int(runtime_settings.get("humanize_max_words")),
         checker_max_chars=int(runtime_settings.get("checker_max_chars")),
+        max_upload_size_mb=int(runtime_settings.get("max_upload_size_mb")),
         github_link_enabled=bool(runtime_settings.get("github_link_enabled")),
         github_repo_url=str(runtime_settings.get("github_repo_url") or ""),
         support_email=str(runtime_settings.get("support_email") or ""),
