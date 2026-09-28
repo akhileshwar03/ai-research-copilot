@@ -80,6 +80,16 @@ def test_document_file_streams_bytes_not_a_redirect(client, auth_headers):
     assert resp.content.startswith(b"%PDF")
 
 
+def test_document_file_is_cached_long_term_as_a_private_immutable_resource(client, auth_headers):
+    """A document's bytes at a given stored_filename never change after upload (re-ingest
+    re-runs extraction on the same stored file, never overwrites it), so the browser should
+    never have to re-fetch the same document's PDF from network every time the side panel
+    reopens it. "private" (not "public") since this is still an access-token-gated response --
+    a shared/proxy cache must never store it."""
+    resp = client.get("/api/v1/documents/seed.pdf/file", headers=auth_headers, follow_redirects=False)
+    assert resp.headers["cache-control"] == "private, max-age=31536000, immutable"
+
+
 def test_document_file_404s_for_unknown_document(client, auth_headers):
     resp = client.get("/api/v1/documents/does-not-exist.pdf/file", headers=auth_headers)
     assert resp.status_code == 404

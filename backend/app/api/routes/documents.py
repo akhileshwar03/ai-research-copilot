@@ -31,12 +31,27 @@ def get_document_file(
     proxies bytes through the backend (see get_document_download's docstring
     for why the old R2-presigned-redirect was dropped — it broke PDF viewing
     entirely due to the bucket having no CORS policy).
+
+    Cache-Control is new (2026-09-28): this had no caching headers at all, so
+    every time the PDF side panel opened -- even reopening the same document
+    a moment later, or switching tabs away and back -- the browser re-fetched
+    and the backend re-read+re-proxied the full file from R2, every time. A
+    document's bytes at a given stored_filename never change after upload
+    (re-ingest re-runs extraction on the same stored file; it never
+    overwrites it -- see DocumentService.storage.save's one call site), so
+    this is a genuinely immutable resource per URL and safe to cache
+    long-term. "private" (not "public") since this is still an
+    access-token-gated, per-owner response, not something a shared/proxy
+    cache should ever store.
     """
     download = service.get_document_download(document_id, user_email=email)
     return Response(
         content=download["content"],
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{download["filename"]}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{download["filename"]}"',
+            "Cache-Control": "private, max-age=31536000, immutable",
+        },
     )
 
 
