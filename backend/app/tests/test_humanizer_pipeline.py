@@ -365,3 +365,88 @@ def test_empty_text_scores_as_worst_possible():
 
     assert _ai_likelihood_score("") == float("inf")
     assert _ai_likelihood_score(None) == float("inf")
+
+
+# ── Closed-loop real-checker validation (2026-09-29 rebuild) ────────────────────────────────
+# Pass 3's old validation ran the SAME class of weak, bare-judgment mechanism the checker used
+# to have (detector.verify() — no reference point to compare against). This closes the loop
+# with the actual, now-validated production Checker instead, and regenerates once if it still
+# reads as AI-generated. These tests exercise _close_loop_with_real_checker directly, since
+# building a full fake AIService that also implements classify() (for CheckerService) through
+# the entire run() generator would obscure what's actually being tested.
+
+
+class _FakeCloseLoopAIService:
+    """Implements just what _close_loop_with_real_checker needs: classify() (for the real
+    CheckerService instance it constructs internally) and rewrite_humanize_once() (for the
+    regeneration attempt)."""
+
+    def __init__(self, classify_responses, rewrite_response="regenerated text"):
+        self._classify_responses = list(classify_responses)
+        self.classify_calls = []
+        self.rewrite_response = rewrite_response
+        self.rewrite_calls = []
+
+    async def classify(self, messages):
+        self.classify_calls.append(messages)
+        idx = len(self.classify_calls) - 1
+        return self._classify_responses[min(idx, len(self._classify_responses) - 1)]
+
+    async def rewrite_humanize_once(self, messages):
+        self.rewrite_calls.append(messages)
+        return self.rewrite_response
+
+
+def _run_close_loop(*args, **kwargs):
+    from app.services.humanizer.pipeline import _close_loop_with_real_checker
+
+    return asyncio.run(_close_loop_with_real_checker(*args, **kwargs))
+
+
+def test_close_loop_does_nothing_when_checker_already_reads_it_as_human():
+    import json
+
+    fake_ai = _FakeCloseLoopAIService(
+        classify_responses=[json.dumps({"ai_probability": 0.1, "reasoning": "x", "ai_sentences": []})]
+    )
+    result = _run_close_loop(fake_ai, "Some already-human-reading text.", "normal", False, "casual")
+    assert result is None
+    assert fake_ai.rewrite_calls == []  # no wasted regeneration call
+
+
+def test_close_loop_regenerates_and_returns_the_improved_text_when_it_helps():
+    import json
+
+    fake_ai = _FakeCloseLoopAIService(
+        classify_responses=[
+            json.dumps({"ai_probability": 0.8, "reasoning": "reads as AI", "ai_sentences": ["A flagged sentence."]}),
+            json.dumps({"ai_probability": 0.2, "reasoning": "reads as human", "ai_sentences": []}),
+        ],
+        rewrite_response="the regenerated, improved text",
+    )
+    result = _run_close_loop(fake_ai, "Text that still reads as AI-generated.", "normal", False, "casual")
+    assert result == "the regenerated, improved text"
+    assert len(fake_ai.rewrite_calls) == 1
+
+
+def test_close_loop_never_returns_a_worse_scoring_regeneration():
+    import json
+
+    fake_ai = _FakeCloseLoopAIService(
+        classify_responses=[
+            json.dumps({"ai_probability": 0.6, "reasoning": "reads as AI", "ai_sentences": []}),
+            json.dumps({"ai_probability": 0.9, "reasoning": "reads even more AI", "ai_sentences": []}),
+        ],
+        rewrite_response="a worse regeneration",
+    )
+    result = _run_close_loop(fake_ai, "Borderline text.", "normal", False, "casual")
+    assert result is None  # regeneration made it worse -- must not be surfaced as an improvement
+
+
+def test_close_loop_skips_entirely_when_checker_llm_signal_is_unavailable():
+    class _NoClassifyAIService:
+        async def rewrite_humanize_once(self, messages):
+            raise AssertionError("should never be called -- no reliable signal to act on")
+
+    result = _run_close_loop(_NoClassifyAIService(), "Some text.", "normal", False, "casual")
+    assert result is None

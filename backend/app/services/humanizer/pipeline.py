@@ -14,9 +14,26 @@ import logging
 import re
 import statistics
 
+from app.services.checker_service import CheckerService
 from app.services.humanizer import chunking, detector, examples as examples_module, prompts, style_check
 
 logger = logging.getLogger(__name__)
+
+# 2026-09-29: real closed-loop validation, added as part of the same rebuild that fixed
+# checker_service.py's LLM signal (see its module-level comments — the old bare-probability
+# self-report had almost no discriminating power on plain factual writing; the new
+# reference-point-comparison mechanism measured 87.5% real accuracy). Before this, Pass 3
+# validated the rewrite against detector.verify() — the SAME class of weak, bare-judgment
+# mechanism the checker used to have, asking an LLM to list "AI-writing tells" with no
+# reference point to compare against. There was no reason to trust that mechanism any more
+# than the checker's old one, and no evidence it was ever independently measured. This closes
+# the loop with the one signal in this codebase that's actually been validated against real,
+# labeled data: run the ACTUAL production Checker on the final text, and if it still reads as
+# AI-generated, regenerate once with its own concrete feedback (which sentences it flagged and
+# why) rather than trusting Pass 2/3's local heuristic proxy as the last word. Bounded to one
+# extra round — same cost-control philosophy as MAX_PARAGRAPH_RETRY_ATTEMPTS.
+REAL_CHECK_RETRY_THRESHOLD = 0.5  # "uncertain" or worse triggers one more real attempt
+
 
 MAX_RETRY_PARAGRAPHS = 8  # sane ceiling so one pathological verify pass can't fire off dozens of retry calls
 
@@ -304,6 +321,69 @@ async def _generate_chunk(ai_service, messages: list[tuple[str, str]], num_candi
     yield {"type": "_chunk_result", "text": winner}
 
 
+async def _close_loop_with_real_checker(
+    ai_service, current_text: str, style: str, expand: bool, register: str
+) -> str | None:
+    """Real closed-loop validation — see the module-level comment on REAL_CHECK_RETRY_THRESHOLD
+    for why this exists. Runs the actual production Checker against the pipeline's own output;
+    if it still reads as AI-generated, regenerates the WHOLE text once more with the checker's
+    own concrete findings (which sentences, and why) fed back as feedback, then re-checks the
+    regenerated candidate too. Returns the better-scoring text if a regeneration happened and
+    genuinely improved on the original, or None if no change was made — this NEVER returns a
+    worse-scoring candidate than it started with; a failed regeneration attempt just means no
+    improvement was found, not a regression accepted silently.
+    """
+    checker = CheckerService(ai_service)
+    try:
+        before = await checker.check_text(current_text)
+    except Exception:
+        logger.exception("humanizer_close_loop_check_failed")
+        return None
+
+    if before["signals"]["llm_probability"] is None:
+        # The checker's own LLM analysis failed and it degraded to heuristic-only —
+        # not a reliable enough basis to trigger a whole extra regeneration round on.
+        return None
+
+    if before["ai_probability"] < REAL_CHECK_RETRY_THRESHOLD:
+        return None  # already reads as human per the real checker -- nothing to do
+
+    flagged = "\n".join(f'- "{s}"' for s in before["ai_sentences"][:6])
+    feedback = (
+        "A real AI-text detector flagged this rewrite as still likely AI-generated "
+        f"(reason: {before['explanation']}). "
+        + (f"Specific sentences it flagged:\n{flagged}\n" if flagged else "")
+        + "Rewrite the ENTIRE text again from scratch, addressing this specific feedback — "
+        "vary sentence rhythm more, remove any remaining generic phrasing, add genuine "
+        "specificity — without changing any fact, number, name, date, or claim."
+    )
+    retry_prompt = _build_rewrite_prompt(style, expand, feedback, register=register)
+    try:
+        regenerated = await ai_service.rewrite_humanize_once([("system", retry_prompt), ("human", current_text)])
+    except Exception:
+        logger.exception("humanizer_close_loop_regenerate_failed")
+        return None
+    regenerated = (regenerated or "").strip()
+    if not regenerated:
+        return None
+
+    try:
+        after = await checker.check_text(regenerated)
+    except Exception:
+        logger.exception("humanizer_close_loop_recheck_failed")
+        return None
+
+    logger.info(
+        "humanizer_close_loop before=%.3f after=%.3f improved=%s",
+        before["ai_probability"],
+        after["ai_probability"],
+        after["ai_probability"] < before["ai_probability"],
+    )
+    if after["ai_probability"] < before["ai_probability"]:
+        return regenerated
+    return None  # regeneration didn't actually help -- keep the original, don't regress
+
+
 async def run(ai_service, text: str, style: str = "normal", expand: bool = False):
     """Yields {"type": "token", "text": str} for each streamed rewrite token,
     then at most one {"type": "revised", "text": str} if Pass 3 patched a
@@ -365,5 +445,13 @@ async def run(ai_service, text: str, style: str = "normal", expand: bool = False
         logger.exception("humanizer_verify_failed")
         patched = None
 
-    if patched:
-        yield {"type": "revised", "text": patched}
+    current_best = patched or full_text
+    try:
+        improved = await _close_loop_with_real_checker(ai_service, current_best, style, expand, register)
+    except Exception:
+        logger.exception("humanizer_close_loop_failed")
+        improved = None
+
+    final_text = improved or current_best
+    if final_text != full_text:
+        yield {"type": "revised", "text": final_text}
