@@ -334,6 +334,41 @@ def test_moderate_llm_ai_call_does_not_override_genuinely_clean_heuristics():
     assert result["ai_probability"] < 0.4
 
 
+# 2026-09-29: real false positive found via a structured 24-sample validation run
+# (scripts/checker_eval/, 8 topic-matched human/AI/humanized triples) — 5 of 8 genuine
+# 2013-Wikipedia human paragraphs (formal/encyclopedic register, heuristic_score 0-8,
+# genuinely clean) were misclassified likely_ai, and in every one of those 5 cases
+# llm_probability landed at EXACTLY 0.85 -- an LLM self-report anchor value that fell
+# precisely in the unprotected gap between the two guardrails (`< 0.85` and `>= 0.9`).
+_FORMAL_ENCYCLOPEDIC_PARAGRAPH = (
+    "A watermill uses a water wheel to drive machinery. The design dates to antiquity. "
+    "Water is directed from a river or millpond along a channel to the wheel, where its "
+    "force turns a shaft connected to internal gearing that converts rotation into the "
+    "motion a mill's task requires. Overshot, undershot, and breastshot designs differ in "
+    "where the water strikes the wheel. Efficiency depends on the available head and flow. "
+    "Many surviving examples across Europe were adapted for grinding grain, and some were "
+    "later converted to generate electricity in the early twentieth century before falling "
+    "out of everyday use."
+)
+
+
+def test_llm_probability_of_exactly_0_85_does_not_escape_the_clean_heuristic_guardrail():
+    llm_response = json.dumps(
+        {
+            "ai_probability": 0.85,
+            "reasoning": "Smooth, factual, evenly-paced prose with no personal voice.",
+            "ai_sentences": [],
+        }
+    )
+    service = CheckerService(ai_service=_FakeAIService(llm_response))
+
+    result = _run(service.check_text(_FORMAL_ENCYCLOPEDIC_PARAGRAPH))
+
+    assert result["signals"]["heuristic_score"] < 15
+    assert result["verdict"] == "likely_human"
+    assert result["ai_probability"] < 0.4
+
+
 # 2026-09-28: real false NEGATIVE found live in production, right after the guardrail
 # above shipped — a paragraph with leftover AI-assistant preamble ("Here is a short,
 # random essay about...") scored heuristic_score=2 (clean of every OTHER signal) and the

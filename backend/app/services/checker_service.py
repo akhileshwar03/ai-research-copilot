@@ -639,13 +639,23 @@ class CheckerService:
             # Two independent free market AI detectors called that same text
             # 93%+ human; our own deterministic checks agreed; only the LLM's
             # moderate, non-decisive number disagreed. A moderate-confidence
-            # LLM call (< 0.85) should not be able to override heuristics
-            # that are THIS clean (< 0.15) — that combination is exactly the
-            # "genuinely ambiguous" case the LLM prompt itself says to use
-            # sparingly, not a case for the LLM to carry alone. This does NOT
-            # touch the >=0.85 tier: a genuinely confident LLM AI call still
-            # wins per the guardrail above.
-            if heuristic_probability < 0.15 and llm_probability < 0.85:
+            # LLM call should not be able to override heuristics that are THIS
+            # clean (< 0.15) — that combination is exactly the "genuinely
+            # ambiguous" case the LLM prompt itself says to use sparingly, not
+            # a case for the LLM to carry alone.
+            #
+            # 2026-09-29: the threshold here was originally `< 0.85`, deliberately
+            # left just short of the guardrail above's `>= 0.9` "genuine conviction"
+            # gate. A structured 24-sample validation run (scripts/checker_eval/,
+            # 8 topic-matched human/AI/humanized triples) found this gap was a real,
+            # not theoretical, bug: 5 of 8 genuine 2013-Wikipedia human paragraphs
+            # (heuristic_score 0-8, genuinely clean) were misclassified likely_ai —
+            # and in EVERY one of those 5 cases llm_probability landed at EXACTLY
+            # 0.85, an LLM self-report anchor value that fell precisely in the
+            # unprotected gap between the two guardrails. Widened to `< 0.9` so the
+            # two guardrails share one continuous boundary with no gap between them —
+            # confirmed against the same validation set to fix all 5 real failures.
+            if heuristic_probability < 0.15 and llm_probability < 0.9:
                 blended_probability = min(blended_probability, 0.3 * llm_probability + 0.7 * heuristic_probability)
 
             # Floor for the leftover-AI-preamble signal specifically, found for real
