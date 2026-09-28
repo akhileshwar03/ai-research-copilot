@@ -10,6 +10,11 @@ class CheckSignals(BaseModel):
     burstiness: float
     lexical_diversity: float
     ai_phrase_hits: int
+    function_word_ratio: float
+    mean_word_length: float
+    trigram_repetition_rate: float
+    transition_opener_rate: float
+    personal_voice_score: float
     heuristic_score: float
     llm_probability: float | None
 

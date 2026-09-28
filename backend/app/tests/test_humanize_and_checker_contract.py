@@ -116,6 +116,30 @@ def test_checker_text_success(client, auth_headers):
     assert "signals" in body
 
 
+# 2026-09-28: real bug found live in production — CheckerService.compute_heuristics()
+# computed five new signals (function_word_ratio, mean_word_length,
+# trigram_repetition_rate, transition_opener_rate, personal_voice_score) and the
+# service layer's own unit tests passed, but the route's `response_model=CheckResult`
+# Pydantic schema (app/schemas/checker.py) was never updated to declare them —
+# FastAPI/Pydantic silently drops any field not declared on the response model, so
+# every real HTTP response kept shipping the OLD signal shape despite the service
+# genuinely computing the new one. Service-layer tests calling CheckerService
+# directly can never catch this class of bug; only a real HTTP round-trip through
+# the actual route can, which is what this asserts.
+def test_checker_text_new_heuristic_signals_survive_the_http_response_model(client, auth_headers):
+    resp = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers)
+    assert resp.status_code == 200
+    signals = resp.json()["signals"]
+    for key in (
+        "function_word_ratio",
+        "mean_word_length",
+        "trigram_repetition_rate",
+        "transition_opener_rate",
+        "personal_voice_score",
+    ):
+        assert key in signals, f"{key} was silently dropped by the response_model"
+
+
 def test_checker_text_rejects_empty(client, auth_headers):
     resp = client.post("/api/v1/checker/text", json={"text": ""}, headers=auth_headers)
     assert resp.status_code in (400, 422)
