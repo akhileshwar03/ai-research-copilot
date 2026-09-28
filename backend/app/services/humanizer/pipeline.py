@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRY_PARAGRAPHS = 8  # sane ceiling so one pathological verify pass can't fire off dozens of retry calls
 
+# 2026-09-28: real production evidence (two independent real inputs, different topics) showed a
+# single Pass-3 retry attempt is not reliable enough -- both times, the model's retry still
+# contained a banned word and/or was still sentence-length-uniform, and the original design just
+# accepted that as final since nothing re-checked the retry's own output. 2 total attempts per
+# paragraph (the original call plus one bounded extra chance) closes most of that gap without
+# turning "basic" into an unbounded retry loop -- see _retry_paragraph.
+MAX_PARAGRAPH_RETRY_ATTEMPTS = 2
+
 _WORD_SPLIT_RE = re.compile(r"\S+\s*")
 
 
@@ -144,19 +152,45 @@ async def _retry_paragraph(
     paragraph_text: str,
     register: str = "casual",
 ) -> tuple[int, str | None]:
-    """One Pass-3 retry call for a single flagged paragraph. Isolated per-paragraph
-    error handling preserved exactly as before (a failed retry just leaves that
-    paragraph unpatched) — only the caller now runs these concurrently instead of
-    one at a time."""
+    """Pass-3 retry for a single flagged paragraph, re-checked and retried again — bounded by
+    MAX_PARAGRAPH_RETRY_ATTEMPTS — if the fix didn't actually land. Isolated per-paragraph error
+    handling preserved exactly as before (a failed call just leaves the paragraph at whatever its
+    best attempt so far was) — only the caller runs these concurrently instead of one at a time.
+
+    Real production evidence (2026-09-28): a single retry attempt is not reliable. Two
+    independent real inputs (different topics) both came back from their one retry still
+    containing a banned word and/or still sentence-length-uniform — the original design had
+    nothing re-checking the retry's own output, so it just accepted that as final. Re-checked
+    here with style_check.deterministic_findings only, not a second detector.verify() LLM call —
+    that's a free, local, instant check, so this doesn't multiply the expensive full-text LLM
+    verify pass for every request that needed any retry at all, only adds a second cheap rewrite
+    call for the (real, but not universal) paragraphs still flagged after their first attempt."""
     issues = [f for f in findings if f.get("paragraph") == idx]
-    retry_prompt = _build_retry_prompt(style, expand, detector.findings_summary(issues), register)
-    try:
-        revised = await ai_service.rewrite_humanize_once([("system", retry_prompt), ("human", paragraph_text)])
-    except Exception:
-        logger.exception("humanizer_retry_failed paragraph=%d", idx)
-        return idx, None
-    revised = (revised or "").strip()
-    return idx, (revised or None)
+    current_text = paragraph_text
+    revised: str | None = None
+    for attempt in range(MAX_PARAGRAPH_RETRY_ATTEMPTS):
+        retry_prompt = _build_retry_prompt(style, expand, detector.findings_summary(issues), register)
+        try:
+            candidate = await ai_service.rewrite_humanize_once([("system", retry_prompt), ("human", current_text)])
+        except Exception:
+            logger.exception("humanizer_retry_failed paragraph=%d attempt=%d", idx, attempt)
+            break
+        candidate = (candidate or "").strip()
+        if not candidate:
+            break
+        revised = candidate
+        current_text = candidate
+        remaining = style_check.deterministic_findings([candidate], register)
+        if not remaining:
+            break
+        logger.info(
+            "humanizer_retry_still_flagged paragraph=%d attempt=%d types=%s",
+            idx,
+            attempt,
+            sorted({f["type"] for f in remaining}),
+        )
+        issues = remaining  # next attempt targets exactly what's still wrong, not the original findings
+    return idx, revised
 
 
 async def _verify_and_patch(

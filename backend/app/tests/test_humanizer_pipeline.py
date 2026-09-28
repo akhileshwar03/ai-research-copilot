@@ -128,6 +128,51 @@ def test_pipeline_retries_a_banned_word_even_when_the_llm_verifier_misses_it():
     assert len(fake_ai.retry_calls) == 1
 
 
+def test_pipeline_retries_again_when_the_first_retry_is_still_flagged():
+    """The real gap this closes: a single retry attempt isn't reliable (2026-09-28 production
+    evidence, two independent real inputs) -- if the retry's own output is STILL flagged by the
+    free deterministic checks, retry once more (bounded by MAX_PARAGRAPH_RETRY_ATTEMPTS) rather
+    than accepting a still-bad result as final, which is what the original single-attempt design
+    did."""
+    fake_ai = _FakeAIService(
+        classify_responses=["casual", NO_FINDINGS, NO_FINDINGS],
+        rewrite_tokens=[["Great for today's business landscape."]],
+        once_responses=[
+            "Still uses the word landscape here.",  # attempt 1: still flagged (banned word)
+            "Great for real people trying to get things done.",  # attempt 2: clean
+        ],
+    )
+
+    events = _run(run_pipeline(fake_ai, "some source text", style="normal"))
+
+    revised_events = [e for e in events if e["type"] == "revised"]
+    assert len(revised_events) == 1
+    assert revised_events[0]["text"] == "Great for real people trying to get things done."
+    assert len(fake_ai.once_calls) == 2  # both attempts genuinely fired
+
+
+def test_pipeline_bounds_retry_attempts_instead_of_looping_forever():
+    """Even if the retry never cleans up, this must not loop unboundedly -- capped at
+    MAX_PARAGRAPH_RETRY_ATTEMPTS, and the LAST attempt's output (best-effort) ships rather than
+    blocking or failing the request."""
+    fake_ai = _FakeAIService(
+        classify_responses=["casual", NO_FINDINGS, NO_FINDINGS],
+        rewrite_tokens=[["Great for today's business landscape."]],
+        once_responses=[
+            "Still uses the word landscape here.",
+            "Still uses the word landscape again.",
+            "Still uses the word landscape a third time.",  # must never be reached
+        ],
+    )
+
+    events = _run(run_pipeline(fake_ai, "some source text", style="normal"))
+
+    revised_events = [e for e in events if e["type"] == "revised"]
+    assert len(revised_events) == 1
+    assert revised_events[0]["text"] == "Still uses the word landscape again."
+    assert len(fake_ai.once_calls) == 2  # the bound held -- the 3rd scripted response never used
+
+
 def test_pipeline_does_not_retry_findings_with_no_paragraph_index():
     # A whole-text finding (paragraph: null) can't be targeted by a
     # single-paragraph retry, so it should be ignored rather than raising.
