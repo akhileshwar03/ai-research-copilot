@@ -78,6 +78,39 @@ def _looks_like_aggregate_query(text: str) -> bool:
     return bool(_AGGREGATE_QUERY_RE.search(text))
 
 
+# "Which of my documents talks about X" / "does either document mention X" -- a question that
+# genuinely spans every selected document, not a fact lookup within one of them. Flagged as
+# unsolved in the 2026-09-27 eval notes: plain top-k retrieval (retrieve_context, scoped to all
+# selected documents together) runs ONE global similarity search, so it silently starves out any
+# document whose chunks don't win that race -- the model then answers from whichever document(s)
+# happened to match best, with zero visibility into the others, and no way to honestly say "this
+# one doesn't cover it" versus "we just didn't check." See
+# retrieval_service.retrieve_context_for_document_coverage, which this routes to instead: a small,
+# independent top-k fetched from EVERY selected document.
+#
+# Deliberately narrower than it could be: requires an explicit "which document/file/paper" or a
+# quantifier word (any/all/either/both/none/each) alongside "do/does documents", not just any
+# question containing "which" -- "Which page discusses X" (page-specific) and "Which model
+# performed best" (an ordinary fact the text states) must not be caught by this, and a bare
+# "do/does ... document" with no quantifier ("What does the document say about X") is common
+# enough ordinary phrasing that it's deliberately excluded too, even though that costs a few
+# genuine "do my documents mention X" phrasings without a quantifier word.
+_CROSS_DOCUMENT_QUERY_RE = re.compile(
+    r"\bwhich (?:of (?:my|these|the|all) )?(?:documents?|files?|papers?|pdfs?|sources?)\b"
+    r"|\bwhich (?:document|file|paper|pdf|source|one|ones)\b.{0,40}\b(?:talk\w* about|cover\w*|mention\w*"
+    r"|discuss\w*|address\w*|has|contain\w*|includ\w*)\b"
+    r"|\b(?:do|does)(?:n.t)? (?:any|all|either|both|none|each) (?:of )?(?:(?:my|these|the) )?"
+    r"(?:documents?|files?|papers?|sources?)\b"
+    r"|\b(?:is|are) (?:there|any) .{0,30}\b(?:document|file|paper|source)s?\b.{0,40}\b(?:talk\w* about|cover\w*"
+    r"|mention\w*|discuss\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_cross_document_query(text: str) -> bool:
+    return bool(_CROSS_DOCUMENT_QUERY_RE.search(text))
+
+
 # A narrower, code-level (not prompt-level) fix for the specific failure rule 11 above only
 # reduces the frequency of, not closes: a 2026-09-27 production test showed that even with
 # that rule in place, insistent phrasing ("Give me one final number: how many tables total,
@@ -242,6 +275,7 @@ RULES — follow these without exception:
    - An "at least N" count is a genuine lower bound — hedge only that one.
    - "not available for this document" means exactly that fact was checked and could not be reliably determined for this specific document — it is itself the answer to "how many X does this document have", not an invitation to go find the real number elsewhere. For that fact, say plainly that you cannot reliably determine that count for this document.
    For "how many references/figures/tables does this document have/cite/contain" questions, answer every fact type the question touches strictly from its own clause — a question asking about all three, or asking "exactly how many", is not a reason to try harder and produce a number for whichever ones say "not available". Never try to count these yourself from the excerpts below, even if some are visible there and even for a fact this bracket marks unavailable — a handful of retrieved chunks or a truncated whole-document view cannot reliably enumerate every reference, figure, or table in a document, which is exactly the mistake this fact exists to prevent.
+12. If the DOCUMENT CONTEXT block below says CROSS-DOCUMENT COVERAGE SCAN, the question is asking which of several selected documents cover a topic, and a small independent sample was checked in every one of them separately — go through every document named in the "Documents available" list above one at a time and state, for each, whether it appears to cover the topic based on what's shown, rather than only describing whichever document(s) had the most obviously relevant excerpts. A trailing bracketed note naming documents with no closely-matching content ("No closely-matching content was found... in: X") is a real, checked negative result for those specific documents — state plainly that they don't appear to cover it, the same confidence you'd use for a document the excerpts do support, not a hedge about incomplete searching.
 """
 
 # Used when the session has no documents selected. Deliberately NOT a
@@ -398,6 +432,11 @@ class ChatService:
             # document's already-known structural facts (see _structural_count_answer) --
             # stream_response never fetches the whole document for it, so it must not be
             # charged against the whole-document daily quota either, or count as a classifier call.
+            return False
+        if len(document_ids) > 1 and _looks_like_cross_document_query(latest):
+            # "Which of my documents covers X" goes to retrieve_context_for_document_coverage --
+            # a small, bounded per-document sample, not the whole document -- see stream_response.
+            # Must not be charged against the whole-document daily quota either.
             return False
         if _EXPLICIT_WHOLE_RE.search(latest):
             return True
@@ -608,67 +647,98 @@ class ChatService:
                 page_result["missing_pages"],
             )
         else:
-            # Counting/enumeration questions get the whole document instead of
-            # a top-k similarity search — see _AGGREGATE_QUERY_RE and
-            # get_full_document_context. Falls back to normal retrieval if the
-            # document turns out to have no ingested chunks at all (e.g.
-            # still processing).
-            if full_document is None:
-                full_document = await self.decide_full_document(sanitized, action, document_ids)
-            use_full_document = full_document
-            full_doc: dict | None = None
-            if use_full_document:
-                # Blocking DB call -- see the to_thread comment on get_page_context above.
-                full_doc = await asyncio.to_thread(
-                    self.retrieval_service.get_full_document_context,
-                    document_ids,
-                    user_email=user_email,
-                    source_names=document_names,
-                )
-                if not full_doc["context"].strip():
-                    use_full_document = False
-
-            if use_full_document:
-                context = full_doc["context"]
-                sources = document_ids
-                if full_doc["truncated"]:
-                    cut = ", ".join(document_names.get(d, d) for d in full_doc.get("truncated_sources", []))
-                    completeness = (
-                        "LARGE-DOCUMENT CONTEXT (truncated to fit — most, but not necessarily all, of the "
-                        "selected document(s); a count from this is a reliable lower bound, not guaranteed exact"
-                        + (
-                            f". The middle of these was omitted, keeping only their beginning and end: {cut}"
-                            if cut
-                            else ""
-                        )
-                        + ")"
-                    )
-                else:
-                    completeness = "NEAR-COMPLETE DOCUMENT (covers the full text of the selected document(s))"
-                logger.info(
-                    "chat_stream_start scope=grounded mode=full_document document_ids=%s chunks=%d truncated=%s",
-                    document_ids,
-                    full_doc["chunk_count"],
-                    full_doc["truncated"],
-                )
-            else:
+            # "Which of my documents covers X" spans every selected document -- checked before
+            # the aggregate/whole-document decision below, since it's a genuinely different need
+            # (a fair, independent sample from EACH document) that neither whole-document mode
+            # (built for counting/listing WITHIN one document, and ~15x cost) nor plain top-k
+            # (one global search that starves out non-winning documents) actually serves. Only
+            # meaningful with more than one document selected -- with one, this degrades to an
+            # ordinary lookup anyway, so let it fall through to that instead of adding no value
+            # for a fan-out of exactly one.
+            cross_doc = not action and len(document_ids) > 1 and _looks_like_cross_document_query(latest_user_message)
+            if cross_doc:
                 last_user_index = max((i for i, m in enumerate(sanitized) if m["role"] == "user"), default=0)
                 search_query = await self._standalone_query(sanitized[:last_user_index], latest_user_message)
-                retrieval = await self.retrieval_service.retrieve_context(
-                    search_query,
-                    source_ids=document_ids,
-                    user_email=user_email,
-                    source_names=document_names,
+                coverage = await self.retrieval_service.retrieve_context_for_document_coverage(
+                    search_query, source_ids=document_ids, user_email=user_email, source_names=document_names
                 )
-                context = retrieval["context"]
-                sources = retrieval.get("sources", [])
-                completeness = "PARTIAL EXCERPTS (a handful of chunks retrieved for this specific question)"
+                context = coverage["context"]
+                sources = coverage["sources"]
+                completeness = (
+                    "CROSS-DOCUMENT COVERAGE SCAN (a small, independent sample was checked in EACH selected "
+                    "document separately -- every document got a fair, separate look, not just whichever "
+                    "chunks matched best overall across all of them combined)"
+                )
                 logger.info(
-                    "chat_stream_start scope=grounded mode=retrieval document_ids=%s context_sources=%s messages=%d",
+                    "chat_stream_start scope=grounded mode=cross_document_coverage document_ids=%s covered=%s "
+                    "no_match=%s",
                     document_ids,
-                    sources,
-                    len(sanitized),
+                    coverage["sources"],
+                    coverage["no_match_sources"],
                 )
+            else:
+                # Counting/enumeration questions get the whole document instead of
+                # a top-k similarity search — see _AGGREGATE_QUERY_RE and
+                # get_full_document_context. Falls back to normal retrieval if the
+                # document turns out to have no ingested chunks at all (e.g.
+                # still processing).
+                if full_document is None:
+                    full_document = await self.decide_full_document(sanitized, action, document_ids)
+                use_full_document = full_document
+                full_doc: dict | None = None
+                if use_full_document:
+                    # Blocking DB call -- see the to_thread comment on get_page_context above.
+                    full_doc = await asyncio.to_thread(
+                        self.retrieval_service.get_full_document_context,
+                        document_ids,
+                        user_email=user_email,
+                        source_names=document_names,
+                    )
+                    if not full_doc["context"].strip():
+                        use_full_document = False
+
+                if use_full_document:
+                    context = full_doc["context"]
+                    sources = document_ids
+                    if full_doc["truncated"]:
+                        cut = ", ".join(document_names.get(d, d) for d in full_doc.get("truncated_sources", []))
+                        completeness = (
+                            "LARGE-DOCUMENT CONTEXT (truncated to fit — most, but not necessarily all, of the "
+                            "selected document(s); a count from this is a reliable lower bound, not guaranteed exact"
+                            + (
+                                f". The middle of these was omitted, keeping only their beginning and end: {cut}"
+                                if cut
+                                else ""
+                            )
+                            + ")"
+                        )
+                    else:
+                        completeness = "NEAR-COMPLETE DOCUMENT (covers the full text of the selected document(s))"
+                    logger.info(
+                        "chat_stream_start scope=grounded mode=full_document document_ids=%s chunks=%d truncated=%s",
+                        document_ids,
+                        full_doc["chunk_count"],
+                        full_doc["truncated"],
+                    )
+                else:
+                    last_user_index = max((i for i, m in enumerate(sanitized) if m["role"] == "user"), default=0)
+                    search_query = await self._standalone_query(sanitized[:last_user_index], latest_user_message)
+                    retrieval = await self.retrieval_service.retrieve_context(
+                        search_query,
+                        source_ids=document_ids,
+                        user_email=user_email,
+                        source_names=document_names,
+                    )
+                    context = retrieval["context"]
+                    sources = retrieval.get("sources", [])
+                    completeness = "PARTIAL EXCERPTS (a handful of chunks retrieved for this specific question)"
+                    logger.info(
+                        "chat_stream_start scope=grounded mode=retrieval document_ids=%s context_sources=%s "
+                        "messages=%d",
+                        document_ids,
+                        sources,
+                        len(sanitized),
+                    )
 
         # Ground truth for "how many/which documents can you access" — independent
         # of whatever the retrieval query above happened to match. Also carries a

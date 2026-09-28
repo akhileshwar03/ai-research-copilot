@@ -125,6 +125,74 @@ class RetrievalService:
 
         return {"context": "\n\n".join(formatted_chunks), "sources": unique_sources}
 
+    # Cross-document coverage questions ("which of my documents talks about X") get a small,
+    # independent top-k from EVERY selected document rather than one global top-k across all of
+    # them -- see retrieve_context_for_document_coverage's docstring for why. Kept small: the
+    # point is a coarse "does this document even touch the topic" signal per document, not the
+    # single best-matching passage overall, and the total context size scales with the number of
+    # documents selected.
+    _COVERAGE_PER_DOC_TOP_K = 3
+    # A hard cap independent of whatever the frontend allows the user to multi-select -- this
+    # question type fans out one full retrieval (embedding + DB query, and a reranker LLM call
+    # when enabled) per document, run concurrently but still bounded real cost/latency.
+    _COVERAGE_MAX_DOCUMENTS = 12
+
+    async def retrieve_context_for_document_coverage(
+        self,
+        query: str,
+        source_ids: list[str],
+        user_email: str = "",
+        source_names: dict[str, str] | None = None,
+    ) -> dict:
+        """For "which of my documents covers/mentions/discusses X" -- a question that spans
+        every selected document, not just whichever one's chunks happen to win a single global
+        similarity race.
+
+        retrieve_context's plain top-k, run once across all selected documents together, has no
+        way to answer this honestly: it silently starves out any document whose chunks don't
+        rank in the global top few, even if that document genuinely also covers the topic, and
+        gives the model zero signal about documents it found nothing relevant in -- it can only
+        ever fail to mention them, never confidently rule them out. This runs retrieve_context
+        independently, once per document (concurrently, via asyncio.gather -- safe now that its
+        blocking embed/DB calls are offloaded via to_thread, see the comment above), each scoped
+        to just that one document, so every document gets a fair, independent look. A document
+        with nothing passing the similarity threshold for this query is reported explicitly by
+        name in `no_match_sources` (and appended to the context as a plain, honest negative
+        statement) instead of just silently having no chunks -- the difference between "this
+        document doesn't seem to cover it" and "we never actually checked."
+        """
+        source_names = source_names or {}
+        scoped_ids = source_ids[: self._COVERAGE_MAX_DOCUMENTS]
+
+        results = await asyncio.gather(
+            *(
+                self.retrieve_context(
+                    query, source_ids=[source_id], n_results=self._COVERAGE_PER_DOC_TOP_K, user_email=user_email,
+                    source_names=source_names,
+                )
+                for source_id in scoped_ids
+            )
+        )
+
+        parts = []
+        covered_sources = []
+        no_match_sources = []
+        for source_id, result in zip(scoped_ids, results):
+            if result["context"].strip():
+                parts.append(result["context"])
+                covered_sources.append(source_id)
+            else:
+                no_match_sources.append(source_id)
+
+        if no_match_sources:
+            names = ", ".join(source_names.get(s, s) for s in no_match_sources)
+            parts.append(
+                f"[No closely-matching content was found for this question in: {names}. Treat this as a real "
+                "negative signal for those documents, not a gap in what was searched.]"
+            )
+
+        return {"context": "\n\n".join(parts), "sources": covered_sources, "no_match_sources": no_match_sources}
+
     async def _rerank(self, query: str, candidates: list[dict], top_k: int) -> list[dict]:
         """Ask the reranker LLM to pick the *top_k* most relevant of *candidates* (already distance-filtered
         and pool-sized). Falls back to plain distance order -- never raises and never blocks a reply -- on
