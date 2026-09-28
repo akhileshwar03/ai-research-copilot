@@ -375,6 +375,28 @@ def test_leftover_ai_preamble_is_not_suppressed_by_the_clean_heuristic_guardrail
     assert "AI-assistant phrasing" in result["explanation"]
 
 
+# 2026-09-28: found live minutes after the fix above shipped — the LLM's own
+# self-reported probability is genuinely noisy across identical calls on identical
+# text (0.3, 0.75, 0.85 observed in a row on the same paragraph). A low noisy sample
+# (0.3) blended 70/30 still dragged a heuristic_score=90 case (the preamble detector
+# firing — close to unambiguous ground truth) down to only 46% ("uncertain").
+def test_leftover_ai_preamble_gets_a_floor_even_against_a_noisy_low_llm_sample():
+    llm_response = json.dumps(
+        {
+            "ai_probability": 0.3,  # a noisy, unusually low sample from the LLM
+            "reasoning": "Varied sentence length and some specific imagery.",
+            "ai_sentences": [],
+        }
+    )
+    service = CheckerService(ai_service=_FakeAIService(llm_response))
+
+    result = _run(service.check_text(_AI_PREAMBLE_PARAGRAPH))
+
+    assert result["signals"]["heuristic_score"] >= 80
+    assert result["verdict"] == "likely_ai"
+    assert result["ai_probability"] > 0.6
+
+
 def test_advanced_scan_skipped_for_short_single_segment_text():
     llm_response = json.dumps({"ai_probability": 0.7, "reasoning": "x", "ai_sentences": []})
     service = CheckerService(ai_service=_FakeAIServiceSequence([llm_response]))

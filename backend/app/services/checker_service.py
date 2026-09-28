@@ -600,6 +600,19 @@ class CheckerService:
             # wins per the guardrail above.
             if heuristic_probability < 0.15 and llm_probability < 0.85:
                 blended_probability = min(blended_probability, 0.3 * llm_probability + 0.7 * heuristic_probability)
+
+            # Floor for the leftover-AI-preamble signal specifically, found for real
+            # right after it shipped: the LLM's own self-reported probability is
+            # genuinely noisy across identical calls on identical text (observed 0.3,
+            # 0.75, 0.85 on the same paragraph in a row) - a low noisy sample (e.g.
+            # 0.3) blended 70/30 still pulled a heuristic_score=90 case (the preamble
+            # detector firing, close to unambiguous ground truth) down to only 46%
+            # ("uncertain") instead of a decisive AI call. Unlike the other heuristic
+            # sub-scores, which are graduated and genuinely benefit from LLM
+            # corroboration, the preamble detector is closer to a fact than a
+            # suspicion - so it gets its own floor instead of relying on the blend.
+            if heuristics["meta_preamble_hit"]:
+                blended_probability = max(blended_probability, 0.85)
         else:
             blended_probability = heuristic_probability
         final_probability = _sharpen(blended_probability)
