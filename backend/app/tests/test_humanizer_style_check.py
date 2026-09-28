@@ -99,3 +99,49 @@ def test_deterministic_findings_combines_both_checks():
     types = {f["type"] for f in findings}
     assert "sentence_length_uniform" in types
     assert "missing_contractions" in types
+
+
+# 2026-09-28: real gap found live in production -- a genuine Basic-tab request came back with
+# "today's business landscape" in the final output despite "landscape" being on
+# AGGRESSIVE_REWRITE_PROMPT's RULE 1 absolute ban list AND heavily penalized by the best-of-N
+# scorer (pipeline.py's _ai_likelihood_score). Both are soft signals: the model's bias toward a
+# specific banned phrase can be strong enough that every independent candidate shares it, so
+# best-of-N has nothing clean left to pick, and Pass 3 had no deterministic check for this at
+# all before this fix -- only the LLM-based detector.verify(), the same class of soft signal.
+
+def test_banned_vocabulary_findings_flags_the_real_production_case():
+    paragraph = "Embracing this is essential for sustaining growth and success in today's business landscape."
+    findings = style_check.banned_vocabulary_findings([paragraph])
+    assert len(findings) == 1
+    assert findings[0]["type"] == "banned_vocabulary"
+    assert findings[0]["paragraph"] == 0
+    assert "landscape" in findings[0]["detail"]
+
+
+def test_banned_vocabulary_findings_passes_clean_text():
+    paragraph = "This tool helps you get more done without slowing you down or getting in the way."
+    assert style_check.banned_vocabulary_findings([paragraph]) == []
+
+
+def test_banned_vocabulary_findings_reports_every_distinct_hit_once():
+    paragraph = "We need to navigate this landscape carefully, and landscape after landscape looks the same."
+    findings = style_check.banned_vocabulary_findings([paragraph])
+    assert len(findings) == 1
+    # deduplicated -- "landscape" appears 3 times in the text but should be named once
+    hits = findings[0]["detail"].split(": ", 1)[1].split(".")[0].split(", ")
+    assert sorted(hits) == ["landscape", "navigate"]
+
+
+def test_banned_vocabulary_findings_checks_every_paragraph_independently():
+    findings = style_check.banned_vocabulary_findings(
+        ["This paragraph is completely clean and fine.", "This one has a paradigm shift in it though."]
+    )
+    assert len(findings) == 1
+    assert findings[0]["paragraph"] == 1
+
+
+def test_deterministic_findings_now_also_includes_banned_vocabulary():
+    paragraph = "This will foster real change across today's landscape, whatever that even means."
+    findings = style_check.deterministic_findings([paragraph], register="casual")
+    types = {f["type"] for f in findings}
+    assert "banned_vocabulary" in types

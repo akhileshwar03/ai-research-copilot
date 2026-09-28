@@ -105,6 +105,29 @@ def test_pipeline_retries_a_flagged_paragraph_and_emits_revised_event():
     assert retried_paragraph_message == ("human", "Paragraph one rewritten.")
 
 
+def test_pipeline_retries_a_banned_word_even_when_the_llm_verifier_misses_it():
+    """2026-09-28: the real production failure this closes -- a real request's rewrite came back
+    with "today's business landscape" ("landscape" is on the absolute ban list) and nothing
+    caught it, because the only two defenses (the prompt instruction, and best-of-N's scoring)
+    are both soft and the LLM-based verifier can miss it too. This scripts exactly that: the
+    verify pass (Pass 3's classify_humanize call) reports NO findings, same as a real miss, but
+    style_check.banned_vocabulary_findings (plain code, not the model) still catches the banned
+    word and forces the retry regardless."""
+    fake_ai = _FakeAIService(
+        # register classify + analyze + verify -- verify finds nothing, simulating a real miss.
+        classify_responses=["casual", NO_FINDINGS, NO_FINDINGS],
+        rewrite_tokens=[["Great for today's business landscape."]],
+        retry_response="Great for real people trying to get things done.",
+    )
+
+    events = _run(run_pipeline(fake_ai, "some source text", style="normal"))
+
+    revised_events = [e for e in events if e["type"] == "revised"]
+    assert len(revised_events) == 1
+    assert "landscape" not in revised_events[0]["text"]
+    assert len(fake_ai.retry_calls) == 1
+
+
 def test_pipeline_does_not_retry_findings_with_no_paragraph_index():
     # A whole-text finding (paragraph: null) can't be targeted by a
     # single-paragraph retry, so it should be ignored rather than raising.

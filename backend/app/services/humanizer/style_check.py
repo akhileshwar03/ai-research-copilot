@@ -15,6 +15,8 @@ feeding the one that already exists and is already tested.
 
 import re
 
+from app.services.humanizer import prompts
+
 _SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _WORD_RE = re.compile(r"[A-Za-z']+")
 _CONTRACTION_RE = re.compile(r"\w+['’]\w+")
@@ -103,7 +105,48 @@ def contraction_findings(paragraphs: list[str], register: str) -> list[dict]:
     return findings
 
 
+def banned_vocabulary_findings(paragraphs: list[str]) -> list[dict]:
+    """Real gap found live in production (2026-09-28): AGGRESSIVE_REWRITE_PROMPT's RULE 1 is an
+    "ABSOLUTE LEXICAL AND PHRASE BAN", and the best-of-N scorer (pipeline.py's
+    _ai_likelihood_score) already penalizes every hit heavily -- but both are soft signals. A
+    real request came back with "today's business landscape" in the final output despite both:
+    the model's bias toward a specific banned phrase can be strong enough that all N independent
+    candidates share the same violation, so best-of-N has nothing clean to pick between, and the
+    prompt instruction alone is exactly the kind of "ask it not to" signal this whole module
+    exists to replace with plain code (see the module docstring). Pass 3 previously had no
+    deterministic check for this at all -- it could only be caught by the LLM-based detector.verify()
+    noticing it, which is the same class of soft, non-guaranteed signal as the two above.
+
+    Checked against ALL_BANNED_VOCABULARY (the same union both the rewrite prompt and the
+    best-of-N scorer already use), so a paragraph flagged here is not a new, separately-tuned
+    rule — it's the same rule, enforced one more time with a hard backstop instead of relying on
+    generation-time luck three separate times before giving up."""
+    findings = []
+    for idx, paragraph in enumerate(paragraphs):
+        lower = paragraph.lower()
+        hits = sorted({phrase for phrase in prompts.ALL_BANNED_VOCABULARY if phrase in lower})
+        if not hits:
+            continue
+        findings.append(
+            {
+                "type": "banned_vocabulary",
+                "paragraph": idx,
+                "detail": (
+                    f"This paragraph uses banned word(s)/phrase(s): {', '.join(hits)}. These are on the "
+                    "absolute ban list (RULE 1) — rewrite the paragraph without them or any other banned "
+                    "buzzword, using a plain, concrete word choice instead, without changing any fact, "
+                    "number, or claim."
+                ),
+            }
+        )
+    return findings
+
+
 def deterministic_findings(paragraphs: list[str], register: str) -> list[dict]:
     """Combined entry point pipeline.py calls — everything this module checks, merged
     into one findings list in the same shape detector.py's LLM findings use."""
-    return sentence_length_findings(paragraphs) + contraction_findings(paragraphs, register)
+    return (
+        sentence_length_findings(paragraphs)
+        + contraction_findings(paragraphs, register)
+        + banned_vocabulary_findings(paragraphs)
+    )
