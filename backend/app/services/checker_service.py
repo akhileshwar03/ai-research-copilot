@@ -216,6 +216,25 @@ Respond with ONLY a JSON object, no other text: \
 "ai_sentences": ["<verbatim sentence>", ...]}"""
 
 
+# Leftover AI-assistant response scaffolding: the model announcing what it's
+# about to write, rather than just writing it. Found live in production
+# (2026-09-28): a paragraph opening "Here is a short, random essay about the
+# quiet magic of ordinary mornings." scored heuristic_score=2 (clean of every
+# OTHER signal — no banned phrases, no stock transition openers, decent
+# burstiness) and the moderate-LLM guardrail above suppressed a correctly-
+# leaning LLM call, giving a 2% "likely_human" verdict on text that reads,
+# to any human, as an obvious AI response with the preamble left in — no
+# genuine human essay opens by describing itself in the third person like
+# this. Unlike every other signal in this file, this one is close to
+# unambiguous when it fires, so it's weighted far more heavily than a single
+# banned-vocabulary hit and is checked independent of the LLM's own read.
+_AI_META_PREAMBLE_RE = re.compile(
+    r"^(certainly[!,.]?\s*)?"
+    r"(here(?:'s| is)|below is|the following is|i'?d be happy to (?:help|write|provide|draft))"
+    r"\b[^.!?\n]{0,80}\b(essay|paragraph|article|passage|response|piece|write-?up|summary|poem|story|text)\b",
+    re.IGNORECASE,
+)
+
 _MIN_PROBABILITY = 0.02
 _MAX_PROBABILITY = 0.98
 
@@ -373,6 +392,16 @@ def compute_heuristics(text: str) -> dict:
     personal_voice_relief = min(personal_voice_score * 3, 15.0)
     heuristic_score = max(0.0, min(heuristic_score - personal_voice_relief, 100.0))
 
+    # Leftover AI-assistant preamble ("Here is a short essay about...") is
+    # close to unambiguous when present — see its regex's docstring for the
+    # real false-negative this fixed. Applied AFTER personal-voice relief and
+    # as a floor, not an addend: no amount of clean burstiness or personal
+    # voice elsewhere in the text should be able to explain away the model
+    # literally describing its own output instead of just writing it.
+    meta_preamble_hit = bool(_AI_META_PREAMBLE_RE.match(text.strip()))
+    if meta_preamble_hit:
+        heuristic_score = max(heuristic_score, 90.0)
+
     return {
         "burstiness": round(burstiness, 4),
         "lexical_diversity": round(lexical_diversity, 4),
@@ -384,6 +413,10 @@ def compute_heuristics(text: str) -> dict:
         "personal_voice_score": round(personal_voice_score, 3),
         "heuristic_score": round(heuristic_score, 2),
         "word_count": word_count,
+        # Internal only — not part of the public CheckSignals schema (kept
+        # out deliberately: it's a same-session helper flag for check_text's
+        # explanation text, not a graduated 0-1 "signal" like the others).
+        "meta_preamble_hit": meta_preamble_hit,
     }
 
 
@@ -576,6 +609,11 @@ class CheckerService:
         paragraphs = await self._paragraph_breakdown(stripped) if advanced else []
 
         explanation_parts = []
+        if heuristics["meta_preamble_hit"]:
+            explanation_parts.append(
+                "This text opens with leftover AI-assistant phrasing (e.g. \"Here is a...\") "
+                "describing the writing instead of just writing it — a near-certain AI tell."
+            )
         if llm_reasoning:
             explanation_parts.append(llm_reasoning)
         if heuristics["ai_phrase_hits"] > 0:

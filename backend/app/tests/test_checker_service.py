@@ -334,6 +334,47 @@ def test_moderate_llm_ai_call_does_not_override_genuinely_clean_heuristics():
     assert result["ai_probability"] < 0.4
 
 
+# 2026-09-28: real false NEGATIVE found live in production, right after the guardrail
+# above shipped — a paragraph with leftover AI-assistant preamble ("Here is a short,
+# random essay about...") scored heuristic_score=2 (clean of every OTHER signal) and the
+# new guardrail suppressed a correctly-leaning moderate LLM call (0.75), giving a 2%
+# "likely_human" verdict on text that opens by describing itself instead of just being
+# written — a tell no genuine human essay produces. Two independent free market
+# detectors called this same text 86-93% AI.
+_AI_PREAMBLE_PARAGRAPH = (
+    "Here is a short, random essay about the quiet magic of ordinary mornings. Morning "
+    "arrives not with a loud trumpet, but with a slow, pale blue light slipping through "
+    "the curtains. The world is quiet before the rush of the day begins. In this brief "
+    "window, time feels elastic and kind. A single cup of coffee sends up a thin column "
+    "of steam, swirling into the cool air like an unspoken thought. Outside, a lone bird "
+    "tests its voice on a high branch, measuring the silence. These quiet moments are "
+    "easy to overlook, buried beneath the weight of our rushing schedules and endless "
+    "digital noise. Yet, they hold a rare kind of medicine. They remind us that peace is "
+    "not a distant place we travel to, but a space we can inhabit right where we are, if "
+    "only for a few minutes before the noise of the world catches up."
+)
+
+
+def test_leftover_ai_preamble_is_not_suppressed_by_the_clean_heuristic_guardrail():
+    llm_response = json.dumps(
+        {
+            "ai_probability": 0.75,
+            "reasoning": "Smooth, predictable rhythm and polished vocabulary typical of AI-generated prose.",
+            "ai_sentences": [],
+        }
+    )
+    service = CheckerService(ai_service=_FakeAIService(llm_response))
+
+    result = _run(service.check_text(_AI_PREAMBLE_PARAGRAPH))
+
+    # The meta-preamble detector must push heuristic_score high enough that the
+    # moderate-LLM guardrail (heuristic < 0.15) never engages here.
+    assert result["signals"]["heuristic_score"] >= 80
+    assert result["verdict"] == "likely_ai"
+    assert result["ai_probability"] > 0.6
+    assert "AI-assistant phrasing" in result["explanation"]
+
+
 def test_advanced_scan_skipped_for_short_single_segment_text():
     llm_response = json.dumps({"ai_probability": 0.7, "reasoning": "x", "ai_sentences": []})
     service = CheckerService(ai_service=_FakeAIServiceSequence([llm_response]))
