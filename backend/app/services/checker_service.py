@@ -7,18 +7,63 @@ prose. This service combines two weak, independent signals into a single
 estimate and is explicit about that uncertainty in every response (see
 ``disclaimer`` below) rather than presenting a bare confident percentage.
 
-Signal 1 (heuristic, deterministic, free): sentence-length burstiness,
-lexical diversity, and density of overused "AI-tell" phrases. Pure function,
-no network call — easy to unit test and always available. This is a SECONDARY
-channel: it raises suspicion when positive AI-tells are present, but it is
-deliberately NOT allowed to vote "human" just because the prose is clean and
-well varied — modern AI produces exactly that, and treating polish as a human
-signal is what caused clean AI text to be mislabelled.
+Signal 1 (heuristic, deterministic, free): a set of measurable style
+counts, no network call — easy to unit test and always available. This is a
+SECONDARY channel: it raises suspicion when positive AI-tells are present,
+but it is deliberately NOT allowed to vote "human" just because the prose is
+clean and well varied — modern AI produces exactly that, and treating polish
+as a human signal is what caused clean AI text to be mislabelled.
 
 Signal 2 (LLM judgment, primary): asks the model for its own probability
 estimate plus the sentences it finds most AI-like (used for highlighting).
 More semantically aware than the heuristics but can fail (bad JSON, API
 error); the result degrades gracefully to heuristic-only if so.
+
+2026-09-28 rebuild. The previous heuristic set (burstiness + lexical
+diversity + a fixed phrase list) was thin next to what the market actually
+measures — real, on-the-record technical material was gathered from
+GPTZero, ZeroGPT, QuillBot, Turnitin, Copyleaks, Pangram, HumanizeAI, and
+(most usefully) a competitor's own published per-signal breakdown
+(cleverhumanizer.ai/ai-detection-reasons, a 28-signal taxonomy across five
+groups: vocabulary, sentence structure/rhythm, flow/transitions,
+repetition/templates, tone/stance/evidence) and adapted into this file —
+never copied verbatim; every threshold below is our own reading of the
+publicly stated direction of each signal, re-expressed as our own
+constants and re-derived from what we can actually measure. Five new,
+zero-cost deterministic signals were added on top of the two that already
+existed (burstiness, lexical diversity, phrase hits):
+
+- ``function_word_ratio`` — share of words that are function words
+  (pronouns, articles, prepositions, auxiliaries). AI prose leans more
+  content-word-dense; human prose carries more connective tissue.
+- ``mean_word_length`` — AI prose skews toward longer, more Latinate word
+  choices on average; human prose skews shorter and plainer.
+- ``trigram_repetition_rate`` — the share of 3-word sequences that repeat
+  somewhere else in the text. Counter-intuitively, HUMAN writing repeats
+  more of its own phrasing (people fall back on the same few ways of
+  saying something); AI models are tuned to diversify wording sentence to
+  sentence and so repeat less. Low repetition is the AI-leaning direction
+  here, not high.
+- ``transition_opener_rate`` — share of sentences that *open* with a stock
+  transition word ("Moreover", "Additionally", "Furthermore", ...). This is
+  a stricter, more specific version of the old flat phrase count: AI
+  prose leans heavily on transition words specifically as sentence
+  openers, far more than human prose does.
+- ``personal_voice_score`` — density of first-person pronouns and
+  opinion/stance verbs ("I think", "in my experience", ...). Deliberately
+  asymmetric: presence is allowed to pull the score DOWN toward human,
+  but absence never pulls it up — plenty of genuine human writing (formal,
+  technical, third-person) has zero personal voice, and over-crediting its
+  absence is exactly the kind of tone-based false positive already found
+  for real on a non-native-English academic paper (see the blend guardrail
+  further down). This mirrors the taxonomy's own explicit warning that its
+  tone/stance group is the weakest, most false-positive-prone of the five.
+
+Weighting favors the signals the gathered research consistently ranked as
+most separating (predictability/rhythm, specific stock-phrase and
+transition-opener usage) and keeps the noisiest, most register-dependent
+signals (lexical diversity, word length, tone) as minor contributors —
+see the comments in ``compute_heuristics`` for the exact weights.
 """
 
 import json
@@ -64,45 +109,101 @@ _AI_TELL_PATTERNS = [
     re.compile(r"\b(?:studies show|experts agree|research suggests|industry insiders|it is widely known|it's widely known)\b", re.IGNORECASE),
 ]
 
+# Closed-class function words: pronouns, articles, prepositions, conjunctions,
+# auxiliary/modal verbs. Deliberately a broad, standard closed-class list, not
+# tuned to any one corpus.
+_FUNCTION_WORDS = frozenset(
+    """
+    the a an and or but if then because as until while of at by for with about
+    against between into through during before after above below to from up
+    down in out on off over under again further once here there when where why
+    how all any both each few more most other some such no nor not only own
+    same so than too very s t can will just don should now is am are was were
+    be been being have has had having do does did doing i me my myself we our
+    ours ourselves you your yours yourself yourselves he him his himself she
+    her hers herself it its itself they them their theirs themselves what
+    which who whom this that these those
+    """.split()
+)
+
+# Stock sentence-opening transition words/phrases. Checked ONLY at the start
+# of a sentence (after stripping leading quotes/parens) — this is stricter
+# and more specific than a flat phrase count anywhere in the text, matching
+# how the gathered research frames this as a sentence-opener signal.
+_TRANSITION_OPENERS = frozenset(
+    """
+    moreover furthermore additionally consequently therefore thus hence
+    however nevertheless nonetheless meanwhile overall importantly notably
+    ultimately significantly conversely accordingly indeed similarly likewise
+    """.split()
+)
+
+# First-person pronouns + explicit opinion/stance verbs — presence-only
+# signal, see the module docstring's ``personal_voice_score`` explanation
+# for why absence is never allowed to count against the text.
+_PERSONAL_VOICE_RE = re.compile(
+    r"\b(i|i'?m|i'?ve|i'?d|i'?ll|me|my|mine|myself|we|we'?re|we'?ve|our|ours)\b"
+    r"|\b(i think|i believe|i feel|i suspect|i doubt|in my experience|"
+    r"in my opinion|personally|honestly|to me)\b",
+    re.IGNORECASE,
+)
+
 MIN_WORDS_FOR_CONFIDENCE = 60
 
 _LLM_SYSTEM_PROMPT = """You are a strict, decisive AI-text detector. Estimate the probability that \
 the given text was generated by an AI language model.
 
+Judge across five groups of signals, weighted in this order — earlier groups matter more and \
+should dominate the call; later groups are corroborating at best and must never carry a verdict \
+on their own:
+
+1. RHYTHM & PREDICTABILITY (weigh most): sentence-length variation, paragraph-length variation, \
+how predictable the next word/clause feels. AI prose tends toward a narrow, comfortable band of \
+sentence lengths and a smooth, low-surprise flow; human prose lurches — a clipped sentence, then \
+a long winding one, an aside, a fragment.
+2. VOCABULARY & WORD CHOICE: stock AI vocabulary ("delve", "tapestry", "landscape", "underscores", \
+"testament to", "seamless", "robust", "leverage" as a verb), a preference for the more formal/ \
+Latinate synonym over the plain one, and a low rate of ordinary function words (a, the, of, and, \
+but...) relative to content words.
+3. FLOW & TRANSITIONS: heavy, mechanical use of transition words as sentence openers \
+("Moreover,", "Furthermore,", "Additionally,", "In conclusion,") — genuinely useful in moderation \
+but a strong tell when nearly every paragraph opens with one.
+4. REPETITION & TEMPLATES: repeated sentence templates ("It's not just X, it's Y" over and over), \
+formulaic list/parallel structures, near-identical openings across paragraphs. Note this is about \
+STRUCTURAL templates repeating, not phrase repetition in general — genuine human writers often \
+reuse the SAME exact short phrase across a piece more than AI does, so word-for-word phrase reuse \
+alone is not itself a tell.
+5. TONE, STANCE & EVIDENCE (weigh least, and treat with real caution): presence/absence of \
+personal voice, opinion, or lived specificity. This is the WEAKEST and most false-positive-prone \
+group — plenty of genuine human writing (formal, technical, third-person, non-native-English) has \
+no personal voice at all, and that absence must never by itself push the score toward "AI". Use \
+this group only to pull a genuinely close call slightly one way, never to decide it.
+
 Be decisive. Do not default to a cautious middle-ground number just because you are not 100% \
-certain — that is a cop-out, not caution. Commit:
-- If the text shows AI-typical patterns (generic transitions, hedge-heavy or listy structure, \
-vague-but-confident phrasing, overused stock phrases, an absence of personal voice or concrete \
-lived detail), commit to a high probability (0.8+).
-- If the text reads like authentic human writing (concrete specifics, irregular rhythm, personal \
-voice, opinions, small imperfections, idiosyncrasy), commit to a low probability (0.2 or below).
-- Reserve the 0.4-0.6 range ONLY for text that is genuinely ambiguous — not as a default fallback.
+certain — that is a cop-out, not caution. Commit to 0.8+ when groups 1-3 show real AI-typical \
+patterns; commit to 0.2 or below when they show genuine human irregularity and specificity. \
+Reserve 0.4-0.6 ONLY for text that is genuinely, evenly ambiguous on groups 1-3 — not as a \
+default fallback, and never based on group 5 alone.
 
 Critical: clean grammar, correct spelling, and varied sentence length are NOT evidence of a \
-human author. Modern AI produces polished, well-varied prose. Judge voice, specificity, and \
-idiosyncrasy — not surface polish.
+human author by themselves. Modern AI produces polished, well-varied prose. Judge the full \
+pattern above — not surface polish, and not personal voice in isolation.
 
 Also critical: weigh proportion. If only a short aside reads as personal while the surrounding \
-majority of the text shows AI-typical patterns, that majority should still decide the score — a \
-brief human-sounding line does not override a longer AI-typical passage around it.
+majority of the text shows AI-typical patterns in groups 1-3, that majority should still decide \
+the score — a brief human-sounding line does not override a longer AI-typical passage around it.
 
 In fiction, poetry, marketing, reviews, or any first-person creative writing, personal voice \
 alone is NOT proof of a human author — competent AI produces vivid, emotional, first-person prose \
 fluently. The real test in these genres is specific vs. generic:
-- Human, scored low: "The bus was already pulling away when I saw her, and for one stupid second \
-I actually ran, in my work shoes, on the wet part of the platform, holding my bag over my head \
-like an idiot, and she didn't even see me, she was looking at her phone the entire time." The \
-detail (wet platform, bag over her head, she wasn't even looking) is oddly specific and slightly \
-unflattering — the kind of thing one particular person notices about their own memory, not a \
-story beat.
-- AI, scored high: "As I stood there in the rain, memories flooded back to me, each one a reminder \
-of everything we had shared and everything I now stood to lose. I knew, in that moment, that I \
-would never forget the way the streetlights reflected in the puddles beneath my feet." Every \
-image here (rain, memories flooding back, streetlights in puddles) is a generic, interchangeable \
-"emotional moment" beat that could be dropped into any story about loss — nothing is specific to \
-one narrator's actual situation.
+- Human-leaning: a narrator notices one small, slightly odd, unflattering, or physically specific \
+detail that has no narrative purpose — the kind of thing only someone who was actually there would \
+think to mention (an exact object, an exact minor embarrassment, a stray unrelated thought).
+- AI-leaning: description built from generic, swappable "mood" imagery (rain as sadness, a \
+sunset as hope, "memories flooding back") that could be dropped into any other piece on a similar \
+theme without losing anything specific to this one.
 Ask: does a detail feel like one person's odd, unrepeatable noticing, or could it be swapped into \
-any other story about a similar feeling without losing anything? The first is human evidence even \
+any other piece about a similar feeling without losing anything? The first is human evidence even \
 in fiction or poetry; the second is not, regardless of genre — and this cuts both ways: genuinely \
 specific, idiosyncratic personal-voice writing should still score low even when it's clearly \
 fiction, poetry, or persuasive copy.
@@ -146,19 +247,74 @@ def _split_sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s.strip()]
 
 
+def _function_word_ratio(words: list[str]) -> float:
+    if not words:
+        return 0.0
+    return sum(1 for w in words if w.lower() in _FUNCTION_WORDS) / len(words)
+
+
+def _mean_word_length(words: list[str]) -> float:
+    if not words:
+        return 0.0
+    return sum(len(w) for w in words) / len(words)
+
+
+def _trigram_repetition_rate(words: list[str]) -> float:
+    """Share of word-trigrams that occur more than once in the text.
+    See the module docstring: HIGH repetition leans human here, LOW leans AI."""
+    lowered = [w.lower() for w in words]
+    if len(lowered) < 6:
+        return 0.0
+    trigrams = [tuple(lowered[i : i + 3]) for i in range(len(lowered) - 2)]
+    counts: dict[tuple, int] = {}
+    for tg in trigrams:
+        counts[tg] = counts.get(tg, 0) + 1
+    repeated = sum(count for count in counts.values() if count > 1)
+    return repeated / len(trigrams)
+
+
+def _transition_opener_rate(sentences: list[str]) -> float:
+    if not sentences:
+        return 0.0
+    opens = 0
+    for s in sentences:
+        cleaned = s.strip().strip("\"'“‘(")
+        first_word = re.match(r"[A-Za-z]+", cleaned)
+        if first_word and first_word.group(0).lower() in _TRANSITION_OPENERS:
+            opens += 1
+    return opens / len(sentences)
+
+
+def _personal_voice_score(text: str, word_count: int) -> float:
+    """Density of first-person/opinion markers per 100 words. Presence-only
+    signal by construction — see module docstring."""
+    if word_count == 0:
+        return 0.0
+    hits = len(_PERSONAL_VOICE_RE.findall(text))
+    return (hits / word_count) * 100
+
+
 def compute_heuristics(text: str) -> dict:
     """Pure, deterministic writing-style heuristics. No network calls.
 
-    Rebalanced so the heuristic score behaves as a one-sided "suspicion"
-    channel: positive AI-tells (stock phrases, extreme sentence uniformity,
-    very low lexical diversity) push the score up, but ordinary well-varied
-    prose scores near zero rather than being treated as strong evidence of a
-    human author. The old weighting leaned ~65% on burstiness + diversity,
-    which let clean, varied AI writing read as "human" — a real false negative.
+    Seven signals combined into one 0-100 "suspicion" score. This channel is
+    one-sided by design: positive AI-tells push the score up, but ordinary
+    clean/varied prose scores near zero rather than being read as strong
+    human evidence — modern AI produces clean, varied prose too, and voting
+    "human" on polish alone is the exact false-negative this file previously
+    had. See the module docstring for what each new signal measures and why.
+
+    Weights favor what the gathered competitive research consistently
+    describes as the most separating signal families — sentence-rhythm
+    predictability and specific stock-phrase/transition-opener usage — over
+    noisier, more register-dependent ones (raw lexical diversity, word
+    length). Personal-voice is handled separately, as a capped SUBTRACTION
+    at the end, never a positive contributor — see its docstring.
     """
     words = re.findall(r"[A-Za-z']+", text)
     sentences = _split_sentences(text)
     sentence_lengths = [len(re.findall(r"[A-Za-z']+", s)) for s in sentences if s]
+    word_count = len(words)
 
     # Burstiness: coefficient of variation of sentence length. Human writing
     # tends to vary sentence length more; uniform sentence lengths lean AI-ish.
@@ -170,34 +326,64 @@ def compute_heuristics(text: str) -> dict:
         burstiness = 0.5  # not enough sentences to judge — neutral
 
     # Lexical diversity: unique words / total words.
-    lexical_diversity = len(set(w.lower() for w in words)) / len(words) if words else 0.0
+    lexical_diversity = len(set(w.lower() for w in words)) / word_count if words else 0.0
 
-    # AI-tell phrase density, per 100 words.
+    # AI-tell phrase density, per 100 words (anywhere in the text).
     lowered = text.lower()
     hits = sum(lowered.count(phrase) for phrase in _AI_TELL_PHRASES)
     hits += sum(len(pattern.findall(text)) for pattern in _AI_TELL_PATTERNS)
-    hits_per_100 = (hits / len(words)) * 100 if words else 0.0
+    hits_per_100 = (hits / word_count) * 100 if words else 0.0
 
-    # Combine into a single 0-100 heuristic score (higher = more AI-like).
-    # Phrase hits are the strongest, most specific signal and carry the most
-    # weight. Uniformity only contributes when sentences are genuinely uniform
-    # (burstiness below ~0.45); above that it adds nothing rather than voting
-    # "human". Diversity is the noisiest signal and counts least.
-    uniformity_score = max(0.0, (0.45 - burstiness) / 0.45) * 100  # only very-uniform text scores
-    diversity_score = max(0.0, (0.50 - lexical_diversity)) * 200  # low diversity -> higher score
-    phrase_score = min(hits_per_100 * 30, 100)  # phrase hits dominate quickly when present
+    function_word_ratio = _function_word_ratio(words)
+    mean_word_length = _mean_word_length(words)
+    trigram_repetition_rate = _trigram_repetition_rate(words)
+    transition_opener_rate = _transition_opener_rate(sentences)
+    personal_voice_score = _personal_voice_score(text, word_count)
 
-    heuristic_score = min(
-        uniformity_score * 0.30 + diversity_score * 0.15 + phrase_score * 0.55,
-        100.0,
+    # Each sub-score is 0-100, "how AI-like is this specific signal".
+    uniformity_score = max(0.0, (0.45 - burstiness) / 0.45) * 100
+    diversity_score = max(0.0, (0.50 - lexical_diversity)) * 200
+    phrase_score = min(hits_per_100 * 30, 100)
+    # function-word ratio: human ~40%, AI ~33% is the observed direction —
+    # score rises as the ratio drops below a human-typical ~38%.
+    function_word_score = max(0.0, (0.38 - function_word_ratio)) * 400
+    # mean word length: AI skews longer/more Latinate; score rises above a
+    # plain-English baseline of ~5.3 chars, saturating by ~6.2.
+    word_length_score = max(0.0, min((mean_word_length - 5.3) / 0.9, 1.0)) * 100
+    # trigram repetition: LOW repetition leans AI here (see docstring) —
+    # score rises as repetition falls below a human-typical ~3%.
+    trigram_score = max(0.0, (0.03 - trigram_repetition_rate) / 0.03) * 100
+    # transition-opener rate: human writing opens with a stock transition on
+    # roughly 1 sentence in 10 or fewer; AI prose leans much higher.
+    transition_score = max(0.0, min((transition_opener_rate - 0.10) / 0.25, 1.0)) * 100
+
+    heuristic_score = (
+        phrase_score * 0.28
+        + uniformity_score * 0.18
+        + function_word_score * 0.15
+        + transition_score * 0.15
+        + trigram_score * 0.10
+        + word_length_score * 0.07
+        + diversity_score * 0.07
     )
+
+    # Personal voice is subtractive-only: real presence of first-person/
+    # opinion markers pulls the score down (capped at -15), but its absence
+    # never adds anything — see module docstring on false-positive risk.
+    personal_voice_relief = min(personal_voice_score * 3, 15.0)
+    heuristic_score = max(0.0, min(heuristic_score - personal_voice_relief, 100.0))
 
     return {
         "burstiness": round(burstiness, 4),
         "lexical_diversity": round(lexical_diversity, 4),
         "ai_phrase_hits": hits,
+        "function_word_ratio": round(function_word_ratio, 4),
+        "mean_word_length": round(mean_word_length, 3),
+        "trigram_repetition_rate": round(trigram_repetition_rate, 4),
+        "transition_opener_rate": round(transition_opener_rate, 4),
+        "personal_voice_score": round(personal_voice_score, 3),
         "heuristic_score": round(heuristic_score, 2),
-        "word_count": len(words),
+        "word_count": word_count,
     }
 
 
@@ -390,6 +576,11 @@ class CheckerService:
                 "burstiness": heuristics["burstiness"],
                 "lexical_diversity": heuristics["lexical_diversity"],
                 "ai_phrase_hits": heuristics["ai_phrase_hits"],
+                "function_word_ratio": heuristics["function_word_ratio"],
+                "mean_word_length": heuristics["mean_word_length"],
+                "trigram_repetition_rate": heuristics["trigram_repetition_rate"],
+                "transition_opener_rate": heuristics["transition_opener_rate"],
+                "personal_voice_score": heuristics["personal_voice_score"],
                 "heuristic_score": heuristics["heuristic_score"],
                 "llm_probability": round(llm_probability, 4) if llm_probability is not None else None,
             },

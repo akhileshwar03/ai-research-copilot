@@ -4,7 +4,7 @@ import json
 import pytest
 
 from app.core.exceptions import AppError
-from app.services.checker_service import CheckerService
+from app.services.checker_service import CheckerService, compute_heuristics
 
 
 def _run(coro):
@@ -188,6 +188,111 @@ def test_advanced_scan_degrades_gracefully_when_breakdown_call_fails():
     # Overall result still comes through fine even though the breakdown failed.
     assert result["ai_probability"] > 0
     assert result["paragraphs"] == []
+
+
+# ── New deterministic signals (2026-09-28 rebuild) ─────────────────────────
+# Each test below isolates one new signal with text engineered to land on one
+# side of its documented threshold, adapted from the competitive research
+# gathered on real market AI detectors (see checker_service.py's module
+# docstring) — never copying any source's example text verbatim, just the
+# documented direction of each signal.
+
+_STOCK_AI_PARAGRAPH = (
+    "Moreover, the adoption of renewable energy represents a paradigm shift in the "
+    "global economy. Furthermore, businesses must leverage cutting-edge technology to "
+    "navigate this landscape. Additionally, stakeholders should harness the power of "
+    "innovation to unlock the potential of sustainable growth. In conclusion, this is a "
+    "testament to the ever-evolving nature of modern industry."
+)
+
+_PERSONAL_HUMAN_PARAGRAPH = (
+    "I still remember the smell of my grandmother's kitchen on Sunday mornings. She'd "
+    "burn the first pancake every single time, toss it to the dog, and swear it was on "
+    "purpose. My brother and I never bought it. That kitchen had this ugly yellow "
+    "linoleum floor, curling up at the corners near the fridge, and somehow that detail "
+    "sticks with me more than almost anything else from that whole house."
+)
+
+
+def test_stock_ai_paragraph_scores_much_higher_than_personal_human_paragraph():
+    ai_heuristics = compute_heuristics(_STOCK_AI_PARAGRAPH)
+    human_heuristics = compute_heuristics(_PERSONAL_HUMAN_PARAGRAPH)
+    assert ai_heuristics["heuristic_score"] > human_heuristics["heuristic_score"] + 30
+    assert human_heuristics["heuristic_score"] < 10
+
+
+def test_function_word_ratio_lower_for_stock_ai_paragraph():
+    # AI prose leans content-word-dense; human prose carries more connective
+    # tissue (pronouns, articles, prepositions) — see module docstring.
+    ai_heuristics = compute_heuristics(_STOCK_AI_PARAGRAPH)
+    human_heuristics = compute_heuristics(_PERSONAL_HUMAN_PARAGRAPH)
+    assert ai_heuristics["function_word_ratio"] < human_heuristics["function_word_ratio"]
+
+
+def test_mean_word_length_higher_for_stock_ai_paragraph():
+    ai_heuristics = compute_heuristics(_STOCK_AI_PARAGRAPH)
+    human_heuristics = compute_heuristics(_PERSONAL_HUMAN_PARAGRAPH)
+    assert ai_heuristics["mean_word_length"] > human_heuristics["mean_word_length"]
+
+
+def test_transition_opener_rate_flags_paragraph_opening_every_sentence_with_a_transition():
+    heuristics = compute_heuristics(_STOCK_AI_PARAGRAPH)
+    assert heuristics["transition_opener_rate"] >= 0.5
+
+
+def test_transition_opener_rate_zero_for_paragraph_with_no_stock_openers():
+    heuristics = compute_heuristics(_PERSONAL_HUMAN_PARAGRAPH)
+    assert heuristics["transition_opener_rate"] == 0.0
+
+
+def test_personal_voice_score_positive_for_first_person_paragraph():
+    heuristics = compute_heuristics(_PERSONAL_HUMAN_PARAGRAPH)
+    assert heuristics["personal_voice_score"] > 0.0
+
+
+def test_personal_voice_score_zero_for_third_person_paragraph():
+    heuristics = compute_heuristics(_STOCK_AI_PARAGRAPH)
+    assert heuristics["personal_voice_score"] == 0.0
+
+
+def test_personal_voice_is_subtractive_only_absence_does_not_raise_score():
+    # A clean, plain, third-person paragraph with none of the other AI-tells
+    # either -- zero personal voice must not, by itself, push the score up.
+    # This is the exact false-positive shape found for real on a genuine,
+    # non-native-English academic paper (see checker_service.py comments).
+    neutral_paragraph = (
+        "The bridge was completed in 1932 after four years of construction. It spans "
+        "just over two kilometers and carries both rail and road traffic. Maintenance "
+        "crews inspect the main cables every five years. The last major repair project "
+        "replaced most of the original rivets with welded joints."
+    )
+    heuristics = compute_heuristics(neutral_paragraph)
+    assert heuristics["personal_voice_score"] == 0.0
+    assert heuristics["heuristic_score"] < 20
+
+
+def test_trigram_repetition_rate_zero_for_short_or_fully_unique_text():
+    heuristics = compute_heuristics("Short text here.")
+    assert heuristics["trigram_repetition_rate"] == 0.0
+
+
+def test_trigram_repetition_rate_positive_when_a_phrase_repeats():
+    text = "This is the same thing. Later, this is the same thing again, exactly the same thing."
+    heuristics = compute_heuristics(text)
+    assert heuristics["trigram_repetition_rate"] > 0.0
+
+
+def test_signals_dict_exposes_all_new_heuristics():
+    service = CheckerService(ai_service=_FakeAIService('{"ai_probability": 0.5}'))
+    result = _run(service.check_text(_STOCK_AI_PARAGRAPH))
+    for key in (
+        "function_word_ratio",
+        "mean_word_length",
+        "trigram_repetition_rate",
+        "transition_opener_rate",
+        "personal_voice_score",
+    ):
+        assert key in result["signals"]
 
 
 def test_advanced_scan_skipped_for_short_single_segment_text():

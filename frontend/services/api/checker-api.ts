@@ -4,6 +4,11 @@ export interface CheckSignals {
   burstiness: number;
   lexical_diversity: number;
   ai_phrase_hits: number;
+  function_word_ratio: number;
+  mean_word_length: number;
+  trigram_repetition_rate: number;
+  transition_opener_rate: number;
+  personal_voice_score: number;
   heuristic_score: number;
   llm_probability: number | null;
 }

@@ -98,6 +98,10 @@ function AnalysisRail({ result, onHumanize }: { result: CheckResult; onHumanize?
   const phraseTone: Tone = s.ai_phrase_hits === 0 ? "good" : s.ai_phrase_hits <= 2 ? "neutral" : "bad";
   const phraseTag = s.ai_phrase_hits === 0 ? "none" : s.ai_phrase_hits <= 2 ? "a few" : "many";
   const heur = band(s.heuristic_score, 33, 66, true);
+  const funcWords = band(s.function_word_ratio, 0.33, 0.38);
+  const transitions = band(s.transition_opener_rate, 0.1, 0.35, true);
+  const voiceTone: Tone = s.personal_voice_score > 1 ? "good" : "neutral";
+  const voiceTag = s.personal_voice_score > 1 ? "present" : "absent";
 
   return (
     <div className="space-y-5">
@@ -145,6 +149,27 @@ function AnalysisRail({ result, onHumanize }: { result: CheckResult; onHumanize?
           fill={Math.min(s.ai_phrase_hits / 5, 1)}
           tag={phraseTag}
           tone={phraseTone}
+        />
+        <SignalBar
+          label="Function-word ratio"
+          value={s.function_word_ratio.toFixed(2)}
+          fill={s.function_word_ratio}
+          tag={funcWords.tag === "varied" ? "typical" : funcWords.tag === "uniform" ? "sparse" : "moderate"}
+          tone={funcWords.tone}
+        />
+        <SignalBar
+          label="Transition openers"
+          value={`${Math.round(s.transition_opener_rate * 100)}%`}
+          fill={s.transition_opener_rate}
+          tag={transitions.tag}
+          tone={transitions.tone}
+        />
+        <SignalBar
+          label="Personal voice"
+          value={voiceTag}
+          fill={Math.min(s.personal_voice_score / 8, 1)}
+          tag={voiceTag}
+          tone={voiceTone}
         />
         <SignalBar
           label="Heuristic score"
