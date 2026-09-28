@@ -63,7 +63,7 @@ def get_stats(admin: User = Depends(require_admin), db: Session = Depends(get_db
         total_realtime_sessions=count(db.query(func.count(RealtimeSession.id))),
         requests_24h=count(db.query(func.count(UsageEvent.id)).filter(UsageEvent.created_at >= day_ago)),
         errors_24h=count(
-            db.query(func.count(UsageEvent.id)).filter(UsageEvent.created_at >= day_ago, UsageEvent.ok.is_(False))
+            db.query(func.count(UsageEvent.id)).filter(UsageEvent.created_at >= day_ago, UsageEvent.is_real_error())
         ),
         active_users_24h=count(
             db.query(func.count(func.distinct(UsageEvent.user_id))).filter(

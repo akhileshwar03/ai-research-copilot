@@ -127,7 +127,7 @@ def _hourly_activity(db: Session, since: datetime, until: datetime, user_id: int
             dow,
             hour,
             func.count(UsageEvent.id),
-            func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)),
+            func.sum(case((UsageEvent.is_real_error(), 1), else_=0)),
         )
         .filter(*_event_filters(since, until, user_id))
         .group_by(dow, hour)
@@ -144,7 +144,7 @@ def _tool_stats(db: Session, filters: list) -> list[dict]:
         db.query(
             UsageEvent.tool,
             func.count(UsageEvent.id),
-            func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)),
+            func.sum(case((UsageEvent.is_real_error(), 1), else_=0)),
             func.avg(UsageEvent.duration_ms),
             func.count(func.distinct(UsageEvent.user_id)),
         )
@@ -260,7 +260,7 @@ def compute_analytics(db: Session, start: date, end: date, user_id: int | None, 
     humanizer_runs = _daily_counts(db, HumanizerRun.created_at, since, until, *scoped(HumanizerRun.user_id))
     realtime_sessions = _daily_counts(db, RealtimeSession.created_at, since, until, *scoped(RealtimeSession.user_id))
     requests = _daily_counts(db, UsageEvent.created_at, since, until, *scoped(UsageEvent.user_id))
-    errors = _daily_counts(db, UsageEvent.created_at, since, until, *scoped(UsageEvent.user_id, UsageEvent.ok.is_(False)))
+    errors = _daily_counts(db, UsageEvent.created_at, since, until, *scoped(UsageEvent.user_id, UsageEvent.is_real_error()))
     messages = _daily_messages(db, since, until, user_id)
     active = _daily_active_users(db, since, until, user_id)
 

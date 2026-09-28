@@ -1342,6 +1342,93 @@ def test_alerts_require_authentication(client):
     assert client.get("/api/v1/admin/alerts").status_code in (401, 403)
 
 
+# 2026-09-28: real incident -- 4 stale-auth 401s from one 7-second browser-testing burst pushed
+# Research Copilot's 30-day error rate to 10.8% on the admin overview, comfortably over the 5%
+# alert threshold, with zero actual service failures behind it. A 401 (expired/missing token) is
+# a client-side auth state, not a defect in the tool it was aimed at -- see
+# UsageEvent.is_real_error's docstring. These pin that it's excluded everywhere an error RATE or
+# alert is computed, while still being honestly visible in the raw audit log.
+
+def _seed_401s(tool: str, count: int):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with TestingSessionLocal() as db:
+        for _ in range(count):
+            db.add(
+                UsageEvent(
+                    user_id=None,  # a 401 never resolves an authenticated user
+                    tool=tool,
+                    status_code=401,
+                    ok=False,
+                    duration_ms=5,
+                    request_id="401-test",
+                    created_at=now - timedelta(minutes=5),
+                )
+            )
+        db.commit()
+
+
+def test_401_only_traffic_never_triggers_the_error_rate_alert(client, admin_headers):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    # Above the default alert_min_requests (10) and, pre-fix, a 100% "error" rate -- deliberately
+    # sized so this test actually discriminates the fix instead of passing either way because the
+    # low-volume gate alone would have suppressed a smaller batch regardless.
+    _seed_401s("research_copilot", 15)
+    alerts = client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"]
+    assert alerts == []
+
+
+def test_a_real_error_spike_still_alerts_even_with_401_noise_mixed_in(client, admin_headers, unique_email):
+    """401s must not accidentally suppress a genuine alert either -- only excluded from the
+    numerator, never silently swallowing the whole signal."""
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_401s("humanizer", 5)
+    _seed_recent_events(unique_email, "humanizer", ok_count=2, fail_count=8)  # genuine 500s
+    alerts = client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"]
+    ids = {a["id"] for a in alerts}
+    assert "error-rate" in ids and "tool-failing:humanizer" in ids
+
+
+def test_overview_errors_24h_excludes_401s(client, admin_headers):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_401s("research_copilot", 4)
+    body = client.get("/api/v1/admin/stats", headers=admin_headers).json()
+    assert body["errors_24h"] == 0
+
+
+def test_analytics_tool_error_rate_excludes_401s(client, admin_headers, unique_email):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_usage(unique_email, "2026-09-28", tool="research_copilot", ok=True, count=33)
+    _seed_401s("research_copilot", 4)
+    from datetime import date
+
+    today = date.today().isoformat()
+    resp = client.get(f"/api/v1/admin/analytics?start={today}&end={today}", headers=admin_headers)
+    tools = {t["tool"]: t for t in resp.json()["tools"]}
+    assert tools["research_copilot"]["errors"] == 0
+    assert tools["research_copilot"]["error_rate"] == 0.0
+    assert tools["research_copilot"]["requests"] == 37  # 401s still count as real traffic
+
+
+def test_401s_still_show_up_in_the_raw_audit_log(client, admin_headers):
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_401s("research_copilot", 4)
+    resp = client.get("/api/v1/admin/usage-events?errors_only=true", headers=admin_headers).json()
+    assert resp["total"] == 4
+    assert all(e["status_code"] == 401 for e in resp["events"])
+
+
 # ── Admin two-factor (TOTP) ────────────────────────────────────────────────────
 
 def _current_code(secret: str) -> str:

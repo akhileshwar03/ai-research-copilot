@@ -21,7 +21,7 @@ def compute_alerts(db: Session, now: datetime, error_rate_pct: int, min_requests
         db.query(
             UsageEvent.tool,
             func.count(UsageEvent.id),
-            func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)),
+            func.sum(case((UsageEvent.is_real_error(), 1), else_=0)),
         )
         .filter(UsageEvent.created_at >= since)
         .group_by(UsageEvent.tool)

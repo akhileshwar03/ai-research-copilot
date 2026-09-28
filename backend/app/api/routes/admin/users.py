@@ -403,7 +403,7 @@ def get_user_activity(
     since = _utcnow_naive() - timedelta(days=30)
 
     usage_rows = (
-        db.query(UsageEvent.tool, func.count(UsageEvent.id), func.sum(case((UsageEvent.ok.is_(False), 1), else_=0)))
+        db.query(UsageEvent.tool, func.count(UsageEvent.id), func.sum(case((UsageEvent.is_real_error(), 1), else_=0)))
         .filter(UsageEvent.user_id == user.id, UsageEvent.created_at >= since)
         .group_by(UsageEvent.tool)
         .all()

@@ -80,7 +80,7 @@ def collect_report_data(db: Session, start: date, end: date, user_id: int | None
     error_codes = [
         (int(code), int(n))
         for code, n in db.query(UsageEvent.status_code, func.count(UsageEvent.id))
-        .filter(*event_filters, UsageEvent.ok.is_(False))
+        .filter(*event_filters, UsageEvent.is_real_error())
         .group_by(UsageEvent.status_code)
         .order_by(func.count(UsageEvent.id).desc())
         .limit(8)
