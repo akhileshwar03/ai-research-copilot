@@ -64,6 +64,18 @@ def test_check_text_falls_back_when_llm_returns_malformed_json():
     assert result["signals"]["llm_probability"] is None
 
 
+# 2026-09-29: real failure observed live -- the model occasionally appends a trailing
+# sentence after the JSON object despite "Respond with ONLY JSON", which breaks a strict
+# `json.loads` of the whole raw string even though a valid JSON object is right there.
+def test_check_text_recovers_llm_json_with_trailing_prose_after_it():
+    llm_response = '{"ai_probability": 0.8, "reasoning": "x", "ai_sentences": []} Hope that helps!'
+    service = CheckerService(ai_service=_FakeAIService(llm_response))
+
+    result = _run(service.check_text("Text where the model appends prose after the JSON object."))
+
+    assert result["signals"]["llm_probability"] == 0.8
+
+
 def test_check_text_rejects_empty_text():
     service = CheckerService(ai_service=_FakeAIService("{}"))
     with pytest.raises(AppError) as exc_info:
@@ -295,78 +307,42 @@ def test_signals_dict_exposes_all_new_heuristics():
         assert key in result["signals"]
 
 
-# 2026-09-28: real false positive found live in production — a purely descriptive,
-# mood-driven human paragraph (no first-person voice, but also genuinely clean of every
-# deterministic AI-tell: no banned phrases, no stock transition openers, natural
-# burstiness) scored heuristic_score ~10 (correctly clean) while the LLM was only
-# MODERATELY confident it was AI (0.7, well under the existing 0.9 "genuine conviction"
-# gate) — and the 70/30 blend still dragged the result into "uncertain"/borderline-AI
-# territory. Two independent free market AI detectors called the real text 93%+ human.
-_DESCRIPTIVE_HUMAN_PARAGRAPH = (
-    "Late autumn mornings have a particular stillness to them. Outside, frost clings to "
-    "the fence posts, and the garden looks almost silver in the early light. The kitchen "
-    "smells of woodsmoke and toast, and the old radiator ticks as it warms up in the "
-    "corner. Wrapped in a thick sweater, it is easy to sit by the window and watch steam "
-    "rise off a mug of tea. The cat stretches out on the warm floorboards near the stove, "
-    "in no hurry to go outside. Somewhere down the lane a dog barks twice and then falls "
-    "quiet again. The whole street feels slower than usual, as though the cold has asked "
-    "everyone to wait a little before starting the day."
-)
+# 2026-09-29 ground-up rebuild: the three bidirectional blend guardrails that used to live
+# here (added 2026-09-28/29, and tested by two now-deleted tests -
+# test_moderate_llm_ai_call_does_not_override_genuinely_clean_heuristics and
+# test_llm_probability_of_exactly_0_85_does_not_escape_the_clean_heuristic_guardrail) were
+# patches compensating for the OLD LLM prompt, which a real 16-sample test proved had almost
+# no discriminating power on plain factual writing (13/16 samples returned the exact same
+# 0.85 self-report regardless of true label). The real fix was rebuilding the prompt itself
+# (see checker_service.py's _LLM_SYSTEM_PROMPT docstring: 87.5% real accuracy with the new
+# reference-point-comparison mechanism). Those two tests asserted "a clean heuristic
+# overrides even the LLM saying 0.7/0.85" — a requirement that made sense ONLY as a patch
+# around a broken signal, and would now be actively wrong: with the new prompt, an LLM call
+# of 0.85 on a genuinely clean-heuristic text is real signal, not noise to be overridden.
+# Deleting them was a deliberate architectural decision, not an oversight — replaced below
+# with tests of the new, simpler blend's actual arithmetic.
 
 
-def test_moderate_llm_ai_call_does_not_override_genuinely_clean_heuristics():
-    llm_response = json.dumps(
-        {
-            "ai_probability": 0.7,
-            "reasoning": "Smooth, predictable rhythm with generic cozy imagery typical of AI writing.",
-            "ai_sentences": [],
-        }
-    )
+def test_blend_weights_llm_signal_heavily_over_heuristics():
+    # 0.85 * llm + 0.15 * heuristic, no guardrails -- verify the actual arithmetic holds for
+    # a case where the two signals disagree, rather than asserting on the old, now-removed
+    # guardrail behavior.
+    llm_response = json.dumps({"ai_probability": 0.9, "reasoning": "x", "ai_sentences": []})
     service = CheckerService(ai_service=_FakeAIService(llm_response))
-
-    result = _run(service.check_text(_DESCRIPTIVE_HUMAN_PARAGRAPH))
-
-    # Heuristics are genuinely clean here (no banned phrases, no stock openers, no
-    # trigram thinness) — a moderate (not decisive) LLM call must not drag this into
-    # "uncertain" or "likely_ai".
-    assert result["signals"]["heuristic_score"] < 15
-    assert result["verdict"] == "likely_human"
-    assert result["ai_probability"] < 0.4
-
-
-# 2026-09-29: real false positive found via a structured 24-sample validation run
-# (scripts/checker_eval/, 8 topic-matched human/AI/humanized triples) — 5 of 8 genuine
-# 2013-Wikipedia human paragraphs (formal/encyclopedic register, heuristic_score 0-8,
-# genuinely clean) were misclassified likely_ai, and in every one of those 5 cases
-# llm_probability landed at EXACTLY 0.85 -- an LLM self-report anchor value that fell
-# precisely in the unprotected gap between the two guardrails (`< 0.85` and `>= 0.9`).
-_FORMAL_ENCYCLOPEDIC_PARAGRAPH = (
-    "A watermill uses a water wheel to drive machinery. The design dates to antiquity. "
-    "Water is directed from a river or millpond along a channel to the wheel, where its "
-    "force turns a shaft connected to internal gearing that converts rotation into the "
-    "motion a mill's task requires. Overshot, undershot, and breastshot designs differ in "
-    "where the water strikes the wheel. Efficiency depends on the available head and flow. "
-    "Many surviving examples across Europe were adapted for grinding grain, and some were "
-    "later converted to generate electricity in the early twentieth century before falling "
-    "out of everyday use."
-)
-
-
-def test_llm_probability_of_exactly_0_85_does_not_escape_the_clean_heuristic_guardrail():
-    llm_response = json.dumps(
-        {
-            "ai_probability": 0.85,
-            "reasoning": "Smooth, factual, evenly-paced prose with no personal voice.",
-            "ai_sentences": [],
-        }
+    # A long enough, clean paragraph that heuristic_score comes out near 0.
+    clean_text = (
+        "The bridge was completed in 1932 after four years of construction. It spans just "
+        "over two kilometers and carries both rail and road traffic. Maintenance crews "
+        "inspect the main cables every five years. The last major repair project replaced "
+        "most of the original rivets with welded joints."
     )
-    service = CheckerService(ai_service=_FakeAIService(llm_response))
-
-    result = _run(service.check_text(_FORMAL_ENCYCLOPEDIC_PARAGRAPH))
-
-    assert result["signals"]["heuristic_score"] < 15
-    assert result["verdict"] == "likely_human"
-    assert result["ai_probability"] < 0.4
+    result = _run(service.check_text(clean_text))
+    heuristic_probability = result["signals"]["heuristic_score"] / 100.0
+    expected_blend = 0.85 * 0.9 + 0.15 * heuristic_probability
+    # _sharpen stretches away from 0.5 by factor 2, clamped to [0.02, 0.98].
+    expected_sharpened = max(0.02, min(0.98, 0.5 + (expected_blend - 0.5) * 2))
+    assert abs(result["ai_probability"] - expected_sharpened) < 0.01
+    assert result["verdict"] == "likely_ai"  # a confident LLM call now correctly wins
 
 
 # 2026-09-28: real false NEGATIVE found live in production, right after the guardrail
