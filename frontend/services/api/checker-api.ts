@@ -4,11 +4,14 @@ export interface CheckSignals {
   burstiness: number;
   lexical_diversity: number;
   ai_phrase_hits: number;
-  function_word_ratio: number;
-  mean_word_length: number;
-  trigram_repetition_rate: number;
-  transition_opener_rate: number;
-  personal_voice_score: number;
+  // Optional: a response from a backend deploy that predates these fields
+  // (e.g. mid-rollout, or a cached response) won't have them — the UI must
+  // degrade gracefully rather than assume they're always present.
+  function_word_ratio?: number;
+  mean_word_length?: number;
+  trigram_repetition_rate?: number;
+  transition_opener_rate?: number;
+  personal_voice_score?: number;
   heuristic_score: number;
   llm_probability: number | null;
 }

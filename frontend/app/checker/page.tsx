@@ -93,15 +93,23 @@ function AnalysisRail({ result, onHumanize }: { result: CheckResult; onHumanize?
   const pct = Math.round(result.ai_probability * 100);
   const s = result.signals;
 
+  // Defensive against a stale/older API response missing the newer signal
+  // fields (e.g. a frontend deploy landing before the backend one finishes) —
+  // a real crash was found live in production from this exact race, since
+  // `.toFixed()` on `undefined` throws instead of degrading gracefully.
+  const functionWordRatio = s.function_word_ratio ?? 0;
+  const transitionOpenerRate = s.transition_opener_rate ?? 0;
+  const personalVoiceScore = s.personal_voice_score ?? 0;
+
   const burst = band(s.burstiness, 0.4, 0.6);
   const div = band(s.lexical_diversity, 0.45, 0.6);
   const phraseTone: Tone = s.ai_phrase_hits === 0 ? "good" : s.ai_phrase_hits <= 2 ? "neutral" : "bad";
   const phraseTag = s.ai_phrase_hits === 0 ? "none" : s.ai_phrase_hits <= 2 ? "a few" : "many";
   const heur = band(s.heuristic_score, 33, 66, true);
-  const funcWords = band(s.function_word_ratio, 0.33, 0.38);
-  const transitions = band(s.transition_opener_rate, 0.1, 0.35, true);
-  const voiceTone: Tone = s.personal_voice_score > 1 ? "good" : "neutral";
-  const voiceTag = s.personal_voice_score > 1 ? "present" : "absent";
+  const funcWords = band(functionWordRatio, 0.33, 0.38);
+  const transitions = band(transitionOpenerRate, 0.1, 0.35, true);
+  const voiceTone: Tone = personalVoiceScore > 1 ? "good" : "neutral";
+  const voiceTag = personalVoiceScore > 1 ? "present" : "absent";
 
   return (
     <div className="space-y-5">
@@ -152,22 +160,22 @@ function AnalysisRail({ result, onHumanize }: { result: CheckResult; onHumanize?
         />
         <SignalBar
           label="Function-word ratio"
-          value={s.function_word_ratio.toFixed(2)}
-          fill={s.function_word_ratio}
+          value={functionWordRatio.toFixed(2)}
+          fill={functionWordRatio}
           tag={funcWords.tag === "varied" ? "typical" : funcWords.tag === "uniform" ? "sparse" : "moderate"}
           tone={funcWords.tone}
         />
         <SignalBar
           label="Transition openers"
-          value={`${Math.round(s.transition_opener_rate * 100)}%`}
-          fill={s.transition_opener_rate}
+          value={`${Math.round(transitionOpenerRate * 100)}%`}
+          fill={transitionOpenerRate}
           tag={transitions.tag}
           tone={transitions.tone}
         />
         <SignalBar
           label="Personal voice"
           value={voiceTag}
-          fill={Math.min(s.personal_voice_score / 8, 1)}
+          fill={Math.min(personalVoiceScore / 8, 1)}
           tag={voiceTag}
           tone={voiceTone}
         />
