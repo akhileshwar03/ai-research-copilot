@@ -54,6 +54,22 @@ def test_only_the_last_references_heading_is_used():
     assert result.count == 5
 
 
+def test_a_document_with_two_real_reference_lists_uses_the_more_complete_one():
+    """The real regression this guards against (2026-09-27/28, GPT-4 Technical Report,
+    verified against the actual PDF): some documents genuinely have two distinct, real
+    numbered reference lists -- e.g. a main paper's own bibliography followed, many pages
+    later, by an appendix/system-card section with its own separate "References" heading and
+    numbered list. Blindly trusting "the last References heading" is only safe because the
+    later, real list here also happens to be the complete one ([1]-[105], not a partial
+    subset) -- this pins that real, verified case, not just a synthetic one with a single
+    real list and an incidental earlier mention of the word."""
+    early_list = _refs(*range(1, 86))  # a genuine but partial numbered list (as one really appeared)
+    late_list = _refs(*range(1, 106))  # the complete, later list -- must be what's reported
+    text = f"{early_list}\n\nAppendix\nMore text.\n\n{late_list}"
+    result = detect_reference_count(text)
+    assert result.count == 105 and result.exact is True
+
+
 def test_the_dotted_style_fallback_is_used_when_no_bracket_style_entries_exist():
     body = "\n".join(f"{n}. Some Author. Some Title. Venue, {2020 + n % 5}." for n in range(1, 16))
     text = f"References\n{body}\n"
