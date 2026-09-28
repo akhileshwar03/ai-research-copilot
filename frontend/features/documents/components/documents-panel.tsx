@@ -60,6 +60,30 @@ function DotsIcon() {
   );
 }
 
+function ListLayoutIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function GridLayoutIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h6v6H4V5zm10 0h6v6h-6V5zM4 15h6v6H4v-6zm10 0h6v6h-6v-6z" />
+    </svg>
+  );
+}
+
+function SelectIcon() {
+  return (
+    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+  );
+}
+
 function FileIcon() {
   return (
     <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -96,7 +120,9 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
   const {
     selectedDocument, setSelectedDocument,
     checkedDocuments, toggleChecked, setAllChecked, clearChecked,
+    selectMode, setSelectMode,
     sortOrder, setSortOrder,
+    layout, setLayout,
   } = useDocumentStore();
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -213,14 +239,49 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
             </DropdownMenuRoot>
           )}
 
-          {/* Upload */}
-          <label
-            className="hover-surface flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-zinc-500 transition hover:text-zinc-300"
-            title="Upload a PDF"
-          >
-            <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} disabled={isUploading} />
-            <UploadIcon />
-          </label>
+          {/* Manage — bulk-select (for delete) and layout, kept out of the way of the
+              everyday single-click "open in panel" / "pick for a chat" flow below. There was
+              a second, redundant upload button here before (the always-visible "Add PDF" row
+              at the bottom of the list is the one, unambiguous upload entry point) — removed
+              2026-09-28 alongside pulling bulk-select behind this menu, for the same reason:
+              cut duplicate/competing affordances, not add a third one. */}
+          {documents.length > 1 && (
+            <DropdownMenuRoot>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="hover-surface flex items-center justify-center rounded-md p-1 text-zinc-500 transition hover:text-zinc-300"
+                  title="Manage documents"
+                >
+                  <DotsIcon />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Select</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setSelectMode(!selectMode)}>
+                  <SelectIcon />
+                  {selectMode ? "Done selecting" : "Select documents…"}
+                </DropdownMenuItem>
+                {selectMode && (
+                  <DropdownMenuItem onClick={() => (allChecked ? clearChecked() : setAllChecked(documents.map((d) => d.id)))}>
+                    <CheckIcon />
+                    {allChecked ? "Deselect all" : "Select all"}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Layout</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setLayout("list")}>
+                  <ListLayoutIcon />
+                  <span className={layout === "list" ? "text-white" : ""}>List</span>
+                  {layout === "list" && <CheckIcon />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setLayout("grid")}>
+                  <GridLayoutIcon />
+                  <span className={layout === "grid" ? "text-white" : ""}>Grid</span>
+                  {layout === "grid" && <CheckIcon />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenuRoot>
+          )}
         </div>
       </div>
 
@@ -280,11 +341,15 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
         </label>
       ) : (
         <div className="flex flex-col gap-1">
-          {/* Select-all row — hidden until there's more than one to select */}
-          {documents.length > 1 && (
+          {/* Select-all row — only while select mode (from the "⋮" menu) is on; these
+              checkboxes are for bulk-delete only, never for choosing what a chat can see (that's
+              "Sources for this chat", entirely separate — see checkedDocuments' comment in
+              document-store.ts for the full story on why this used to be a source of real
+              confusion). */}
+          {selectMode && (
             <div className="flex items-center gap-2 px-1 pb-1">
               <button
-                onClick={() => allChecked ? clearChecked() : setAllChecked(documents.map((d) => d.id))}
+                onClick={() => (allChecked ? clearChecked() : setAllChecked(documents.map((d) => d.id)))}
                 className={[
                   "flex h-4 w-4 shrink-0 items-center justify-center rounded border transition",
                   allChecked
@@ -298,6 +363,10 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
             </div>
           )}
 
+          {/* List: stacked, full-width rows (unchanged). Grid: a horizontally-scrolling strip
+              of fixed-width cards — useful once there are enough documents that scanning them
+              at a glance beats scrolling a long vertical list. */}
+          <div className={layout === "grid" ? "flex gap-2 overflow-x-auto pb-1" : "flex flex-col gap-1"}>
           {sorted.map((doc) => {
             const isActive = selectedDocument === doc.id;
             const isChecked = checkedDocuments.includes(doc.id);
@@ -312,6 +381,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
                 key={doc.id}
                 className={[
                   "group relative flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-all duration-150",
+                  layout === "grid" ? "w-[220px] shrink-0" : "",
                   isActive
                     ? "border-[var(--border-medium)] bg-[var(--surface-2)]"
                     : "hover-surface border-[var(--border-subtle)] bg-[var(--surface-1)] hover:border-[var(--border-medium)]",
@@ -326,7 +396,9 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
                   />
                 )}
 
-                {/* Checkbox */}
+                {/* Checkbox — bulk-delete selection only, shown only while select mode (the
+                    "⋮" menu's "Select documents…") is on. */}
+                {selectMode && (
                 <button
                   onClick={(e) => { e.stopPropagation(); toggleChecked(doc.id); }}
                   className={[
@@ -338,6 +410,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
                 >
                   {isChecked && <CheckIcon />}
                 </button>
+                )}
 
                 {/* File icon + name */}
                 <button
@@ -410,17 +483,21 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
                       <PinIcon filled={isPinned} />
                       {isPinned ? "Unpin" : "Pin to top"}
                     </DropdownMenuItem>
+                    {/* This used to be labelled "Compare / select" and toggled the same
+                        bulk-delete checkbox while claiming (via a toast) to help with
+                        "comparing" documents -- it never did anything to any chat's sources, so
+                        that was a real, confirmed source of user confusion. Comparing/selecting
+                        documents for an actual chat is "Sources for this chat" (chat-header.tsx)
+                        -- entirely separate, and already works; this item now honestly does only
+                        what a per-row shortcut into bulk-delete should do. */}
                     <DropdownMenuItem
                       onClick={() => {
+                        setSelectMode(true);
                         toggleChecked(doc.id);
-                        const others = documents.filter((d) => d.id !== doc.id && checkedDocuments.includes(d.id));
-                        if (others.length === 0 && !checkedDocuments.includes(doc.id)) {
-                          toast.info("Select more documents to compare");
-                        }
                       }}
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
-                      Compare / select
+                      <SelectIcon />
+                      Select for deletion…
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem destructive onClick={() => handleDelete(doc.id, doc.name)}>
@@ -432,6 +509,7 @@ export function DocumentsPanel({ documents, onUpload, onDelete, onTogglePin, isU
               </div>
             );
           })}
+          </div>
 
           {/* Upload more */}
           <label className="mt-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-subtle)] py-2 text-[11px] text-zinc-700 transition hover:border-[var(--border-medium)] hover:text-zinc-500">

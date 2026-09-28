@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 export type DocumentSortOrder = "latest" | "alpha";
+export type DocumentsLayout = "list" | "grid";
 
 /** A pending "scroll the PDF panel to this page" request, made by clicking a page citation in
  * a chat reply (see chat-message-list.tsx). `nonce` increments on every call, including a
@@ -20,15 +21,30 @@ interface DocumentState {
   pdfJumpRequest: PdfJumpRequest | null;
   jumpToPage: (documentId: string, page: number) => void;
 
-  // multi-select
+  // Bulk-delete selection ONLY — this has nothing to do with which document(s) a chat can see.
+  // That's a real, separate piece of state owned by chat-header.tsx's "Sources for this chat"
+  // picker, and conflating the two (a per-row checkbox that looked like it also drove a "compare"
+  // action, when toggling it did nothing to any chat's scope) was a genuine, confirmed source of
+  // user confusion, fixed 2026-09-28 by making `selectMode` opt-in via the documents panel's own
+  // "⋮" menu instead of always showing these checkboxes.
   checkedDocuments: string[];
   toggleChecked: (id: string) => void;
   setAllChecked: (ids: string[]) => void;
   clearChecked: () => void;
 
+  // Whether bulk-select checkboxes are currently shown at all (see checkedDocuments' comment).
+  // Turning this off also clears any in-progress selection, so re-entering select mode always
+  // starts clean rather than resuming a stale selection from a previous visit.
+  selectMode: boolean;
+  setSelectMode: (on: boolean) => void;
+
   // sort
   sortOrder: DocumentSortOrder;
   setSortOrder: (order: DocumentSortOrder) => void;
+
+  // list vs. horizontally-scrolling grid presentation of the documents panel
+  layout: DocumentsLayout;
+  setLayout: (layout: DocumentsLayout) => void;
 }
 
 export const useDocumentStore = create<DocumentState>((set) => ({
@@ -55,6 +71,12 @@ export const useDocumentStore = create<DocumentState>((set) => ({
   setAllChecked: (ids) => set({ checkedDocuments: ids }),
   clearChecked: () => set({ checkedDocuments: [] }),
 
+  selectMode: false,
+  setSelectMode: (selectMode) => set({ selectMode, checkedDocuments: [] }),
+
   sortOrder: "latest",
   setSortOrder: (sortOrder) => set({ sortOrder }),
+
+  layout: "list",
+  setLayout: (layout) => set({ layout }),
 }));
