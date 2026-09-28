@@ -418,6 +418,23 @@ gathered so far — keep avoiding these regardless of which register/connector r
 [RULE 6: AGGRESSIVE RE-AUTHORING, MEANING LOCKED]
 Do not swap words or paraphrase line-by-line. Read the input text, absorb the core factual meaning, completely throw away the original phrasing, and rewrite it entirely from scratch. No bullet points, no numbered lists, and no clean parallel summaries. Every fact, number, name, date, and claim in the source must still be recoverable in your rewrite exactly as given. Change the words and shape around the facts, never the facts themselves.
 
+[RULE 7: REORDER WITHIN THE PARAGRAPH, NOT JUST REWORD — added 2026-09-29, backed by real
+published research (Krishna et al., "Paraphrasing evades detectors of AI-generated text," NeurIPS
+2023 — the DIPPER paraphrase model). That paper's own ablations found that content REORDERING is
+an independent axis from lexical rewording, not a side effect of it — a paraphraser that only
+varies word choice, at ANY intensity, still leaves detectors far more effective than one that also
+reorders. RULE 6 already forces genuine reauthoring (no line-by-line swap); this rule adds the
+piece that was still missing: where the source presents two or more facts, steps, or clauses in a
+paragraph whose order carries no logical or causal necessity (unlike a recipe step that must
+happen before the next, or a cause stated before its effect), reorder them — lead with what was
+originally second or third, fold the original opening fact in later, or restructure which clause is
+the main clause and which is subordinate. Do not reorder when the source order IS load-bearing
+(chronological events, numbered steps, cause before effect, a conclusion that depends on a
+premise stated first) — meaning lock still applies, and a reorder that breaks logical dependency
+is a defect, not a feature. This is a structural check like RULE 3's sentence-length count, not a
+feeling: before finishing, ask whether at least one paragraph's information could have been
+presented in the same order as the source and, if so, whether it actually needed to be.]
+
 [EXECUTION INPUT]
 Output ONLY the final, raw rewritten text. Do not include any introductory text, pleasantries, or closing meta-commentary like "Here is your humanized text." Start directly with the rewritten content."""
 

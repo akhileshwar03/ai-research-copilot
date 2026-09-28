@@ -70,6 +70,7 @@ import json
 import logging
 import re
 import statistics
+import unicodedata
 
 from app.core.exceptions import AppError
 from app.services.ai_service import AIService
@@ -77,9 +78,17 @@ from app.services.runtime_settings import runtime_settings
 
 logger = logging.getLogger(__name__)
 
+# 2026-09-29 (Tier 1): reworded per the independent RAID benchmark's own explicit
+# recommendation (Dugan et al., ACL 2024, arXiv:2405.07940) — the authors of the largest
+# published cross-detector evaluation state plainly that no current AI-text detector,
+# including the strongest ones they tested, should be used "in any sort of disciplinary or
+# punitive context." That is not our own caution dressed up — it is the field's own
+# measured conclusion, and our wording should say so plainly rather than hedge around it.
 DISCLAIMER = (
-    "A strict estimate, not proof — false positives happen, especially on short "
-    "or formal text. Don't use this as the sole basis for an accusation."
+    "A strict estimate, not proof. Every public benchmark of AI-text detectors — including "
+    "the strongest ones on the market — finds real false positives, worse on short, formal, "
+    "or non-native-English writing. Do not use this result to accuse, discipline, or penalize "
+    "anyone; that is exactly the use every independent study of these tools warns against."
 )
 
 # Phrases disproportionately common in unedited LLM output. Not proof on
@@ -147,6 +156,44 @@ _PERSONAL_VOICE_RE = re.compile(
     r"in my opinion|personally|honestly|to me)\b",
     re.IGNORECASE,
 )
+
+# 2026-09-29 (Tier 1 of the ground-up rebuild plan): homoglyph substitution and invisible
+# zero-width characters are the single most damaging real adversarial attack against every
+# perplexity/burstiness-family detector, per the independent RAID benchmark (Dugan et al.,
+# ACL 2024, arXiv:2405.07940) — a -36% to -41% accuracy hit against Binoculars and GLTR, far
+# worse than misspelling or whitespace attacks. Both attacks work the same way: insert a
+# character that is invisible or visually identical to the reader but breaks the literal
+# string a naive detector scores (a genuine "bee | Credits:" scraped-web-page-style problem,
+# but adversarial rather than incidental). Normalizing BOTH before scoring is a real,
+# zero-cost, evidence-backed defense with no plausible downside for genuine text: it never
+# changes what a human reader sees, so it can't introduce a new false positive/negative on
+# clean input.
+_HOMOGLYPH_MAP = str.maketrans(
+    {
+        # Cyrillic lookalikes -> Latin
+        "а": "a", "е": "e", "о": "o", "р": "p", "с": "c",
+        "х": "x", "у": "y", "і": "i", "ѕ": "s", "ј": "j",
+        "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M",
+        "Н": "H", "О": "O", "Р": "P", "С": "C", "Т": "T",
+        "Х": "X", "Ѕ": "S", "І": "I",
+        # Greek lookalikes -> Latin
+        "ο": "o", "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z",
+        "Η": "H", "Ι": "I", "Κ": "K", "Μ": "M", "Ν": "N",
+        "Ο": "O", "Ρ": "P", "Τ": "T", "Υ": "Y", "Χ": "X",
+    }
+)
+
+
+def _normalize_evasion_chars(text: str) -> str:
+    """Strip invisible Unicode "format" characters (zero-width space/joiner, word joiner,
+    byte-order-mark, soft hyphen, etc. — Unicode general category "Cf", a generic rule
+    rather than a hand-maintained list) and map common single-character Cyrillic/Greek
+    homoglyphs back to their visually-identical Latin letter. Applied once, up front, so
+    every downstream signal (heuristics AND the LLM call) sees the same normalized text —
+    partial application would let a homoglyph survive into the LLM prompt or vice versa."""
+    without_invisible = "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+    return without_invisible.translate(_HOMOGLYPH_MAP)
+
 
 MIN_WORDS_FOR_CONFIDENCE = 60
 
@@ -546,7 +593,7 @@ class CheckerService:
         return [item for _, item in indexed_out]
 
     async def check_text(self, text: str, advanced: bool = False) -> dict:
-        stripped = text.strip()
+        stripped = _normalize_evasion_chars(text.strip())
         if not stripped:
             raise AppError(code="EMPTY_TEXT", message="Text must not be empty", status_code=400)
 
