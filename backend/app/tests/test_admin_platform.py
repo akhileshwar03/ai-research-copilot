@@ -1411,15 +1411,28 @@ def test_overview_errors_24h_excludes_401s(client, admin_headers):
     assert body["errors_24h"] == 0
 
 
+# 2026-09-30: real bug found via a Dependabot PR's CI run, not flakiness — this test seeded
+# its 33 "ok" events against a HARDCODED date literal ("2026-09-28", the day it was written)
+# while querying the analytics endpoint for `date.today()`. That only ever worked on the one
+# day those two happened to match; it was guaranteed to start failing permanently the very
+# next day (and did — surfaced on 2026-10-01 UTC CI, assert 4 == 37, since only the 4 401s,
+# seeded against "now" by _seed_401s, still fell inside the query's date range).
+#
+# First fix attempt used `date.today()` (LOCAL server time) and still failed locally — the
+# real admin analytics endpoint resolves "today" in UTC (`_utcnow_naive().date()`, see
+# app/api/routes/admin/overview.py), and _seed_401s already stamps its events against UTC
+# `datetime.now(timezone.utc)`. Querying with local "today" while the server runs on UTC is
+# the same class of bug as the original — just in local/UTC terms instead of frozen/live —
+# so this must use UTC "today" everywhere, matching the real endpoint's own contract.
 def test_analytics_tool_error_rate_excludes_401s(client, admin_headers, unique_email):
     with TestingSessionLocal() as db:
         db.query(UsageEvent).delete()
         db.commit()
-    _seed_usage(unique_email, "2026-09-28", tool="research_copilot", ok=True, count=33)
-    _seed_401s("research_copilot", 4)
-    from datetime import date
+    from datetime import datetime, timezone
 
-    today = date.today().isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
+    _seed_usage(unique_email, today, tool="research_copilot", ok=True, count=33)
+    _seed_401s("research_copilot", 4)
     resp = client.get(f"/api/v1/admin/analytics?start={today}&end={today}", headers=admin_headers)
     tools = {t["tool"]: t for t in resp.json()["tools"]}
     assert tools["research_copilot"]["errors"] == 0
