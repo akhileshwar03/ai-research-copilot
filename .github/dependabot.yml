@@ -5,6 +5,16 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # Must equal the version react-pdf nests, or the PDF viewer renders blank at runtime (the
+      # build still passes, so CI can't catch it). Bump it together with react-pdf, by hand.
+      - dependency-name: "pdfjs-dist"
+      # eslint-config-next's plugins only support eslint <= 9 (invalid peers on 10).
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # Major jump with a type-check/build failure; used in one core layout file.
+      - dependency-name: "react-resizable-panels"
+        update-types: ["version-update:semver-major"]
     groups:
       # Patch/minor bumps are low-risk (confirmed 2026-09-27: 14 of 16 non-major bumps that week
       # merged clean) — batch them into one PR/week instead of one branch per package. Majors are
@@ -20,6 +30,12 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    ignore:
+      # 2.1 defaults postgresql:// to psycopg3 and would break startup migrations; see requirements.txt.
+      - dependency-name: "sqlalchemy"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "pgvector"
+        update-types: ["version-update:semver-minor"]
     groups:
       pip-minor-patch:
         update-types:
