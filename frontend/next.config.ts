@@ -18,7 +18,7 @@ import { withSentryConfig } from "@sentry/nextjs/config";
 //
 // Ships as Report-Only first (CSP_ENFORCE=false): the browser logs violations but blocks nothing, so
 // every page can be exercised on the real site before it is allowed to break anything.
-const CSP_ENFORCE = false;
+const CSP_ENFORCE = true;
 
 function originOf(value: string | undefined): string | null {
   if (!value) return null;
