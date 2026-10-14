@@ -110,3 +110,20 @@ def test_extract_image_route_rejects_script_labelled_as_png(client, auth_headers
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "INVALID_FILE_TYPE"
+
+
+# A file can pass the %PDF- header check and still be truncated/corrupt. Reproduced locally as an
+# unhandled 500 INTERNAL_ERROR from the checker route; the same parser crash had fired a real Sentry
+# alert on production. (The paper analyzer already returns a clean 422 UNREADABLE_PDF from its real
+# service - not asserted here because conftest swaps that service for a fake.)
+_VALID_HEADER_CORRUPT_BODY = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog"
+
+
+def test_checker_corrupt_pdf_with_a_valid_header_is_a_clean_422_not_a_500(client, auth_headers):
+    resp = client.post(
+        "/api/v1/checker/document",
+        files={"file": ("broken.pdf", _VALID_HEADER_CORRUPT_BODY, "application/pdf")},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+    assert resp.json()["error"]["code"] == "UNREADABLE_PDF"
