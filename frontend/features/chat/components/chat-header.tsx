@@ -298,7 +298,7 @@ function SourcesPicker({
         <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        {isScoped ? `${selectedCount} source${selectedCount === 1 ? "" : "s"}` : "All documents"}
+        {isScoped ? `${selectedCount} source${selectedCount === 1 ? "" : "s"}` : "No sources"}
       </button>
 
       {open && (
@@ -306,7 +306,7 @@ function SourcesPicker({
           <div className="border-b border-[var(--border-subtle)] px-3.5 py-2.5">
             <p className="text-[12px] font-semibold text-[var(--text-primary)]">Sources for this chat</p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
-              Pick specific documents to compare, or leave none selected to search everything.
+              Tick the documents this chat should answer from. With none ticked, it answers as a general assistant and does not read your documents.
             </p>
           </div>
           <div className="max-h-64 overflow-y-auto scrollbar-thin py-1">
