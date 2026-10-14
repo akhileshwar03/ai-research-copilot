@@ -51,12 +51,15 @@ if settings.sentry_dsn:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
     from sentry_sdk.integrations.logging import LoggingIntegration
 
+    from app.core.sentry_filter import drop_deliberate_unavailability
+
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         environment=settings.environment,
         # Full error capture; a modest trace sample so performance data doesn't
         # dominate the (free-tier) event quota on a low-traffic app.
         traces_sample_rate=0.1,
+        before_send=drop_deliberate_unavailability,
         integrations=[FastApiIntegration(), LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)],
     )
     logger.info("sentry_initialized environment=%s", settings.environment)
