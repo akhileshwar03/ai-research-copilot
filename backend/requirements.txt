@@ -6,7 +6,7 @@ openai==2.37.0
 httpx==0.28.1
 
 python-dotenv==1.2.3
-python-multipart==0.0.29
+python-multipart==0.0.32
 
 langchain==1.4.2
 langchain-community==0.4.1
@@ -14,9 +14,9 @@ langchain-openai==1.2.1
 langchain-text-splitters==1.1.2
 
 pgvector==0.4.1
-pypdf==6.11.0
+pypdf==6.20.1
 pymupdf==1.28.2
-pdfplumber==0.11.4
+pdfplumber==0.11.10
 tiktoken==0.13.0
 beautifulsoup4==4.15.0
 
