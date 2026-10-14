@@ -41,7 +41,12 @@ function contentSecurityPolicy(): string | null {
     "style-src 'self' 'unsafe-inline'",
     `img-src ${list("'self'", "data:", "blob:", api)}`,
     "font-src 'self' data:",
-    `connect-src ${list("'self'", api, sentry)}`,
+    // blob: is required: the chat passes a blob: URL to the PDF viewer (app/chat/page.tsx
+    // file={pdfBlobUrl}), so pdf.js FETCHES a blob: address, which connect-src governs. Found by
+    // testing on the live Report-Only policy - fetching a blob: URL raised connect-src violations;
+    // enforcing without it would have broken PDF viewing. These URLs are minted by the page itself
+    // from bytes it already got from the API, so allowing them adds no outside host.
+    `connect-src ${list("'self'", "blob:", api, sentry)}`,
     "worker-src 'self' blob:",
     "frame-src 'none'",
     "object-src 'none'",
