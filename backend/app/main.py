@@ -436,5 +436,27 @@ def readiness(service: HealthService = Depends(get_health_service)):
 if settings.auto_create_tables and settings.is_development:
     Base.metadata.create_all(bind=engine)
 
-if settings.jwt_secret_key == "change-me":
-    logger.warning("JWT secret key uses default placeholder value; set JWT_SECRET_KEY in environment.")
+_PLACEHOLDER_JWT_SECRETS = {"change-me", "changeme", "secret", "your-secret-key", "replace-me"}
+
+
+def check_jwt_secret(secret: str, is_development: bool) -> None:
+    """Refuse to run outside development with a known placeholder signing key.
+
+    Found 2026-10-14 in a security review: the default "change-me" was only LOGGED as a warning.
+    Verified for real why that's dangerous — on a server using it, a token signed with
+    "change-me" for an account that doesn't even exist is accepted (HTTP 200), i.e. anyone could
+    mint their own admin login. Production is not affected today (a forged token gets 401 there),
+    but a dropped or mis-set JWT_SECRET_KEY on a redeploy would have silently opened the whole
+    app, so a bad config must stop the deploy instead of shipping. Length is deliberately NOT
+    enforced: the real production secret's length can't be seen from here, and rejecting a
+    working short one would take the site down."""
+    if secret.strip().lower() in _PLACEHOLDER_JWT_SECRETS:
+        if not is_development:
+            raise RuntimeError(
+                "JWT_SECRET_KEY is unset or a placeholder value. Refusing to start: anyone could "
+                "forge login tokens. Set JWT_SECRET_KEY to a long random string."
+            )
+        logger.warning("JWT secret key uses default placeholder value; set JWT_SECRET_KEY in environment.")
+
+
+check_jwt_secret(settings.jwt_secret_key, settings.is_development)

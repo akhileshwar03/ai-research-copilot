@@ -37,3 +37,21 @@ def test_security_headers_never_overwrite_a_route_set_header():
     assert headers[b"x-frame-options"] == b"SAMEORIGIN"  # kept, not replaced
     assert headers[b"x-content-type-options"] == b"nosniff"
     assert b"strict-transport-security" in headers
+
+
+def test_placeholder_jwt_secret_stops_a_production_start():
+    import pytest
+
+    from app.main import check_jwt_secret
+
+    for bad in ("change-me", "CHANGE-ME", " secret "):
+        with pytest.raises(RuntimeError):
+            check_jwt_secret(bad, is_development=False)
+
+
+def test_placeholder_jwt_secret_is_tolerated_in_development_and_real_secrets_pass_everywhere():
+    from app.main import check_jwt_secret
+
+    check_jwt_secret("change-me", is_development=True)  # local dev: warning only
+    check_jwt_secret("a-long-random-production-secret-value", is_development=False)
+    check_jwt_secret("short-but-real", is_development=False)  # length is not enforced
