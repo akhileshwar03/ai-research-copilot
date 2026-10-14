@@ -182,3 +182,62 @@ def test_rejected_upload_does_not_write_to_storage(db_session):
         _upload(service, "notes.pdf", b"%PDF-1.4 second, rejected version", "user@example.com")
 
     assert service.storage.saved == storage_after_first
+
+
+# 2026-10-14: a corrupt PDF in background ingestion is the USER's file problem, not a server fault.
+# It used to hit the catch-all, log at ERROR (-> a Sentry alert per bad upload) and show the generic
+# "Ingestion failed". It now logs a warning and tells the user what is actually wrong.
+class _RaisesPdfStreamError:
+    async def process_pdf(self, **kwargs):
+        from pypdf.errors import PdfStreamError
+
+        raise PdfStreamError("Stream has ended unexpectedly")
+
+
+class _RaisesRuntimeError:
+    async def process_pdf(self, **kwargs):
+        raise RuntimeError("boom")
+
+
+def _background_ingest(monkeypatch, caplog, ingestion):
+    """Run process_upload_background against the test DB with a stored (corrupt) file."""
+    import logging
+
+    from app.db import session as db_session_module
+    from app.tests.conftest import TestingSessionLocal
+
+    monkeypatch.setattr(db_session_module, "SessionLocal", TestingSessionLocal)
+    with TestingSessionLocal() as db:
+        repo = DocumentRepository(db)
+        storage = FakeStorage()
+        storage.save("bg-test.pdf", b"%PDF-1.4 corrupt")
+        repo.create(
+            original_filename="bg.pdf", stored_filename="bg-test.pdf", content_type="application/pdf",
+            size_bytes=16, checksum_sha256="a" * 64, upload_status="processing", user_email="bg@example.com",
+        )
+        db.commit()
+    service = DocumentService(
+        document_repo=None, ingestion_service=ingestion, vector_store=None, storage=storage
+    )
+    with caplog.at_level(logging.INFO, logger="app.services.document_service"):
+        _run(service.process_upload_background("bg-test.pdf"))
+    with TestingSessionLocal() as db:
+        doc = DocumentRepository(db).get_by_stored_filename("bg-test.pdf")
+        result = (doc.upload_status, doc.error_message)
+        db.delete(doc)
+        db.commit()
+    return result, caplog
+
+
+def test_corrupt_pdf_in_background_ingestion_is_a_warning_with_a_clear_message(monkeypatch, caplog):
+    (status, message), caplog = _background_ingest(monkeypatch, caplog, _RaisesPdfStreamError())
+    assert status == "failed"
+    assert message == "Could not read this PDF (it may be corrupt)"
+    levels = {r.levelname for r in caplog.records if "background_ingestion" in r.getMessage()}
+    assert "ERROR" not in levels and "WARNING" in levels  # no Sentry-visible error for a bad user file
+
+
+def test_a_genuine_server_failure_in_ingestion_still_logs_an_error(monkeypatch, caplog):
+    (status, message), caplog = _background_ingest(monkeypatch, caplog, _RaisesRuntimeError())
+    assert status == "failed" and message == "Ingestion failed"
+    assert any(r.levelname == "ERROR" and "background_ingestion_failed" in r.getMessage() for r in caplog.records)

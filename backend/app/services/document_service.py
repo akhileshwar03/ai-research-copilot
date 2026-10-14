@@ -4,6 +4,7 @@ import os
 import uuid
 
 from fastapi import UploadFile
+from pypdf.errors import PyPdfError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
@@ -213,19 +214,30 @@ class DocumentService:
                 result.vision_truncated,
             )
 
+        except PyPdfError:
+            # The user's own file is corrupt/truncated: an expected outcome, not a server fault, so
+            # it must not log at ERROR (that raised a Sentry alert per bad upload) and the user
+            # gets a message that says what's wrong instead of a generic "Ingestion failed".
+            db.rollback()
+            self._mark_ingestion_failed(db, stored_filename, "Could not read this PDF (it may be corrupt)")
+            logger.warning("background_ingestion_unreadable_pdf stored=%s", stored_filename)
         except Exception:
             db.rollback()
-            try:
-                repo = DocumentRepository(db)
-                doc = repo.get_by_stored_filename(stored_filename)
-                if doc:
-                    repo.update_status(doc, upload_status="failed", error_message="Ingestion failed")
-                    db.commit()
-            except Exception:
-                logger.exception("background_ingestion_status_update_failed stored=%s", stored_filename)
+            self._mark_ingestion_failed(db, stored_filename, "Ingestion failed")
             logger.exception("background_ingestion_failed stored=%s", stored_filename)
         finally:
             db.close()
+
+    @staticmethod
+    def _mark_ingestion_failed(db, stored_filename: str, message: str) -> None:
+        try:
+            repo = DocumentRepository(db)
+            doc = repo.get_by_stored_filename(stored_filename)
+            if doc:
+                repo.update_status(doc, upload_status="failed", error_message=message)
+                db.commit()
+        except Exception:
+            logger.exception("background_ingestion_status_update_failed stored=%s", stored_filename)
 
     def get_document_status(self, stored_filename: str, user_email: str) -> dict:
         doc = self.document_repo.get_by_stored_filename(stored_filename)
