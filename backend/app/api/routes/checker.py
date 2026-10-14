@@ -8,6 +8,7 @@ from app.api.dependencies.services import get_checker_service, get_writing_feedb
 from app.core.constants import ALLOWED_UPLOAD_EXTENSIONS
 from app.core.exceptions import AppError
 from app.core.rate_limit import limiter
+from app.core.uploads import read_upload_limited, require_pdf
 from app.schemas.checker import CheckResult, CheckTextRequest
 from app.schemas.writing_feedback import WritingFeedbackRequest, WritingFeedbackResult
 from app.services.checker_service import CheckerService
@@ -42,14 +43,9 @@ async def check_document(
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         raise AppError(code="INVALID_FILE_TYPE", message="Only PDF files are allowed", status_code=400)
 
-    content = await file.read()
     max_upload_mb = int(runtime_settings.get("max_upload_size_mb"))
-    if len(content) > max_upload_mb * 1024 * 1024:
-        raise AppError(
-            code="FILE_TOO_LARGE",
-            message=f"File exceeds the {max_upload_mb} MB limit",
-            status_code=413,
-        )
+    content = await read_upload_limited(file, max_upload_mb * 1024 * 1024, f"File exceeds the {max_upload_mb} MB limit")
+    require_pdf(content)
 
     from pypdf import PdfReader
 

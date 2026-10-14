@@ -5,6 +5,7 @@ from app.api.dependencies.tools import require_tool
 from app.api.dependencies.services import get_ai_service
 from app.core.exceptions import AppError
 from app.core.rate_limit import limiter
+from app.core.uploads import read_upload_limited, require_image_matching
 from app.schemas.extract import ExtractedText, UrlExtractRequest
 from app.services.ai_service import AIService
 from app.services.content_extraction_service import extract_text_from_image, extract_text_from_url
@@ -41,9 +42,8 @@ async def extract_image(
             code="INVALID_FILE_TYPE", message="Only PNG, JPEG, or WEBP images are allowed", status_code=400
         )
 
-    content = await file.read()
-    if len(content) > _MAX_IMAGE_BYTES:
-        raise AppError(code="FILE_TOO_LARGE", message="Image exceeds the 10 MB limit", status_code=413)
+    content = await read_upload_limited(file, _MAX_IMAGE_BYTES, "Image exceeds the 10 MB limit")
+    require_image_matching(content, content_type)
 
     text = await extract_text_from_image(content, content_type, ai_service)
     return {"text": text}

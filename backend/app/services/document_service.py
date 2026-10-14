@@ -9,6 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.config import get_settings
 from app.core.constants import ALLOWED_UPLOAD_EXTENSIONS
 from app.core.exceptions import AppError
+from app.core.uploads import read_upload_limited, require_pdf
 from app.db.repositories.document_repository import DocumentRepository
 from app.modules.rag.ingestion_service import IngestionService
 from app.services.runtime_settings import runtime_settings
@@ -42,15 +43,12 @@ class DocumentService:
         if ext not in ALLOWED_UPLOAD_EXTENSIONS:
             raise AppError(code="INVALID_FILE_TYPE", message="Only PDF files are allowed", status_code=400)
 
-        content = await file.read()
-        size_bytes = len(content)
         max_upload_mb = int(runtime_settings.get("max_upload_size_mb"))
-        if size_bytes > max_upload_mb * 1024 * 1024:
-            raise AppError(
-                code="FILE_TOO_LARGE",
-                message=f"File exceeds the {max_upload_mb} MB limit",
-                status_code=413,
-            )
+        content = await read_upload_limited(
+            file, max_upload_mb * 1024 * 1024, f"File exceeds the {max_upload_mb} MB limit"
+        )
+        require_pdf(content)
+        size_bytes = len(content)
 
         checksum_sha256 = hashlib.sha256(content).hexdigest()
         existing = self.document_repo.get_by_checksum_and_user(checksum_sha256, user_email or "")

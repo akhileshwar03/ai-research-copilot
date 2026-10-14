@@ -9,6 +9,7 @@ from app.api.dependencies.services import get_paper_analyzer_service
 from app.core.constants import ALLOWED_UPLOAD_EXTENSIONS
 from app.core.exceptions import AppError
 from app.core.rate_limit import limiter
+from app.core.uploads import read_upload_limited, require_pdf
 from app.schemas.paper_analyzer import PaperAnalysisResult
 from app.services.paper_analyzer_service import PaperAnalyzerService
 from app.services.runtime_settings import paper_analyzer_rate_limit, runtime_settings
@@ -29,14 +30,9 @@ async def analyze(
     if ext not in ALLOWED_UPLOAD_EXTENSIONS:
         raise AppError(code="INVALID_FILE_TYPE", message="Only PDF files are allowed", status_code=400)
 
-    content = await file.read()
     max_upload_mb = int(runtime_settings.get("max_upload_size_mb"))
-    if len(content) > max_upload_mb * 1024 * 1024:
-        raise AppError(
-            code="FILE_TOO_LARGE",
-            message=f"File exceeds the {max_upload_mb} MB limit",
-            status_code=413,
-        )
+    content = await read_upload_limited(file, max_upload_mb * 1024 * 1024, f"File exceeds the {max_upload_mb} MB limit")
+    require_pdf(content)
 
     # Layout measurement is synchronous, CPU-bound work (pdfplumber has no
     # async API) — run it off the event loop so it doesn't block other

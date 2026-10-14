@@ -72,7 +72,7 @@ def test_extract_image_rejects_non_image_type(client, auth_headers):
 def test_extract_image_success(client, auth_headers):
     resp = client.post(
         "/api/v1/extract/image",
-        files={"file": ("test.png", b"fake-png-bytes", "image/png")},
+        files={"file": ("test.png", b"\x89PNG\r\n\x1a\n" + b"fake-png-body", "image/png")},
         headers=auth_headers,
     )
     assert resp.status_code == 200
