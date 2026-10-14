@@ -9,6 +9,12 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Outcomes of a delivery attempt. "rejected" means the provider refused THIS RECIPIENT
+# (e.g. Resend's 422 validation_error for an example.com test domain) — retrying or
+# falling through to another provider can't help, so it must not be reported as a
+# transient delivery failure.
+_SENT, _FAILED, _REJECTED = "sent", "failed", "rejected"
+
 # ── HTML email templates ────────────────────────────────────────────────────────
 
 def _otp_html(code: str, purpose: str = "verify") -> str:
@@ -52,6 +58,13 @@ def _otp_text(code: str) -> str:
 
 # ── Email service ───────────────────────────────────────────────────────────────
 
+def _is_validation_error(resp: httpx.Response) -> bool:
+    try:
+        return resp.json().get("name") == "validation_error"
+    except ValueError:
+        return False
+
+
 class EmailService:
     def __init__(self):
         self.settings = get_settings()
@@ -77,8 +90,17 @@ class EmailService:
 
         # ── 1. Resend API ──────────────────────────────────────────────────────
         if self.settings.resend_api_key:
-            if self._send_via_resend(email, subject, html, text):
+            outcome = self._send_via_resend(email, subject, html, text)
+            if outcome == _SENT:
                 return None
+            if outcome == _REJECTED:
+                # A bad/unsendable address is the caller's problem, not an outage: 400, not 503
+                # ("try again in a moment" is wrong advice here), and a 4xx doesn't page Sentry.
+                raise AppError(
+                    code="EMAIL_RECIPIENT_REJECTED",
+                    message="That email address can't receive mail. Please check it and try again.",
+                    status_code=400,
+                )
             logger.warning("resend_failed_falling_through to=%s", email)
 
         # ── 2. SMTP ────────────────────────────────────────────────────────────
@@ -109,8 +131,8 @@ class EmailService:
 
     # ── Resend ─────────────────────────────────────────────────────────────────
 
-    def _send_via_resend(self, to: str, subject: str, html: str, text: str) -> bool:
-        """Returns True on success, False on failure (never raises)."""
+    def _send_via_resend(self, to: str, subject: str, html: str, text: str) -> str:
+        """Returns _SENT, _REJECTED (provider refused the recipient) or _FAILED (never raises)."""
         try:
             resp = httpx.post(
                 "https://api.resend.com/emails",
@@ -129,16 +151,19 @@ class EmailService:
             )
             resp.raise_for_status()
             logger.info("otp_email_sent_resend to=%s id=%s", to, resp.json().get("id"))
-            return True
+            return _SENT
         except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 422 and _is_validation_error(exc.response):
+                logger.warning("resend_recipient_rejected to=%s body=%s", to, exc.response.text)
+                return _REJECTED
             logger.error(
                 "resend_error to=%s status=%s body=%s",
                 to, exc.response.status_code, exc.response.text,
             )
-            return False
+            return _FAILED
         except Exception:
             logger.exception("resend_unexpected_error to=%s", to)
-            return False
+            return _FAILED
 
     # ── SMTP ───────────────────────────────────────────────────────────────────
 
