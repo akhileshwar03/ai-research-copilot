@@ -1357,7 +1357,7 @@ def test_alerts_require_authentication(client):
 # UsageEvent.is_real_error's docstring. These pin that it's excluded everywhere an error RATE or
 # alert is computed, while still being honestly visible in the raw audit log.
 
-def _seed_401s(tool: str, count: int):
+def _seed_401s(tool: str, count: int, status_code: int = 401):
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -1367,7 +1367,7 @@ def _seed_401s(tool: str, count: int):
                 UsageEvent(
                     user_id=None,  # a 401 never resolves an authenticated user
                     tool=tool,
-                    status_code=401,
+                    status_code=status_code,
                     ok=False,
                     duration_ms=5,
                     request_id="401-test",
@@ -1385,6 +1385,17 @@ def test_401_only_traffic_never_triggers_the_error_rate_alert(client, admin_head
     # sized so this test actually discriminates the fix instead of passing either way because the
     # low-volume gate alone would have suppressed a smaller batch regardless.
     _seed_401s("research_copilot", 15)
+    alerts = client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"]
+    assert alerts == []
+
+
+@pytest.mark.parametrize("status_code", [400, 403, 422, 429])
+def test_client_error_traffic_never_triggers_alerts(client, admin_headers, status_code):
+    # 2026-10-14: rejected uploads (400/422) from one user raised "AI Checker is failing".
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    _seed_401s("checker", 15, status_code=status_code)
     alerts = client.get("/api/v1/admin/alerts", headers=admin_headers).json()["alerts"]
     assert alerts == []
 

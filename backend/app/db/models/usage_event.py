@@ -37,9 +37,14 @@ class UsageEvent(Base):
         incident (2026-09-28): 4 401s from one 7-second browser-testing burst pushed Research
         Copilot's 30-day rate to 10.8%, comfortably over the 5% alert threshold.
 
-        Deliberately narrower than `ok.is_(False)`: a 401 is still recorded with ok=False and
+        2026-10-14 follow-up: the same reasoning applies to every client error, not just 401. A
+        user uploading a corrupt PDF (422) or a non-PDF (400) is the app correctly rejecting bad
+        input, yet 3 of 6 such requests in an hour raised a critical "AI Checker is failing"
+        alert. So only 5xx -- the server actually failing -- counts toward a rate or alert.
+
+        Deliberately narrower than `ok.is_(False)`: a 4xx is still recorded with ok=False and
         still shows up in the raw audit log (GET /admin/usage-events?errors_only=true) -- this
         only changes what counts toward an aggregate RATE meant to signal tool health, not
         whether the request is honestly logged as having failed.
         """
-        return cls.ok.is_(False) & (cls.status_code != 401)
+        return cls.status_code >= 500
