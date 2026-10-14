@@ -10,6 +10,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.middleware.exception_handlers import register_exception_handlers
 from app.api.middleware.request_context import RequestContextMiddleware
+from app.api.middleware.security_headers import SecurityHeadersMiddleware
 from app.api.dependencies.services import get_health_service
 from app.api.routes.oauth import router as oauth_router
 from app.api.routes.v1 import api_v1_router
@@ -347,7 +348,17 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+def _docs_kwargs(is_development: bool) -> dict:
+    """Interactive API docs and the OpenAPI schema are a free, complete map of every route
+    (found 2026-10-14: an unauthenticated visitor could list all 66 endpoints from
+    /openapi.json). Every sensitive route still demands a login, so this isn't a hole on its
+    own, but there's no reason to hand attackers the map. Kept on for local development only."""
+    if is_development:
+        return {}
+    return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan, **_docs_kwargs(settings.is_development))
 
 # ── Rate limiting ──────────────────────────────────────────────────────────────
 app.state.limiter = limiter
@@ -383,6 +394,8 @@ app.add_middleware(
 )
 
 app.add_middleware(RequestContextMiddleware)
+# HSTS only outside development: over plain-http localhost it's meaningless noise.
+app.add_middleware(SecurityHeadersMiddleware, hsts=not settings.is_development)
 
 os.makedirs(settings.uploads_dir, exist_ok=True)
 
