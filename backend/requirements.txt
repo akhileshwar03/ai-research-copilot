@@ -1,36 +1,36 @@
-fastapi==0.143.0
+fastapi==0.146.0
 uvicorn==0.54.0
-sentry-sdk[fastapi]==2.71.0
+sentry-sdk[fastapi]==2.72.0
 
-openai==3.29.0
+openai==3.35.1
 httpx==0.28.1
 
 python-dotenv==1.2.4
 python-multipart==0.0.32
 
-langchain==1.4.4
+langchain==1.4.6
 langchain-community==0.4.2
-langchain-openai==1.7.0
+langchain-openai==1.7.2
 langchain-text-splitters==1.1.3
 
 # 0.5.x can't bind the embedding on the SQLite dev/test fallback (works on Postgres); no gain, so held.
-pgvector==0.4.1
-pypdf==6.20.1
+pgvector==0.4.2
+pypdf==6.21.1
 pymupdf==1.28.2
 pdfplumber==0.11.10
 tiktoken==0.14.0
 beautifulsoup4==4.15.0
 
-boto3==1.43.111
+boto3==1.43.114
 Pillow==12.3.0  # admin background-image upload: resize/recompress to a size budget before storing
 
 # Stay on 2.0.x: SQLAlchemy 2.1 makes a plain postgresql:// URL load psycopg3 (not installed), so
 # `alembic upgrade head` fails at startup. Move to 2.1 only with an explicit +psycopg2 URL, tested on Postgres.
-SQLAlchemy==2.0.49
+SQLAlchemy==2.0.55
 psycopg2-binary==2.9.13
 bcrypt==5.0.0
 python-jose[cryptography]==3.5.0
-pydantic-settings==2.15.0
+pydantic-settings==2.16.0
 email-validator==2.3.0
 alembic==1.20.0
 
