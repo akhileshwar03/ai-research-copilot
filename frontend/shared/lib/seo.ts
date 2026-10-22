@@ -14,14 +14,18 @@ export function pageMetadata({
   title,
   description,
   path,
+  noindex = false,
 }: {
   title: string;
   description: string;
   path: string;
+  /** For login-gated app screens: signed-out crawlers are redirected to /login, so they can't be indexed. */
+  noindex?: boolean;
 }): Metadata {
   return {
     title,
     description,
+    ...(noindex ? { robots: { index: false, follow: false } } : {}),
     alternates: { canonical: path },
     openGraph: { type: "website", siteName: "Querex", title, description, url: path },
     twitter: { card: "summary", title, description },

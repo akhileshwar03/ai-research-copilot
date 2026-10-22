@@ -14,3 +14,10 @@ describe("pageMetadata", () => {
     expect(m.openGraph).toMatchObject({ siteName: "Querex", type: "website", title: "T", description: "D" });
   });
 });
+
+describe("pageMetadata noindex", () => {
+  it("marks login-gated pages noindex, and leaves public pages indexable", () => {
+    expect(pageMetadata({ title: "T", description: "D", path: "/chat", noindex: true }).robots).toEqual({ index: false, follow: false });
+    expect(pageMetadata({ title: "T", description: "D", path: "/privacy" }).robots).toBeUndefined();
+  });
+});
