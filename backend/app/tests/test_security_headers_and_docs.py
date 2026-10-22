@@ -55,3 +55,11 @@ def test_placeholder_jwt_secret_is_tolerated_in_development_and_real_secrets_pas
     check_jwt_secret("change-me", is_development=True)  # local dev: warning only
     check_jwt_secret("a-long-random-production-secret-value", is_development=False)
     check_jwt_secret("short-but-real", is_development=False)  # length is not enforced
+
+
+def test_health_answers_head_as_well_as_get(client):
+    # Uptime monitors / keep-alive pingers probe with HEAD; a 405 counts as a failed check for them.
+    assert client.get("/health").status_code == 200
+    head = client.head("/health")
+    assert head.status_code == 200
+    assert head.content == b""

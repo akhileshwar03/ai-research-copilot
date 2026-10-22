@@ -426,7 +426,9 @@ async def root():
     return {"message": settings.app_name, "version": "v1", "docs": "/docs"}
 
 
-@app.get("/health")
+# HEAD too: uptime monitors and keep-alive pingers often probe with HEAD, and a 405 reads as a
+# failed check to them (seen in production logs 2026-10-22: HEAD /health -> 405).
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health(service: HealthService = Depends(get_health_service)):
     return service.health()
 
