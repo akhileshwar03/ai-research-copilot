@@ -1,8 +1,7 @@
 import Link from "next/link";
 
-import { NavProfileMenu } from "@/features/auth/components/nav-profile-menu";
-import { GithubNavLink } from "@/features/landing/github-nav-link";
-import { FooterCopyright, FooterStatusList, SupportEmailLink } from "@/features/landing/footer-dynamic";
+import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
+import { PRODUCTS } from "@/features/landing/products";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import {
   AICheckerDemoWidget,
@@ -13,65 +12,7 @@ import {
 import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
-import { BrandMark } from "@/features/shared/components/brand-mark";
 
-const PRODUCTS = [
-  {
-    name: "Research Copilot",
-    tagline: "Upload documents, ask questions, get page-cited answers.",
-    href: "/chat",
-    status: "Available now",
-    icon: "M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25",
-    accent: "#c5691f",
-    accentSoft: "#c5691f1f",
-    accentText: "#9a4d14",
-    glow: "rgba(197,105,31,0.26)",
-  },
-  {
-    name: "Humanizer",
-    tagline: "Rewrite AI-sounding text to read naturally — meaning and facts preserved.",
-    href: "/humanizer",
-    status: "Available now",
-    icon: "M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42",
-    accent: "#b6446a",
-    accentSoft: "#b6446a1f",
-    accentText: "#8f3453",
-    glow: "rgba(182,68,106,0.24)",
-  },
-  {
-    name: "AI Checker",
-    tagline: "Decisive AI-text detection plus free grammar and style feedback.",
-    href: "/checker",
-    status: "Available now",
-    icon: "M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
-    accent: "#1f7d6f",
-    accentSoft: "#1f7d6f1f",
-    accentText: "#145c51",
-    glow: "rgba(31,125,111,0.22)",
-  },
-  {
-    name: "Real-time AI",
-    tagline: "General chat grounded in live web search, with cited sources.",
-    href: "/realtime",
-    status: "Available now",
-    icon: "M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9",
-    accent: "#4457c9",
-    accentSoft: "#4457c91f",
-    accentText: "#33409e",
-    glow: "rgba(68,87,201,0.22)",
-  },
-  {
-    name: "Paper Analyzer",
-    tagline: "Scores your document's margins, spacing, font, and alignment against a style guide.",
-    href: "/paper-analyzer",
-    status: "Available now",
-    icon: "M9 4.5v15m6-15v15M4.5 9h15M4.5 15h15",
-    accent: "#7c4fb0",
-    accentSoft: "#7c4fb01f",
-    accentText: "#5f3a8a",
-    glow: "rgba(124,79,176,0.22)",
-  },
-];
 
 export default function LandingPage() {
   return (
@@ -80,34 +21,7 @@ export default function LandingPage() {
       <PageBackground page="landing" dynamic={<SiteBackground />} />
 
       <div className="relative z-10">
-      {/* ── Navigation: sticky, frosted ────────────────────────────────────── */}
-      <nav className="glass-bar sticky top-0 z-40 border-b">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <BrandMark />
-            <span className="font-headline text-[15px] font-bold tracking-tight">Querex</span>
-          </div>
-          <div className="hidden items-center gap-1 md:flex">
-            {PRODUCTS.map((product) => (
-              <Link
-                key={product.name}
-                href={product.href}
-                className="group flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900"
-              >
-                <span
-                  className="h-1.5 w-1.5 rounded-full opacity-70 transition group-hover:opacity-100"
-                  style={{ backgroundColor: product.accent }}
-                />
-                {product.name}
-              </Link>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            <GithubNavLink className="rounded-lg px-3.5 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900" />
-            <NavProfileMenu />
-          </div>
-        </div>
-      </nav>
+      <LandingNav />
 
       {/* ── Hero: asymmetric split with 3D demo ────────────────────────────── */}
       <section className="relative overflow-hidden">
@@ -624,102 +538,7 @@ export default function LandingPage() {
         </Reveal>
       </section>
 
-      {/* ── Footer ─────────────────────────────────────────────────────────── */}
-      <footer className="glass-bar border-t">
-        <div className="mx-auto max-w-7xl px-6 pt-14">
-          <div className="grid grid-cols-1 gap-12 pb-12 sm:grid-cols-2 lg:grid-cols-[1.2fr_0.9fr_0.9fr_0.9fr_0.9fr]">
-            {/* Brand */}
-            <div>
-              <div className="flex items-center gap-2.5">
-                <BrandMark />
-                <span className="font-headline text-[15px] font-bold tracking-tight text-zinc-900">Querex</span>
-              </div>
-              <p className="mt-4 max-w-xs text-[13.5px] leading-6 text-zinc-500">
-                One account, five AI tools for research and writing — grounded answers,
-                honest detection, and formatting you can verify, not just trust.
-              </p>
-              <div className="mt-5 flex items-center gap-3">
-                <GithubNavLink className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12.5px] font-medium text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900" />
-                <SupportEmailLink className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-[12.5px] font-medium text-zinc-600 shadow-sm transition hover:border-zinc-300 hover:text-zinc-900" />
-              </div>
-            </div>
-
-            {/* Products */}
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Products</p>
-              <ul className="mt-4 space-y-2.5">
-                {PRODUCTS.map((product) => (
-                  <li key={product.name}>
-                    <Link
-                      href={product.href}
-                      className="group flex items-center gap-2 text-[13.5px] text-zinc-600 transition hover:text-zinc-900"
-                    >
-                      <span
-                        className="h-1.5 w-1.5 shrink-0 rounded-full opacity-70 transition group-hover:opacity-100"
-                        style={{ backgroundColor: product.accent }}
-                      />
-                      {product.name}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Account */}
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Account</p>
-              <ul className="mt-4 space-y-2.5 text-[13.5px] text-zinc-600">
-                <li>
-                  <Link href="/chat" className="transition hover:text-zinc-900">
-                    Open workspace
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/register" className="transition hover:text-zinc-900">
-                    Create account
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/login" className="transition hover:text-zinc-900">
-                    Sign in
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Legal</p>
-              <ul className="mt-4 space-y-2.5 text-[13.5px] text-zinc-600">
-                <li>
-                  <Link href="/privacy" className="transition hover:text-zinc-900">
-                    Privacy Policy
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/terms" className="transition hover:text-zinc-900">
-                    Terms of Service
-                  </Link>
-                </li>
-              </ul>
-            </div>
-
-            {/* Status */}
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-zinc-400">Status</p>
-              <FooterStatusList products={PRODUCTS} />
-            </div>
-          </div>
-
-          <div className="flex flex-col items-center justify-between gap-4 border-t border-zinc-200/70 py-6 text-[12.5px] text-zinc-500 md:flex-row">
-            <FooterCopyright />
-            <span className="flex items-center gap-1.5 text-zinc-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              All systems operational
-            </span>
-          </div>
-        </div>
-      </footer>
+      <LandingFooter />
       </div>
     </main>
   );

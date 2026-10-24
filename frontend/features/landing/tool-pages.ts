@@ -9,9 +9,16 @@ export type ToolSlug = "chat" | "humanizer" | "checker";
 export interface ToolPageContent {
   slug: ToolSlug;
   path: string;
+  /** Must equal a PRODUCTS[].name: it picks the accent colour and the live demo. */
   name: string;
+  /** The single <h1>, shown in two parts so the second can be set in the italic accent style. */
   h1: string;
+  headline: { lead: string; emphasis: string };
+  /** Two short, true capability chips floated beside the live preview. */
+  chips: [string, string];
   intro: string;
+  features: { title: string; body: string; bullets: string[] };
+  cta: { title: string; body: string };
   steps: { title: string; body: string }[];
   example: {
     label: string;
@@ -27,7 +34,20 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     slug: "chat",
     path: "/chat",
     name: "Research Copilot",
-    h1: "Chat with your PDFs and get answers you can verify",
+    h1: "Chat with your PDFs and get answers you can verify.",
+    headline: { lead: "Chat with your PDFs", emphasis: "and get answers you can verify." },
+    chips: ["Streams in real time", "Page-level citations"],
+    features: {
+      title: "Every answer, traceable to a page.",
+      body: "Upload, ask, and every answer streams back with a page citation you can check. Choose exactly which documents a chat can read, or work across several at once.",
+      bullets: [
+        "Answers grounded in the documents you select",
+        "Page-level citations, with a built-in viewer that jumps to the page",
+        "One-click actions: Summarize, Key findings, Research report, Compare, References, Study questions",
+        "Streams live, token by token",
+      ],
+    },
+    cta: { title: "Stop guessing. Start verifying.", body: "Upload a PDF and ask your first question. You can have a cited answer in under a minute." },
     intro:
       "Upload research papers, reports or any PDF, then ask questions in plain language. Research Copilot retrieves the relevant passages and answers with page-level citations, so you can check every claim against the source.",
     steps: [
@@ -71,7 +91,19 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     slug: "humanizer",
     path: "/humanizer",
     name: "Humanizer",
-    h1: "Rewrite AI-sounding text so it reads naturally",
+    h1: "Rewrite AI-sounding text so it reads naturally.",
+    headline: { lead: "Rewrite AI-sounding text", emphasis: "so it reads naturally." },
+    chips: ["Word-level diff", "Streams live"],
+    features: {
+      title: "Sound human. Stay accurate.",
+      body: "Rewrite AI-sounding text so it reads naturally, with meaning and facts preserved. Built to make writing genuinely better, not to trick a detector: no invisible characters, no gimmicks, just better editing.",
+      bullets: [
+        "Natural, direct rewrites, built for blog posts, social copy and product writing",
+        "Word-diff transparency: see exactly which words changed",
+        "Streams live, token by token, with no waiting for the full rewrite",
+      ],
+    },
+    cta: { title: "Make it read like you wrote it.", body: "Paste a paragraph and see the rewrite, and every change, in seconds." },
     intro:
       "Paste text that sounds stiff or machine-written and get a rewrite with more natural phrasing and rhythm. A diff view shows exactly what changed, so you stay in control of the final wording.",
     steps: [
@@ -118,7 +150,20 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     slug: "checker",
     path: "/checker",
     name: "AI Checker",
-    h1: "Check whether text was written by AI, and see why",
+    h1: "Check whether text was written by AI, and see why.",
+    headline: { lead: "Check whether text was written by AI,", emphasis: "and see why." },
+    chips: ["Sentence-level highlights", "States its own confidence"],
+    features: {
+      title: "Decisive answers, not hedging.",
+      body: "Detect AI-generated text with sentence-level highlighting and a paragraph-by-paragraph breakdown, plus a free grammar and style pass bundled in. Every result carries an honest disclaimer, not false certainty.",
+      bullets: [
+        "Sentence-level highlighting of the exact flagged text",
+        "Advanced Scan: a paragraph-by-paragraph AI-probability breakdown",
+        "Free Writing Feedback: grammar, spelling and clarity issues",
+        "States its own false-positive risk instead of overclaiming",
+      ],
+    },
+    cta: { title: "Know what you are reading.", body: "Paste a passage or upload a PDF and see the verdict, the flagged sentences and the signals behind it." },
     intro:
       "Paste text or upload a PDF and get a probability that it is AI-generated, with sentence-level highlights and the writing signals behind the verdict, so the result is explainable rather than just a number.",
     steps: [

@@ -2,140 +2,336 @@
 
 import Link from "next/link";
 
-import { BrandMark } from "@/features/shared/components/brand-mark";
-import { PageBackground } from "@/features/shared/components/page-background";
+import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
+import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
+import { AICheckerDemoWidget, HumanizerDemoWidget } from "@/features/landing/product-demo-widgets";
+import { PRODUCTS, type Product } from "@/features/landing/products";
 import { SiteBackground } from "@/features/landing/site-background";
 import { TOOL_PAGES, type ToolSlug } from "@/features/landing/tool-pages";
+import { PageBackground } from "@/features/shared/components/page-background";
+import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
+
+const DEMOS: Record<ToolSlug, () => React.JSX.Element> = {
+  chat: LiveDemoWidget,
+  humanizer: HumanizerDemoWidget,
+  checker: AICheckerDemoWidget,
+};
+
+function Check({ product }: { product: Product }) {
+  return (
+    <span
+      className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+      style={{ backgroundColor: product.accentSoft, color: product.accentText }}
+    >
+      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+      </svg>
+    </span>
+  );
+}
 
 /**
- * What a signed-out visitor (and a crawler) sees at a tool's URL instead of being redirected to
- * /login. Plain semantic HTML on purpose: one h1, headings, a list, <details> for the FAQ.
+ * What a signed-out visitor (and a crawler) sees at a tool's URL instead of being redirected to /login.
+ * It reuses the homepage's own building blocks (nav, footer, live demo widgets, glass cards, accent
+ * colours) so the tool pages look like the rest of the site. Copy lives in tool-pages.ts; every claim
+ * there must match what the tool really does, and the example is a real run.
  */
 export function ToolLanding({ tool }: { tool: ToolSlug }) {
   const page = TOOL_PAGES[tool];
-  const others = Object.values(TOOL_PAGES).filter((p) => p.slug !== tool);
+  const product = PRODUCTS.find((p) => p.name === page.name) ?? PRODUCTS[0];
+  const Demo = DEMOS[tool];
+  const others = PRODUCTS.filter((p) => p.name !== page.name);
 
   return (
     <main className="marketing-light relative min-h-screen text-zinc-900">
       <PageBackground page="landing" dynamic={<SiteBackground />} />
 
       <div className="relative z-10">
-        <nav className="glass-bar sticky top-0 z-40 border-b">
-          <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <BrandMark />
-              <span className="font-headline text-[15px] font-bold tracking-tight">Querex</span>
-            </Link>
-            <Link
-              href="/login"
-              className="rounded-full bg-zinc-900 px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-zinc-700"
-            >
-              Sign in
-            </Link>
-          </div>
-        </nav>
+        <LandingNav active={page.name} />
 
-        <article className="mx-auto max-w-4xl px-6 py-14">
-          <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{page.name}</p>
-          <h1 className="font-headline mt-3 text-4xl font-bold leading-tight tracking-tight text-zinc-900 sm:text-5xl">
-            {page.h1}
-          </h1>
-          <p className="mt-5 max-w-2xl text-[16px] leading-7 text-zinc-600">{page.intro}</p>
+        {/* ── Hero: headline + live preview ─────────────────────────────────── */}
+        <section className="relative overflow-hidden">
+          <div className="hero-grid-floor pointer-events-none absolute inset-x-[-10%] bottom-0 h-[65%]" aria-hidden />
 
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <Link
-              href="/login"
-              className="rounded-full bg-zinc-900 px-6 py-3 text-[14px] font-semibold text-white transition hover:bg-zinc-700"
-            >
-              Sign in to use {page.name}
-            </Link>
-            <span className="text-[13px] text-zinc-500">Free to use. Sign in with Google, GitHub or email.</span>
-          </div>
-
-          <section className="mt-16" aria-labelledby="how-it-works">
-            <h2 id="how-it-works" className="font-headline text-2xl font-bold tracking-tight">
-              How it works
-            </h2>
-            <ol className="mt-6 grid gap-4 sm:grid-cols-3">
-              {page.steps.map((step, i) => (
-                <li key={step.title} className="rounded-2xl border border-zinc-200 bg-white/70 p-5">
-                  <span className="text-[12px] font-semibold text-zinc-400">Step {i + 1}</span>
-                  <h3 className="mt-1 text-[15px] font-semibold text-zinc-900">{step.title}</h3>
-                  <p className="mt-2 text-[14px] leading-6 text-zinc-600">{step.body}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section className="mt-16" aria-labelledby="example">
-            <h2 id="example" className="font-headline text-2xl font-bold tracking-tight">
-              {page.example.label}
-            </h2>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              {page.example.items.map((item) => (
-                <div key={item.heading} className="rounded-2xl border border-zinc-200 bg-white/70 p-5">
-                  <h3 className="text-[12px] font-semibold uppercase tracking-wide text-zinc-500">{item.heading}</h3>
-                  <p className="mt-2 text-[14.5px] leading-7 text-zinc-800">{item.body}</p>
+          <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-14 px-6 pb-24 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-20">
+            <div>
+              <Reveal>
+                <div
+                  className="inline-flex items-center gap-2 rounded-full border bg-white px-3.5 py-1.5 text-[13px] shadow-sm"
+                  style={{ borderColor: product.accentSoft, color: product.accentText }}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: product.accent }} />
+                  {page.name} · one of 5 Querex tools
                 </div>
-              ))}
-            </div>
-            <p className="mt-3 text-[13px] text-zinc-500">{page.example.note}</p>
-          </section>
+              </Reveal>
 
-          <section className="mt-16" aria-labelledby="good-to-know">
-            <h2 id="good-to-know" className="font-headline text-2xl font-bold tracking-tight">
-              Good to know
-            </h2>
-            <ul className="mt-5 list-disc space-y-2 pl-5 text-[14.5px] leading-7 text-zinc-600">
-              {page.goodToKnow.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </section>
+              <Reveal delay={80}>
+                <h1
+                  className="mt-7 text-5xl font-normal leading-[1.08] tracking-tight text-zinc-900 md:text-[3.5rem]"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {page.headline.lead}
+                  <br />
+                  <span className="italic text-zinc-400">{page.headline.emphasis}</span>
+                </h1>
+              </Reveal>
 
-          <section className="mt-16" aria-labelledby="faq">
-            <h2 id="faq" className="font-headline text-2xl font-bold tracking-tight">
-              Questions
-            </h2>
-            <div className="mt-5 divide-y divide-zinc-200 rounded-2xl border border-zinc-200 bg-white/70">
-              {page.faq.map((item) => (
-                <details key={item.q} className="group px-5 py-4" open>
-                  <summary className="cursor-pointer list-none text-[15px] font-semibold text-zinc-900">
-                    {item.q}
-                  </summary>
-                  <p className="mt-2 text-[14.5px] leading-7 text-zinc-600">{item.a}</p>
-                </details>
-              ))}
-            </div>
-          </section>
+              <Reveal delay={160}>
+                <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">{page.intro}</p>
+              </Reveal>
 
-          <section className="mt-16 rounded-2xl border border-zinc-200 bg-white/70 p-6">
-            <h2 className="font-headline text-xl font-bold tracking-tight">More from Querex</h2>
-            <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-[14px]">
-              {others.map((o) => (
-                <li key={o.slug}>
-                  <Link href={o.path} className="font-medium text-zinc-900 underline underline-offset-4">
-                    {o.name}
+              <Reveal delay={240}>
+                <div className="mt-9 flex flex-wrap items-center gap-3">
+                  <Link
+                    href="/login"
+                    className="rounded-xl bg-zinc-900 px-7 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-zinc-900/25 transition hover:-translate-y-0.5 hover:bg-zinc-700 hover:shadow-xl"
+                  >
+                    Sign in to use {page.name}
                   </Link>
-                </li>
-              ))}
-              <li>
-                <Link href="/" className="font-medium text-zinc-900 underline underline-offset-4">
-                  All tools
-                </Link>
-              </li>
-            </ul>
-          </section>
+                  <a
+                    href="#how-it-works"
+                    className="rounded-xl border border-zinc-300 bg-white px-7 py-3.5 text-[15px] font-medium text-zinc-800 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md"
+                  >
+                    See how it works
+                  </a>
+                </div>
+                <p className="mt-5 text-[12px] text-zinc-400">Free to use · sign in with Google, GitHub, or email</p>
+              </Reveal>
+            </div>
 
-          <footer className="mt-12 flex gap-5 text-[13px] text-zinc-500">
-            <Link href="/privacy" className="hover:text-zinc-900">
-              Privacy
-            </Link>
-            <Link href="/terms" className="hover:text-zinc-900">
-              Terms
-            </Link>
-          </footer>
-        </article>
+            <Reveal delay={200}>
+              <div className="relative flex justify-center lg:justify-end" style={{ perspective: "1100px" }}>
+                <div
+                  className="glass-card animate-float-slower absolute -left-10 top-2 z-0 hidden rotate-[-6deg] px-3.5 py-2.5 lg:block"
+                  aria-hidden
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] font-medium" style={{ color: product.accentText }}>
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: product.accent }} />
+                    {page.chips[0]}
+                  </div>
+                </div>
+                <div
+                  className="glass-card animate-float-slow absolute -bottom-12 right-6 z-20 hidden rotate-[5deg] px-3.5 py-2.5 lg:block"
+                  aria-hidden
+                >
+                  <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-100 text-emerald-600">
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </span>
+                    {page.chips[1]}
+                  </div>
+                </div>
+
+                <Tilt3D className="relative z-10 w-full max-w-[440px]">
+                  <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-zinc-400 lg:text-right">
+                    {page.name}, live preview
+                  </p>
+                  <Demo />
+                </Tilt3D>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ── How it works ─────────────────────────────────────────────────── */}
+        <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-8 pt-8" aria-labelledby="how-heading">
+          <Reveal>
+            <div className="text-center">
+              <h2 id="how-heading" className="font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                How it works
+              </h2>
+              <p className="mx-auto mt-3 max-w-lg text-[14px] leading-7 text-zinc-500">
+                Three steps from a blank page to a result you can check.
+              </p>
+            </div>
+          </Reveal>
+          <div className="mt-10 grid gap-4 sm:grid-cols-3">
+            {page.steps.map((step, i) => (
+              <Reveal key={step.title} delay={i * 80}>
+                <div className="glass-card relative h-full overflow-hidden p-6">
+                  <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[14px] font-bold"
+                    style={{ backgroundColor: product.accentSoft, color: product.accentText }}
+                  >
+                    {i + 1}
+                  </span>
+                  <h3 className="mt-5 text-[15.5px] font-semibold tracking-tight text-zinc-900">{step.title}</h3>
+                  <p className="mt-2 text-[13.5px] leading-6 text-zinc-600">{step.body}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ── Features + a real example ────────────────────────────────────── */}
+        <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20" aria-labelledby="feature-heading">
+          <div
+            className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+            style={{ background: `radial-gradient(55% 90% at 85% 50%, ${product.glow}, transparent 70%)` }}
+            aria-hidden
+          />
+          <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
+            <Reveal>
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: product.accentText }}>
+                  {page.name}
+                </p>
+                <h2 id="feature-heading" className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                  {page.features.title}
+                </h2>
+                <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">{page.features.body}</p>
+                <ul className="mt-6 space-y-3">
+                  {page.features.bullets.map((line) => (
+                    <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                      <Check product={product} />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  href="/login"
+                  className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                  style={{ backgroundColor: product.accent, boxShadow: `0 10px 25px -8px ${product.glow}` }}
+                >
+                  Try {page.name}
+                </Link>
+              </div>
+            </Reveal>
+
+            <Reveal delay={120}>
+              <figure className="glass-card relative overflow-hidden p-6">
+                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
+                <figcaption className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: product.accentText }}>
+                  {page.example.label}
+                </figcaption>
+                <div className="mt-4 space-y-3">
+                  {page.example.items.map((item) => (
+                    <div key={item.heading} className="rounded-xl border border-zinc-200/80 bg-white/80 p-4">
+                      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{item.heading}</h3>
+                      <p className="mt-1.5 text-[13.5px] leading-6 text-zinc-800">{item.body}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-[12.5px] leading-5 text-zinc-500">{page.example.note}</p>
+              </figure>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ── Good to know + FAQ ───────────────────────────────────────────── */}
+        <section className="mx-auto max-w-7xl px-6 pb-20" aria-labelledby="know-heading">
+          <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+            <Reveal>
+              <div className="glass-card relative h-full overflow-hidden p-7">
+                <div className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: product.accent }} aria-hidden />
+                <h2 id="know-heading" className="font-headline text-xl font-bold tracking-tight text-zinc-900">
+                  Good to know
+                </h2>
+                <ul className="mt-5 space-y-3.5">
+                  {page.goodToKnow.map((line) => (
+                    <li key={line} className="flex items-start gap-2.5 text-[13.5px] leading-6 text-zinc-700">
+                      <span
+                        className="mt-1 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+                        style={{ backgroundColor: product.accentSoft, color: product.accentText }}
+                        aria-hidden
+                      >
+                        i
+                      </span>
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Reveal>
+
+            <Reveal delay={100}>
+              <div className="glass-card h-full divide-y divide-zinc-200/70 overflow-hidden">
+                <h2 className="px-7 pb-4 pt-7 font-headline text-xl font-bold tracking-tight text-zinc-900">Questions</h2>
+                {page.faq.map((item, i) => (
+                  <details key={item.q} className="group px-7 py-4" open={i === 0}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[14.5px] font-semibold text-zinc-900">
+                      {item.q}
+                      <svg
+                        className="h-4 w-4 shrink-0 text-zinc-400 transition group-open:rotate-180"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        aria-hidden
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </summary>
+                    <p className="mt-2.5 text-[13.5px] leading-6 text-zinc-600">{item.a}</p>
+                  </details>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ── Closing call to action ───────────────────────────────────────── */}
+        <section className="mx-auto max-w-7xl px-6 pb-20">
+          <Reveal>
+            <div className="relative overflow-hidden rounded-3xl bg-zinc-900/75 px-8 py-14 text-center shadow-[0_28px_60px_-18px_rgba(15,23,42,0.45)] backdrop-blur-sm md:px-12">
+              <div
+                className="pointer-events-none absolute inset-0"
+                style={{ background: `radial-gradient(500px 260px at 50% 0%, ${product.glow}, transparent 70%)` }}
+                aria-hidden
+              />
+              <h2 className="font-headline relative text-3xl font-bold tracking-tight text-white">{page.cta.title}</h2>
+              <p className="relative mx-auto mt-3 max-w-md text-[14px] leading-7 text-zinc-300">{page.cta.body}</p>
+              <div className="relative mt-8">
+                <Link
+                  href="/login"
+                  className="inline-block rounded-xl bg-white px-8 py-3.5 text-[15px] font-semibold text-zinc-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-zinc-100"
+                >
+                  Sign in to use {page.name}
+                </Link>
+              </div>
+            </div>
+          </Reveal>
+        </section>
+
+        {/* ── The rest of the suite ────────────────────────────────────────── */}
+        <section className="mx-auto max-w-7xl px-6 pb-24" aria-labelledby="more-heading">
+          <Reveal>
+            <div className="text-center">
+              <h2 id="more-heading" className="font-headline text-2xl font-bold tracking-tight text-zinc-900">
+                More from Querex
+              </h2>
+              <p className="mx-auto mt-2 max-w-lg text-[13.5px] leading-6 text-zinc-500">
+                Five tools, one account.
+              </p>
+            </div>
+          </Reveal>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {others.map((p, i) => (
+              <Reveal key={p.name} delay={i * 70}>
+                <Link href={p.href} className="block h-full">
+                  <div className="glass-card group relative h-full overflow-hidden p-6 transition-all duration-300 hover:-translate-y-1">
+                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: p.accent }} aria-hidden />
+                    <div
+                      className="flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110"
+                      style={{ backgroundColor: p.accentSoft, color: p.accentText }}
+                    >
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d={p.icon} />
+                      </svg>
+                    </div>
+                    <h3 className="mt-5 text-[15.5px] font-semibold tracking-tight text-zinc-900">{p.name}</h3>
+                    <p className="mt-2 text-[13px] leading-6 text-zinc-600">{p.tagline}</p>
+                  </div>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        <LandingFooter />
       </div>
     </main>
   );
