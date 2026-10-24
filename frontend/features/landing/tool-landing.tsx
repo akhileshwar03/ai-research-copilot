@@ -17,7 +17,10 @@ const DEMOS: Record<ToolSlug, () => React.JSX.Element> = {
   checker: AICheckerDemoWidget,
 };
 
-function Check({ product }: { product: Product }) {
+/** The purple the app uses for the trained model (Ultra Human), so the two engines read as distinct. */
+const ULTRA_TONE = { accent: "#7c4fb0", accentSoft: "#7c4fb01f", accentText: "#5f3a8a", glow: "rgba(124,79,176,0.22)" };
+
+function Check({ product }: { product: Pick<Product, "accentSoft" | "accentText"> }) {
   return (
     <span
       className="mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
@@ -220,6 +223,56 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
             </Reveal>
           </div>
         </section>
+
+        {/* ── Two engines (only pages that define them) ───────────────────── */}
+        {page.engines && (
+          <section className="relative mx-auto max-w-7xl px-6 pb-20" aria-labelledby="engines-heading">
+            <Reveal>
+              <div className="text-center">
+                <h2 id="engines-heading" className="font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                  {page.engines.title}
+                </h2>
+                <p className="mx-auto mt-3 max-w-2xl text-[14px] leading-7 text-zinc-500">{page.engines.body}</p>
+              </div>
+            </Reveal>
+            <div className="mt-10 grid gap-5 md:grid-cols-2">
+              {page.engines.items.map((engine, i) => {
+                const tone = engine.tone === "purple" ? ULTRA_TONE : product;
+                return (
+                  <Reveal key={engine.name} delay={i * 100}>
+                    <article className="glass-card relative h-full overflow-hidden p-7">
+                      <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: tone.accent }} aria-hidden />
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: tone.accentText }}>
+                          {engine.kind}
+                        </p>
+                        <span
+                          className={[
+                            "rounded-full px-2.5 py-0.5 text-[10.5px] font-medium",
+                            engine.statusTone === "live" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800",
+                          ].join(" ")}
+                        >
+                          {engine.status}
+                        </span>
+                      </div>
+                      <h3 className="mt-3 font-headline text-2xl font-bold tracking-tight text-zinc-900">{engine.name}</h3>
+                      <p className="mt-3 text-[14px] leading-7 text-zinc-600">{engine.summary}</p>
+                      <ul className="mt-5 space-y-3">
+                        {engine.points.map((point) => (
+                          <li key={point} className="flex items-start gap-2.5 text-[13.5px] leading-6 text-zinc-700">
+                            <Check product={tone} />
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </article>
+                  </Reveal>
+                );
+              })}
+            </div>
+            <p className="mx-auto mt-6 max-w-2xl text-center text-[12.5px] leading-5 text-zinc-500">{page.engines.note}</p>
+          </section>
+        )}
 
         {/* ── Good to know + FAQ ───────────────────────────────────────────── */}
         <section className="mx-auto max-w-7xl px-6 pb-20" aria-labelledby="know-heading">

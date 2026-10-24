@@ -2,7 +2,7 @@ import { pageMetadata } from "@/shared/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Humanizer — Rewrite AI-sounding text | Querex",
-  description: "Rewrite AI-sounding text so it reads naturally, with a diff view that shows exactly what changed.",
+  description: "Rewrite AI-sounding text with two engines: Basic, a prompt-engineered pipeline, and Ultra, a purpose-trained model (rolling out). A word-level diff shows exactly what changed.",
   path: "/humanizer",
 });
 

@@ -289,6 +289,7 @@ export default function LandingPage() {
                   "Natural, direct rewrites — built for blog posts, social copy, and product writing",
                   "Word-diff transparency — see exactly which words changed",
                   "Streams live, token by token, no waiting for the full rewrite",
+                  "Two engines: Basic, a prompt-engineered pipeline, and Ultra, a purpose-trained model (rolling out)",
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
                     <span

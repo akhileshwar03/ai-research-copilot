@@ -39,6 +39,18 @@ describe("public tool landing content", () => {
     }
   });
 
+  it("describes the Humanizer's two engines, with an honest status for each", () => {
+    const engines = TOOL_PAGES.humanizer.engines;
+    expect(engines?.items.map((e) => e.name)).toEqual(["Basic", "Ultra"]);
+    expect(engines?.items[0].kind).toMatch(/prompt/i);
+    expect(engines?.items[1].kind).toMatch(/trained/i);
+    for (const e of engines?.items ?? []) {
+      expect(e.status.length).toBeGreaterThan(0);
+      expect(e.points.length).toBeGreaterThanOrEqual(3);
+    }
+    expect(engines?.note).toMatch(/review the output/i);
+  });
+
   it("never promises to beat AI detectors or guarantees accuracy", () => {
     const text = JSON.stringify(TOOL_PAGES).toLowerCase();
     for (const banned of ["undetectable", "100% accurate", "bypass", "guarantee"]) {

@@ -18,6 +18,22 @@ export interface ToolPageContent {
   chips: [string, string];
   intro: string;
   features: { title: string; body: string; bullets: string[] };
+  /** Optional "two engines" comparison (the Humanizer has Basic and Ultra). */
+  engines?: {
+    title: string;
+    body: string;
+    items: {
+      name: string;
+      kind: string;
+      /** Shown as a badge. Keep it true: update it when Ultra's availability changes. */
+      status: string;
+      statusTone: "live" | "rolling";
+      tone: "product" | "purple";
+      summary: string;
+      points: string[];
+    }[];
+    note: string;
+  };
   cta: { title: string; body: string };
   steps: { title: string; body: string }[];
   example: {
@@ -103,6 +119,41 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
         "Streams live, token by token, with no waiting for the full rewrite",
       ],
     },
+    engines: {
+      title: "Two engines. Choose the right one.",
+      body: "Humanizer offers two distinct approaches to rewriting: a prompt-engineered pipeline for speed and control, and a purpose-trained model for a different, more natural cadence.",
+      items: [
+        {
+          name: "Basic",
+          kind: "Prompt-engineered",
+          status: "Available now",
+          statusTone: "live",
+          tone: "product",
+          summary:
+            "A multi-pass prompting pipeline on a state-of-the-art language model. It analyses your text, rewrites it under strict meaning-preservation rules, then verifies the result and selectively retries any passage that drifts from your source.",
+          points: [
+            "Streams live, token by token",
+            "Final pass checked by Querex's own AI Checker, with one regeneration if it still reads as machine-written",
+            "Word-level diff against your original",
+          ],
+        },
+        {
+          name: "Ultra",
+          kind: "Purpose-trained model",
+          status: "Rolling out",
+          statusTone: "rolling",
+          tone: "purple",
+          summary:
+            "A dedicated language model fine-tuned for rewriting, rather than a general-purpose model steered by prompts. It is trained with LoRA on a curated corpus of human-written text that pre-dates generative AI, which gives it a different sentence rhythm and word choice.",
+          points: [
+            "Fine-tuned for one job, on curated and cleaned training data",
+            "Output guards reject rewrites that run away from the source, and resample",
+            "Slower by design: it works through your text in chunks",
+          ],
+        },
+      ],
+      note: "Ultra is being released gradually. When it is unavailable the app says so, and Basic keeps working. Both modes can make mistakes, so review the output before you use it.",
+    },
     cta: { title: "Make it read like you wrote it.", body: "Paste a paragraph and see the rewrite, and every change, in seconds." },
     intro:
       "Paste text that sounds stiff or machine-written and get a rewrite with more natural phrasing and rhythm. A diff view shows exactly what changed, so you stay in control of the final wording.",
@@ -112,7 +163,7 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
       { title: "Review the changes", body: "Compare the result with your original in the diff view, then copy what you want." },
     ],
     example: {
-      label: "Example, a real run of the tool",
+      label: "Example, a real run of the Basic engine",
       items: [
         {
           heading: "Before",
@@ -128,12 +179,17 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     goodToKnow: [
       "Review the output before you use it. The tool does not verify factual accuracy.",
       "Very short text is hard to judge for any reader or detector, so a minimum length applies.",
+      "Ultra runs a dedicated model, so it is slower than Basic by design. Basic is the fast, always-available option.",
       "It rewrites your wording; it does not promise that any particular AI detector will pass the result.",
     ],
     faq: [
       {
         q: "Will it change my meaning?",
         a: "It is designed to keep your facts and claims and change only phrasing. Always read the result and use the diff view to check.",
+      },
+      {
+        q: "What is the difference between Basic and Ultra?",
+        a: "Basic is a prompt-engineered pipeline: a general-purpose model guided through analysis, rewriting and verification passes. Ultra is a purpose-trained model, fine-tuned specifically for rewriting. Basic is faster; Ultra is slower and is being rolled out gradually.",
       },
       {
         q: "Can I see what it changed?",
