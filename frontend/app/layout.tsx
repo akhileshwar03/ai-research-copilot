@@ -57,7 +57,7 @@ const spaceMono = Space_Mono({
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://www.querex.app";
 const SITE_TITLE = "Querex — AI Tools for Research & Writing";
 const SITE_DESCRIPTION =
-  "Ask your documents with page-cited answers, rewrite AI-sounding text, detect AI-generated content, and search the live web — four AI tools, one account.";
+  "Ask your documents with page-cited answers, rewrite AI-sounding text, detect AI-generated content, search the live web and check a paper's formatting — five AI tools, one account.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

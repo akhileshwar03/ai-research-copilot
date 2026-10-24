@@ -2,6 +2,9 @@ import Link from "next/link";
 
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { PRODUCTS } from "@/features/landing/products";
+import { HeroCta } from "@/features/landing/hero-cta";
+import { HERO_SUBHEAD, SHOWS_ITS_WORK } from "@/features/landing/hero-content";
+import { HeroPreview } from "@/features/landing/hero-preview";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import {
   AICheckerDemoWidget,
@@ -9,7 +12,7 @@ import {
   PaperAnalyzerDemoWidget,
   RealtimeDemoWidget,
 } from "@/features/landing/product-demo-widgets";
-import { Reveal, Tilt3D } from "@/features/shared/motion/motion";
+import { Reveal } from "@/features/shared/motion/motion";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
 
@@ -23,15 +26,11 @@ export default function LandingPage() {
       <div className="relative z-10">
       <LandingNav />
 
-      {/* ── Hero: asymmetric split with 3D demo ────────────────────────────── */}
+      {/* ── Hero: suite-level headline + a user-controlled preview of all five tools ── */}
       <section className="relative overflow-hidden">
-        {/* Perspective floor — the ground the demo card sits on; the rest of
-            the page's depth (grid texture, orbs, particles) is SiteBackground,
-            fixed behind the whole scroll. */}
         <div className="hero-grid-floor pointer-events-none absolute inset-x-[-10%] bottom-0 h-[65%]" aria-hidden />
 
-        <div className="relative mx-auto grid grid-cols-1 max-w-7xl gap-14 px-6 pb-28 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
-          {/* Left: headline + CTA */}
+        <div className="relative mx-auto grid grid-cols-1 max-w-7xl gap-14 px-6 pb-20 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
           <div>
             <Reveal>
               <div
@@ -48,37 +47,26 @@ export default function LandingPage() {
                 className="mt-7 text-5xl font-normal leading-[1.08] tracking-tight text-zinc-900 md:text-[3.75rem]"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                Ask your documents.
+                Five AI tools for
                 <br />
-                <span className="italic text-zinc-400">Get answers</span> you
+                research and writing.
                 <br />
-                can verify.
+                <span className="italic text-zinc-400">One account.</span>
               </h1>
             </Reveal>
 
             <Reveal delay={160}>
-              <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">
-                Upload research papers and reports, then have a conversation with them.
-                Querex retrieves the relevant passages and answers with page-level
-                citations — grounded, streamed, and traceable. It&apos;s also home to a
-                Humanizer, an AI Checker, Real-time web search, and a Paper Analyzer, all
-                under one login.
-              </p>
+              <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">{HERO_SUBHEAD}</p>
             </Reveal>
 
             <Reveal delay={240}>
               <div className="mt-9 flex flex-wrap items-center gap-3">
-                <Link
-                  href="/chat"
-                  className="rounded-xl bg-zinc-900 px-7 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-zinc-900/25 transition hover:-translate-y-0.5 hover:bg-zinc-700 hover:shadow-xl"
-                >
-                  Open workspace
-                </Link>
+                <HeroCta className="rounded-xl bg-zinc-900 px-7 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-zinc-900/25 transition hover:-translate-y-0.5 hover:bg-zinc-700 hover:shadow-xl" />
                 <a
                   href="#products"
                   className="rounded-xl border border-zinc-300 bg-white px-7 py-3.5 text-[15px] font-medium text-zinc-800 shadow-sm transition hover:-translate-y-0.5 hover:border-zinc-400 hover:shadow-md"
                 >
-                  See all 5 tools
+                  See the five tools
                 </a>
               </div>
               <p className="mt-5 text-[12px] text-zinc-400">
@@ -87,52 +75,39 @@ export default function LandingPage() {
             </Reveal>
           </div>
 
-          {/* Right: the product with real depth — tilt + floating layers */}
           <Reveal delay={200}>
-            <div className="relative flex justify-center lg:justify-end" style={{ perspective: "1100px" }}>
-              {/* Floating capability card, behind-left */}
-              <div
-                className="glass-card animate-float-slower absolute -left-10 top-2 z-0 hidden rotate-[-6deg] px-3.5 py-2.5 lg:block"
-                aria-hidden
-              >
-                <div
-                  className="flex items-center gap-1.5 text-[11px] font-medium"
-                  style={{ color: "var(--marketing-accent-text)" }}
-                >
-                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                  </svg>
-                  Streams in real time
-                </div>
-              </div>
-
-              {/* Floating ingestion card, below-right — the column has zero
-                  slack on the right (flush via justify-end), so this sits
-                  below the card's bottom edge instead of beside it. */}
-              <div
-                className="glass-card animate-float-slow absolute -bottom-12 right-6 z-20 hidden rotate-[5deg] px-3.5 py-2.5 lg:block"
-                aria-hidden
-              >
-                <div className="flex items-center gap-2 text-[11px] font-medium text-zinc-500">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-100 text-emerald-600">
-                    <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  </span>
-                  Q3-Report.pdf indexed
-                </div>
-              </div>
-
-              {/* The demo itself, tilting toward the cursor */}
-              <Tilt3D className="relative z-10 w-full max-w-[440px]">
-                <p className="mb-2 text-center text-[11px] font-semibold uppercase tracking-widest text-zinc-400 lg:text-right">
-                  Research Copilot, live preview
-                </p>
-                <LiveDemoWidget />
-              </Tilt3D>
-            </div>
+            <HeroPreview />
           </Reveal>
         </div>
+      </section>
+
+      {/* ── Every tool shows its work: verifiable facts instead of invented social proof ── */}
+      <section className="mx-auto max-w-7xl px-6 pb-4" aria-labelledby="shows-its-work">
+        <Reveal>
+          <div className="glass-card px-6 py-7 md:px-9">
+            <h2 id="shows-its-work" className="text-center text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
+              Every tool shows its work
+            </h2>
+            <ul className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-5">
+              {SHOWS_ITS_WORK.map((item) => {
+                const product = PRODUCTS.find((p) => p.name === item.tool);
+                return (
+                  <li key={item.tool} className="flex items-start gap-2.5">
+                    <span
+                      className="mt-1.5 h-2 w-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: product?.accent }}
+                      aria-hidden
+                    />
+                    <div>
+                      <p className="text-[13px] font-semibold text-zinc-900">{item.tool}</p>
+                      <p className="mt-0.5 text-[12.5px] leading-5 text-zinc-600">{item.fact}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </Reveal>
       </section>
 
       {/* ── Products: the whole suite, front and center ──────────────────────── */}
@@ -149,7 +124,7 @@ export default function LandingPage() {
           </div>
         </Reveal>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {PRODUCTS.map((product, i) => {
             const available = Boolean(product.href);
             const card = (
@@ -198,66 +173,63 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Research Copilot recap: compact, since the hero already proved it ── */}
-      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 pb-4 pt-16">
+      {/* ── Research Copilot: mockup left, text right (same weight as the other four) ── */}
+      <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20">
         <div
-          className="pointer-events-none absolute -inset-x-6 -inset-y-4 -z-10 rounded-[2.5rem] blur-3xl"
-          style={{ background: `radial-gradient(60% 100% at 15% 50%, ${PRODUCTS[0].glow}, transparent 70%)` }}
+          className="pointer-events-none absolute -inset-x-6 -inset-y-10 -z-10 rounded-[3rem] blur-3xl"
+          style={{ background: `radial-gradient(55% 90% at 15% 50%, ${PRODUCTS[0].glow}, transparent 70%)` }}
           aria-hidden
         />
-        <Reveal>
-          <div className="glass-card relative overflow-hidden px-8 py-10 md:px-12">
-            <div className="absolute inset-y-0 left-0 hidden w-1.5 md:block" style={{ backgroundColor: PRODUCTS[0].accent }} aria-hidden />
-            <div className="flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-              <div className="max-w-md">
-                <p
-                  className="text-[11px] font-semibold uppercase tracking-widest"
-                  style={{ color: PRODUCTS[0].accentText }}
-                >
-                  The flagship tool
-                </p>
-                <h2 className="mt-2 font-headline text-2xl font-bold tracking-tight text-zinc-900">
-                  Research Copilot
-                </h2>
-                <p className="mt-3 text-[14px] leading-7 text-zinc-500">
-                  The original Querex product, and still the most capable — upload,
-                  ask, and every answer streams back with a page citation you can check.
-                </p>
-                <Link
-                  href="/chat"
-                  className="mt-5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold"
-                  style={{ color: PRODUCTS[0].accentText }}
-                >
-                  Open Research Copilot
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-                  </svg>
-                </Link>
-              </div>
+        <div className="grid grid-cols-1 items-center gap-12 md:grid-cols-2">
+          <Reveal className="order-2 md:order-1">
+            <LiveDemoWidget />
+          </Reveal>
 
-              <div className="grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4 md:max-w-md">
+          <Reveal delay={120} className="order-1 md:order-2">
+            <div>
+              <p
+                className="text-[11px] font-semibold uppercase tracking-widest"
+                style={{ color: PRODUCTS[0].accentText }}
+              >
+                Research Copilot
+              </p>
+              <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                Every answer, traceable to a page.
+              </h2>
+              <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
+                Upload research papers and reports, then ask questions in plain language.
+                Answers stream back with page-level citations you can check against the
+                source, from one document or several at once.
+              </p>
+              <ul className="mt-6 space-y-3">
                 {[
-                  { label: "Grounded in your sources", icon: "M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" },
-                  { label: "Page-level citations", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-                  { label: "Real-time streaming", icon: "M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" },
-                  { label: "Multi-document synthesis", icon: "M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 0v10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" },
-                ].map((pillar) => (
-                  <div key={pillar.label} className="flex items-start gap-2.5">
-                    <div
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  "Answers grounded in the documents you select",
+                  "Page-level citations, with a built-in viewer that jumps to the page",
+                  "One-click actions: Summarize, Key findings, Compare, References, Study questions",
+                ].map((line) => (
+                  <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
+                    <span
+                      className="mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full"
                       style={{ backgroundColor: PRODUCTS[0].accentSoft, color: PRODUCTS[0].accentText }}
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d={pillar.icon} />
+                      <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
-                    </div>
-                    <p className="text-[12.5px] font-medium leading-5 text-zinc-700">{pillar.label}</p>
-                  </div>
+                    </span>
+                    {line}
+                  </li>
                 ))}
-              </div>
+              </ul>
+              <Link
+                href="/chat"
+                className="mt-7 inline-block rounded-xl px-6 py-3 text-[14px] font-semibold text-white shadow-md transition hover:-translate-y-0.5"
+                style={{ backgroundColor: PRODUCTS[0].accent, boxShadow: `0 10px 25px -8px ${PRODUCTS[0].glow}` }}
+              >
+                Try Research Copilot
+              </Link>
             </div>
-          </div>
-        </Reveal>
+          </Reveal>
+        </div>
       </section>
 
       {/* ── Humanizer: text left, mockup right ───────────────────────────────── */}
@@ -528,12 +500,7 @@ export default function LandingPage() {
               result in under a minute.
             </p>
             <div className="relative mt-8">
-              <Link
-                href="/chat"
-                className="inline-block rounded-xl bg-white px-8 py-3.5 text-[15px] font-semibold text-zinc-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-zinc-100"
-              >
-                Open workspace
-              </Link>
+              <HeroCta className="inline-block rounded-xl bg-white px-8 py-3.5 text-[15px] font-semibold text-zinc-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-zinc-100" />
             </div>
           </div>
         </Reveal>
