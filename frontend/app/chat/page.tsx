@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 
 import ChatWindow from "@/features/chat/components/chat-window";
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { ToolLanding } from "@/features/landing/tool-landing";
 import { useAuthStore } from "@/stores/auth-store";
 import { useDocumentStore } from "@/stores/document-store";
 import { useSessionStore } from "@/stores/session-store";
@@ -68,7 +69,7 @@ function DocumentPreviewBody({
 }
 
 export default function ChatPage() {
-  const { isReady, isAuthenticated } = useAuthGuard();
+  const { isReady, isAuthenticated } = useAuthGuard({ redirect: false });
   const email = useAuthStore((s) => s.email);
   const selectedDocument = useDocumentStore((s) => s.selectedDocument);
   const setSelectedDocument = useDocumentStore((s) => s.setSelectedDocument);
@@ -141,7 +142,11 @@ export default function ChatPage() {
     uploadRef.current?.click();
   }, []);
 
-  if (!isReady || !isAuthenticated) {
+  if (isReady && !isAuthenticated) {
+    return <ToolLanding tool="chat" />;
+  }
+
+  if (!isReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
         <div className="flex flex-col items-center gap-3">

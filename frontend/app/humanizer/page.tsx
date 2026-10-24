@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { ToolLanding } from "@/features/landing/tool-landing";
 import { useHumanizeStream } from "@/features/humanizer/hooks/use-humanize-stream";
 import { useHumanizerHistory } from "@/features/humanizer/hooks/use-humanizer-history";
 import { DiffOutput } from "@/features/humanizer/components/diff-output";
@@ -111,7 +112,7 @@ function wordCount(text: string): number {
 }
 
 export default function HumanizerPage() {
-  const { isReady, isAuthenticated } = useAuthGuard();
+  const { isReady, isAuthenticated } = useAuthGuard({ redirect: false });
   const { stream, isStreaming } = useHumanizeStream();
   // One-shot handoff from AI Checker's "Apply humanization?" card. Read in
   // the state initializer (this page only renders its form client-side,
@@ -169,7 +170,11 @@ export default function HumanizerPage() {
     return () => clearInterval(interval);
   }, [ultraStatus]);
 
-  if (!isReady || !isAuthenticated) {
+  if (isReady && !isAuthenticated) {
+    return <ToolLanding tool="humanizer" />;
+  }
+
+  if (!isReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
         <div

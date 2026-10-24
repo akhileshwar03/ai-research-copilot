@@ -6,6 +6,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
+import { ToolLanding } from "@/features/landing/tool-landing";
 import { useAppConfig } from "@/features/shared/hooks/use-app-config";
 import { oversizeMessage } from "@/shared/lib/upload-limits";
 import { setHumanizerPrefill } from "@/shared/lib/humanizer-handoff";
@@ -248,7 +249,7 @@ function IdleRail() {
 
 export default function CheckerPage() {
   const router = useRouter();
-  const { isReady, isAuthenticated } = useAuthGuard();
+  const { isReady, isAuthenticated } = useAuthGuard({ redirect: false });
   const { config } = useAppConfig();
   const [mode, setMode] = useState<Mode>("detect");
   const [tab, setTab] = useState<"text" | "document">("text");
@@ -270,7 +271,11 @@ export default function CheckerPage() {
     onError: (err) => toast.error(err instanceof Error ? err.message : "Check failed"),
   });
 
-  if (!isReady || !isAuthenticated) {
+  if (isReady && !isAuthenticated) {
+    return <ToolLanding tool="checker" />;
+  }
+
+  if (!isReady) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
         <div
