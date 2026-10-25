@@ -1357,10 +1357,15 @@ def test_alerts_require_authentication(client):
 # UsageEvent.is_real_error's docstring. These pin that it's excluded everywhere an error RATE or
 # alert is computed, while still being honestly visible in the raw audit log.
 
-def _seed_401s(tool: str, count: int, status_code: int = 401):
+def _seed_401s(tool: str, count: int, status_code: int = 401, *, now=None):
     from datetime import datetime, timedelta, timezone
 
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    # "5 minutes ago", but never earlier than the start of today's UTC day. The alert tests only need the
+    # last hour, but the date-bound analytics test queries "today": a plain now - 5min lands on YESTERDAY
+    # when the suite runs within 5 minutes after 00:00 UTC (real CI failure, 2026-10-25 00:04 UTC: 33 != 37).
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    created_at = max(now - timedelta(minutes=5), day_start)
     with TestingSessionLocal() as db:
         for _ in range(count):
             db.add(
@@ -1371,10 +1376,24 @@ def _seed_401s(tool: str, count: int, status_code: int = 401):
                     ok=False,
                     duration_ms=5,
                     request_id="401-test",
-                    created_at=now - timedelta(minutes=5),
+                    created_at=created_at,
                 )
             )
         db.commit()
+
+
+def test_seed_helper_stays_on_todays_utc_day_just_after_midnight(client):
+    # Regression: the CI run that failed started at 00:04 UTC.
+    from datetime import datetime
+
+    with TestingSessionLocal() as db:
+        db.query(UsageEvent).delete()
+        db.commit()
+    just_after_midnight = datetime(2026, 10, 25, 0, 4, 37)
+    _seed_401s("research_copilot", 4, now=just_after_midnight)
+    with TestingSessionLocal() as db:
+        days = {e.created_at.date() for e in db.query(UsageEvent).all()}
+    assert days == {just_after_midnight.date()}
 
 
 def test_401_only_traffic_never_triggers_the_error_rate_alert(client, admin_headers):
