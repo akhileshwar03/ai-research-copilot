@@ -106,6 +106,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {/* Runs before React hydrates — prevents light/dark flash on reload (FOUC fix) */}
+        <noscript>
+          <style>{"[data-reveal]{opacity:1!important;transform:none!important}"}</style>
+        </noscript>
         <Script id="theme-init" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <AppProviders>{children}</AppProviders>
       </body>

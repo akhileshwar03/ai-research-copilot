@@ -696,3 +696,27 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
     font-weight: 700 !important;
   }
 }
+
+/* ── Above-the-fold entrance: visible by default, animated by CSS only ───────── */
+/* `both` holds the `from` state during the delay and releases to the element's natural (visible) state
+   afterwards, so if the animation never runs the content is simply there. */
+@keyframes reveal-rise {
+  from { opacity: 0; transform: translateY(24px); }
+}
+.reveal-above {
+  animation: reveal-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal-above { animation: none; }
+}
+
+/* ── Pause control for the self-playing demos (see features/landing/demo-motion.tsx) ── */
+[data-demo-motion="paused"] .animate-spin,
+[data-demo-motion="paused"] .animate-pulse,
+[data-demo-motion="paused"] .demo-glow,
+[data-demo-motion="paused"] .demo-scan-line,
+[data-demo-motion="paused"] .demo-sheen::after,
+[data-demo-motion="paused"] .animate-float-slow,
+[data-demo-motion="paused"] .animate-float-slower {
+  animation-play-state: paused !important;
+}

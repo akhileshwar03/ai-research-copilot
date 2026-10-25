@@ -148,17 +148,27 @@ export function Glare({
   );
 }
 
-/** Fade-and-rise scroll reveal via IntersectionObserver. */
+/**
+ * Fade-and-rise reveal.
+ *
+ * Below the fold it waits for the block to scroll into view (IntersectionObserver). Above the fold, pass
+ * `above`: the block is then visible from the first paint and the entrance is a pure CSS animation
+ * (`.reveal-above`), so JavaScript can never leave the headline invisible and the hero is not held back
+ * until hydration. Without JavaScript, blocks that wait for scroll are forced visible by the <noscript>
+ * rule in the root layout (they carry `data-reveal`).
+ */
 export function Reveal({
   children,
   delay = 0,
   className = "",
-}: { children: React.ReactNode; delay?: number; className?: string }) {
+  above = false,
+}: { children: React.ReactNode; delay?: number; className?: string; above?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   const reduced = usePrefersReducedMotion();
 
   useEffect(() => {
+    if (above) return;
     const el = ref.current;
     if (!el) return;
     const observer = new IntersectionObserver(
@@ -172,13 +182,22 @@ export function Reveal({
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [above]);
+
+  if (above) {
+    return (
+      <div className={`reveal-above ${className}`.trim()} style={{ animationDelay: `${delay}ms` }}>
+        {children}
+      </div>
+    );
+  }
 
   const shown = visible || reduced;
 
   return (
     <div
       ref={ref}
+      data-reveal
       className={className}
       style={{
         opacity: shown ? 1 : 0,

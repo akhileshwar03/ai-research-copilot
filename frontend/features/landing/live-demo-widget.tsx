@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useDemoPaused } from "@/features/landing/demo-motion";
+
 /**
  * Silent, looping recreation of the real product flow — but showing the whole
  * grounded pipeline, not just a question and answer:
@@ -79,6 +81,7 @@ export function LiveDemoWidget() {
   const [wordCount, setWordCount] = useState(0);
   const [phase, setPhase] = useState<Phase>("retrieving");
   const reducedMotion = useRef(false);
+  const paused = useDemoPaused();
 
   useEffect(() => {
     reducedMotion.current = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -89,8 +92,8 @@ export function LiveDemoWidget() {
   const words = script.answer.split(" ");
 
   useEffect(() => {
-    if (reducedMotion.current) {
-      setWordCount(words.length);
+    if (paused) {
+      if (reducedMotion.current) setWordCount(words.length);
       return;
     }
 
@@ -119,7 +122,7 @@ export function LiveDemoWidget() {
 
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, wordCount, scriptIndex]);
+  }, [phase, wordCount, scriptIndex, paused]);
 
   const visibleAnswer = words.slice(0, wordCount).join(" ");
   const isRetrieving = phase === "retrieving";

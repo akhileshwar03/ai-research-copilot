@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { PRODUCTS } from "@/features/landing/products";
+import { DemoMotionProvider } from "@/features/landing/demo-motion";
 import { HeroCta } from "@/features/landing/hero-cta";
 import { HERO_SUBHEAD, SHOWS_ITS_WORK } from "@/features/landing/hero-content";
 import { HeroPreview } from "@/features/landing/hero-preview";
@@ -19,6 +20,7 @@ import { PageBackground } from "@/features/shared/components/page-background";
 
 export default function LandingPage() {
   return (
+    <DemoMotionProvider>
     <main className="marketing-light relative min-h-screen text-zinc-900">
       {/* Persistent 3D atmosphere — fixed, spans the entire scroll, not just the hero */}
       <PageBackground page="landing" dynamic={<SiteBackground />} />
@@ -32,7 +34,7 @@ export default function LandingPage() {
 
         <div className="relative mx-auto grid grid-cols-1 max-w-7xl gap-14 px-6 pb-20 pt-16 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-24">
           <div>
-            <Reveal>
+            <Reveal above>
               <div
                 className="inline-flex items-center gap-2 rounded-full border bg-white px-3.5 py-1.5 text-[13px] shadow-sm"
                 style={{ borderColor: "var(--marketing-accent-soft)", color: "var(--marketing-accent-text)" }}
@@ -42,7 +44,7 @@ export default function LandingPage() {
               </div>
             </Reveal>
 
-            <Reveal delay={80}>
+            <Reveal above delay={80}>
               <h1
                 className="mt-7 text-5xl font-normal leading-[1.08] tracking-tight text-zinc-900 md:text-[3.75rem]"
                 style={{ fontFamily: "var(--font-display)" }}
@@ -55,11 +57,11 @@ export default function LandingPage() {
               </h1>
             </Reveal>
 
-            <Reveal delay={160}>
+            <Reveal above delay={160}>
               <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">{HERO_SUBHEAD}</p>
             </Reveal>
 
-            <Reveal delay={240}>
+            <Reveal above delay={240}>
               <div className="mt-9 flex flex-wrap items-center gap-3">
                 <HeroCta className="rounded-xl bg-zinc-900 px-7 py-3.5 text-[15px] font-semibold text-white shadow-lg shadow-zinc-900/25 transition hover:-translate-y-0.5 hover:bg-zinc-700 hover:shadow-xl" />
                 <a
@@ -75,7 +77,7 @@ export default function LandingPage() {
             </Reveal>
           </div>
 
-          <Reveal delay={200}>
+          <Reveal above delay={200}>
             <HeroPreview />
           </Reveal>
         </div>
@@ -509,5 +511,6 @@ export default function LandingPage() {
       <LandingFooter />
       </div>
     </main>
+    </DemoMotionProvider>
   );
 }

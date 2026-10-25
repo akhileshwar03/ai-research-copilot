@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { DemoMotionProvider } from "@/features/landing/demo-motion";
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
 import { AICheckerDemoWidget, HumanizerDemoWidget } from "@/features/landing/product-demo-widgets";
@@ -46,6 +47,7 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
   const others = PRODUCTS.filter((p) => p.name !== page.name);
 
   return (
+    <DemoMotionProvider>
     <main className="marketing-light relative min-h-screen text-zinc-900">
       <PageBackground page="landing" dynamic={<SiteBackground />} />
 
@@ -58,7 +60,7 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
 
           <div className="relative mx-auto grid max-w-7xl grid-cols-1 gap-14 px-6 pb-24 pt-14 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:pt-20">
             <div>
-              <Reveal>
+              <Reveal above>
                 <div
                   className="inline-flex items-center gap-2 rounded-full border bg-white px-3.5 py-1.5 text-[13px] shadow-sm"
                   style={{ borderColor: product.accentSoft, color: product.accentText }}
@@ -68,7 +70,7 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
                 </div>
               </Reveal>
 
-              <Reveal delay={80}>
+              <Reveal above delay={80}>
                 <h1
                   className="mt-7 text-5xl font-normal leading-[1.08] tracking-tight text-zinc-900 md:text-[3.5rem]"
                   style={{ fontFamily: "var(--font-display)" }}
@@ -79,11 +81,11 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
                 </h1>
               </Reveal>
 
-              <Reveal delay={160}>
+              <Reveal above delay={160}>
                 <p className="mt-7 max-w-lg text-[16px] leading-8 text-zinc-600">{page.intro}</p>
               </Reveal>
 
-              <Reveal delay={240}>
+              <Reveal above delay={240}>
                 <div className="mt-9 flex flex-wrap items-center gap-3">
                   <Link
                     href="/login"
@@ -102,7 +104,7 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
               </Reveal>
             </div>
 
-            <Reveal delay={200}>
+            <Reveal above delay={200}>
               <div className="relative flex justify-center lg:justify-end" style={{ perspective: "1100px" }}>
                 <div
                   className="glass-card animate-float-slower absolute -left-10 top-2 z-0 hidden rotate-[-6deg] px-3.5 py-2.5 lg:block"
@@ -387,5 +389,6 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
         <LandingFooter />
       </div>
     </main>
+    </DemoMotionProvider>
   );
 }

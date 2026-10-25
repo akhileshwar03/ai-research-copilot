@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+
+import { useDemoPaused } from "@/features/landing/demo-motion";
 
 /**
  * Four looping, honest, labelled illustrations of each remaining product's
@@ -28,14 +30,6 @@ function DotsHeader({ children }: { children: React.ReactNode }) {
 
 function prefersReducedMotion() {
   return typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-function useReducedMotion() {
-  const reduced = useRef(false);
-  useEffect(() => {
-    reduced.current = prefersReducedMotion();
-  }, []);
-  return reduced;
 }
 
 // ─── Humanizer ──────────────────────────────────────────────────────────────
@@ -85,11 +79,11 @@ type HumanizerPhase = "showing" | "rewriting" | "revealed";
 export function HumanizerDemoWidget() {
   const [i, setI] = useState(0);
   const [phase, setPhase] = useState<HumanizerPhase>(() => (prefersReducedMotion() ? "revealed" : "showing"));
-  const reduced = useReducedMotion();
+  const paused = useDemoPaused();
   const script = HUMANIZER_SCRIPTS[i];
 
   useEffect(() => {
-    if (reduced.current) return;
+    if (paused) return;
     const t =
       phase === "showing"
         ? setTimeout(() => setPhase("rewriting"), 1400)
@@ -100,7 +94,7 @@ export function HumanizerDemoWidget() {
               setI((n) => (n + 1) % HUMANIZER_SCRIPTS.length);
             }, 3200);
     return () => clearTimeout(t);
-  }, [phase, reduced]);
+  }, [phase, paused]);
 
   const accentSoft = "#b6446a1f";
   const accentText = "#8f3453";
@@ -257,12 +251,12 @@ export function AICheckerDemoWidget() {
   const [i, setI] = useState(0);
   const [phase, setPhase] = useState<CheckerPhase>(() => (prefersReducedMotion() ? "revealed" : "scanning"));
   const [dial, setDial] = useState(() => (prefersReducedMotion() ? CHECKER_SCRIPTS[0].percent : 0));
-  const reduced = useReducedMotion();
+  const paused = useDemoPaused();
   const script = CHECKER_SCRIPTS[i];
   const colors = TONE_COLORS[script.tone];
 
   useEffect(() => {
-    if (reduced.current) return;
+    if (paused) return;
     if (phase === "scanning") {
       const t = setTimeout(() => setPhase("revealed"), 1300);
       return () => clearTimeout(t);
@@ -273,14 +267,14 @@ export function AICheckerDemoWidget() {
       setI((n) => (n + 1) % CHECKER_SCRIPTS.length);
     }, 3200);
     return () => clearTimeout(t);
-  }, [phase, reduced]);
+  }, [phase, paused]);
 
   useEffect(() => {
-    if (phase !== "revealed" || reduced.current) return;
+    if (phase !== "revealed" || paused) return;
     if (dial >= script.percent) return;
     const t = setTimeout(() => setDial((d) => Math.min(script.percent, d + 2)), 14);
     return () => clearTimeout(t);
-  }, [phase, dial, script.percent, reduced]);
+  }, [phase, dial, script.percent, paused]);
 
   const circumference = 2 * Math.PI * 42;
 
@@ -395,12 +389,12 @@ export function RealtimeDemoWidget() {
     prefersReducedMotion() ? REALTIME_SCRIPTS[0].answer.split(" ").length : 0,
   );
   const [phase, setPhase] = useState<RealtimePhase>(() => (prefersReducedMotion() ? "cited" : "searching"));
-  const reduced = useReducedMotion();
+  const paused = useDemoPaused();
   const script = REALTIME_SCRIPTS[i];
   const words = script.answer.split(" ");
 
   useEffect(() => {
-    if (reduced.current) return;
+    if (paused) return;
     let t: ReturnType<typeof setTimeout>;
     if (phase === "searching") {
       t = setTimeout(() => {
@@ -422,7 +416,7 @@ export function RealtimeDemoWidget() {
     }
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, wordCount, reduced]);
+  }, [phase, wordCount, paused]);
 
   const visibleAnswer = words.slice(0, wordCount).join(" ");
   const isSearching = phase === "searching";
@@ -577,11 +571,11 @@ export function PaperAnalyzerDemoWidget() {
   const [phase, setPhase] = useState<PaperPhase>(() => (prefersReducedMotion() ? "revealed" : "scanning"));
   const [dial, setDial] = useState(() => (prefersReducedMotion() ? PAPER_SCRIPTS[0].score : 0));
   const [rowsShown, setRowsShown] = useState(() => (prefersReducedMotion() ? PAPER_SCRIPTS[0].rows.length : 0));
-  const reduced = useReducedMotion();
+  const paused = useDemoPaused();
   const script = PAPER_SCRIPTS[i];
 
   useEffect(() => {
-    if (reduced.current) return;
+    if (paused) return;
     if (phase === "scanning") {
       const t = setTimeout(() => setPhase("checking"), 900);
       return () => clearTimeout(t);
@@ -602,14 +596,14 @@ export function PaperAnalyzerDemoWidget() {
     }, 3000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, rowsShown, reduced]);
+  }, [phase, rowsShown, paused]);
 
   useEffect(() => {
-    if (phase !== "revealed" || reduced.current) return;
+    if (phase !== "revealed" || paused) return;
     if (dial >= script.score) return;
     const t = setTimeout(() => setDial((d) => Math.min(script.score, d + 2)), 12);
     return () => clearTimeout(t);
-  }, [phase, dial, script.score, reduced]);
+  }, [phase, dial, script.score, paused]);
 
   const circumference = 2 * Math.PI * 42;
   const accent = "#7c4fb0";
