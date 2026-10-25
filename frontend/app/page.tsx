@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { PRODUCTS } from "@/features/landing/products";
 import { DemoMotionProvider } from "@/features/landing/demo-motion";
+import { FounderNote } from "@/features/landing/founder-card";
 import { HeroCta } from "@/features/landing/hero-cta";
 import { HERO_SUBHEAD, SHOWS_ITS_WORK } from "@/features/landing/hero-content";
 import { HeroPreview } from "@/features/landing/hero-preview";
@@ -473,6 +474,9 @@ export default function LandingPage() {
           </Reveal>
         </div>
       </section>
+
+      {/* ── Founder note: renders nothing unless the founder has published it (Settings → Founder) ── */}
+      <FounderNote />
 
       {/* ── Closing CTA ────────────────────────────────────────────────────── */}
       <section className="mx-auto max-w-7xl px-6 pb-28">

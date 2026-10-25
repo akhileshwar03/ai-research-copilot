@@ -8,6 +8,7 @@ Numeric limits and everything else stay admin-only.
 """
 
 import mimetypes
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
@@ -25,6 +26,7 @@ router = APIRouter(prefix="/app", tags=["app"])
 
 _BG_IMAGE_KEY_PREFIX = "_bg_image_"
 _LOGO_IMAGE_KEY = "_logo_image_"
+_FOUNDER_PHOTO_KEY = "_founder_photo_"
 
 
 class BackgroundConfig(BaseModel):
@@ -51,6 +53,21 @@ class PublicAppConfig(BaseModel):
 
 class LegalContent(BaseModel):
     content: str
+
+
+class FounderLink(BaseModel):
+    kind: Literal["linkedin", "github", "x", "website"]
+    label: str
+    url: str
+
+
+class FounderPublic(BaseModel):
+    enabled: bool
+    name: str
+    title: str
+    note: str
+    photo_url: str | None
+    links: list[FounderLink]
 
 
 @router.get("/config", response_model=PublicAppConfig)
@@ -143,3 +160,56 @@ def public_logo(db: Session = Depends(get_db)):
     content = get_storage_service().read(row.value)
     content_type = mimetypes.guess_type(row.value)[0] or "application/octet-stream"
     return Response(content=content, media_type=content_type, headers={"Cache-Control": "public, max-age=3600"})
+
+
+# ── Founder note ──────────────────────────────────────────────────────────────
+# 2026-10-25: strictly opt-in. The section is only ever published when the admin switched it on AND
+# entered a name and a note; otherwise this returns enabled=false with every field empty, so nothing
+# (not even an uploaded photo) leaks while the section is off or half-finished.
+_FOUNDER_LINKS = (
+    ("founder_linkedin_url", "linkedin", "LinkedIn"),
+    ("founder_github_url", "github", "GitHub"),
+    ("founder_x_url", "x", "X"),
+    ("founder_website_url", "website", "Website"),
+)
+
+
+def _founder_publishable() -> bool:
+    return bool(
+        runtime_settings.get("founder_section_enabled")
+        and str(runtime_settings.get("founder_name") or "").strip()
+        and str(runtime_settings.get("founder_note") or "").strip()
+    )
+
+
+@router.get("/founder", response_model=FounderPublic)
+def public_founder(response: Response, db: Session = Depends(get_db)):
+    response.headers["Cache-Control"] = "public, max-age=60"
+    if not _founder_publishable():
+        return FounderPublic(enabled=False, name="", title="", note="", photo_url=None, links=[])
+
+    photo_row = db.get(AppSetting, _FOUNDER_PHOTO_KEY)
+    return FounderPublic(
+        enabled=True,
+        name=str(runtime_settings.get("founder_name")),
+        title=str(runtime_settings.get("founder_title") or ""),
+        note=str(runtime_settings.get("founder_note")),
+        photo_url=f"/app/founder/photo?v={photo_row.value.rsplit('/', 1)[-1]}" if photo_row else None,
+        links=[
+            FounderLink(kind=kind, label=label, url=str(runtime_settings.get(key)))
+            for key, kind, label in _FOUNDER_LINKS
+            if str(runtime_settings.get(key) or "").strip()
+        ],
+    )
+
+
+@router.get("/founder/photo")
+def public_founder_photo(db: Session = Depends(get_db)):
+    """The photo is served only while the section is actually published (an uploaded photo for a switched-off
+    section is not public). Same streaming pattern as the logo; the key is versioned per upload."""
+    row = db.get(AppSetting, _FOUNDER_PHOTO_KEY)
+    if not row or not _founder_publishable():
+        raise AppError(code="NOT_FOUND", message="No founder photo", status_code=404)
+    content = get_storage_service().read(row.value)
+    # Five minutes, not the logo's hour: this one can be un-published, and a cached copy outlives that.
+    return Response(content=content, media_type="image/webp", headers={"Cache-Control": "public, max-age=300"})

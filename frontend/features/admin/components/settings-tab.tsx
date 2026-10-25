@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { adminApi, type AdminSetting, type SettingValue } from "@/services/api/admin-api";
+import { FounderSettings } from "@/features/admin/components/founder-settings";
 import { Button, INPUT_CLASS, SectionCard, Toggle } from "@/features/admin/components/shared";
 import { buildApiUrl } from "@/constants/config";
 import { type BackgroundPage, useAppConfig } from "@/features/shared/hooks/use-app-config";
@@ -500,6 +501,7 @@ export function SettingsTab() {
   const groups = useMemo(() => {
     const byCategory = new Map<string, { label: string; items: AdminSetting[] }>();
     for (const s of settings ?? []) {
+      if (s.category === "founder") continue; // edited in the dedicated Founder section below
       const entry = byCategory.get(s.category) ?? { label: s.category_label, items: [] };
       entry.items.push(s);
       byCategory.set(s.category, entry);
@@ -727,6 +729,11 @@ export function SettingsTab() {
         >
           <LogoUploadControl />
         </SectionCard>
+      )}
+
+      {/* Founder note (dedicated form: own save button, photo upload and live preview) */}
+      {settings && (selectedCategory === "all" || selectedCategory === "founder") && !searchFilter && (
+        <FounderSettings settings={settings} />
       )}
 
       {/* Categorized Settings Groups */}

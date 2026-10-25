@@ -465,6 +465,18 @@ export const adminApi = {
 
   deleteLogo: () => apiRequest<{ message: string }>("/admin/logo", { method: "DELETE" }),
 
+  /** Founder note photo: square-cropped, metadata-stripped and re-encoded by the server. */
+  uploadFounderPhoto: (file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return apiRequest<{ photo_url: string; bytes: number }>("/admin/founder/photo", { method: "POST", body });
+  },
+
+  deleteFounderPhoto: () => apiRequest<{ message: string }>("/admin/founder/photo", { method: "DELETE" }),
+
+  /** Authenticated read for the editor's preview; works while the section is still switched off. */
+  founderPhoto: (): Promise<Blob> => apiRequest<Blob>("/admin/founder/photo", { responseType: "blob" }),
+
   auditLog: (params: { skip?: number; limit?: number; action?: string } = {}) =>
     apiRequest<AuditLogResponse>(`/admin/audit-log${qs({ skip: params.skip ?? 0, limit: params.limit ?? 50, action: params.action })}`),
 

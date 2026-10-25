@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError
+from app.core.founder_links import FOUNDER_LINK_RULES, validate_founder_link
 from app.db.models.app_setting import AppSetting
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,31 @@ def _defs() -> dict[str, SettingDef]:
         "terms_of_service_content": SettingDef(
             str, 0, 20000, "Terms of Service page body (plain text, paragraphs separated by blank lines)", "legal"
         ),
+        # ── Founder ─────────────────────────────────────────────────────────
+        # 2026-10-25: a founder note on the public homepage. Everything here is the founder's own,
+        # hand-entered information: nothing is generated or pre-filled, the section stays hidden until it is
+        # switched on AND has a name and a note, and the photo is a separate upload (see admin/settings.py).
+        # The four links are strictly validated (core/founder_links.py) because they render as public links.
+        "founder_section_enabled": _bool_setting(
+            "Show the founder note on the public homepage (needs a name and a note to appear).", "founder"
+        ),
+        "founder_name": SettingDef(str, 0, 80, "Founder's name, as it should appear publicly", "founder"),
+        "founder_title": SettingDef(
+            str, 0, 120, "Role line under the name, e.g. \"Founder, Querex\" (empty = hidden)", "founder"
+        ),
+        "founder_note": SettingDef(
+            str, 0, 3000, "The note itself (plain text; a blank line starts a new paragraph)", "founder"
+        ),
+        "founder_linkedin_url": SettingDef(
+            str, 0, 200, "LinkedIn profile URL, https://linkedin.com/in/... (empty = hidden)", "founder"
+        ),
+        "founder_github_url": SettingDef(
+            str, 0, 200, "GitHub profile URL, https://github.com/... (empty = hidden)", "founder"
+        ),
+        "founder_x_url": SettingDef(str, 0, 200, "X (Twitter) profile URL, https://x.com/... (empty = hidden)", "founder"),
+        "founder_website_url": SettingDef(
+            str, 0, 200, "Personal website URL, https://... (empty = hidden)", "founder"
+        ),
     }
 
 
@@ -388,6 +414,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "extract": "Text extraction",
     "paper_analyzer": "Paper Analyzer",
     "legal": "Legal & contact",
+    "founder": "Founder",
 }
 
 
@@ -451,6 +478,17 @@ def _env_defaults() -> dict[str, SettingValue]:
         "legal_entity_name": "Querex",
         "privacy_policy_content": _DEFAULT_PRIVACY_POLICY,
         "terms_of_service_content": _DEFAULT_TERMS_OF_SERVICE,
+        # Founder: nothing is pre-filled and the section is off. A placeholder name or invented bio
+        # would be exactly the fabricated authorship Google and users penalise; only the founder
+        # can supply the real thing.
+        "founder_section_enabled": False,
+        "founder_name": "",
+        "founder_title": "",
+        "founder_note": "",
+        "founder_linkedin_url": "",
+        "founder_github_url": "",
+        "founder_x_url": "",
+        "founder_website_url": "",
     }
 
 
@@ -483,6 +521,8 @@ def _coerce(key: str, d: SettingDef, value) -> SettingValue:
                 message=f"{key} must be at most {int(d.max)} characters",
                 status_code=400,
             )
+        if key in FOUNDER_LINK_RULES:
+            return validate_founder_link(key, text)
         if d.choices is not None and text not in d.choices:
             raise AppError(
                 code="INVALID_SETTING_VALUE",

@@ -5,15 +5,18 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
 from PIL import Image
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.auth import require_admin
 from app.core.exceptions import AppError
+from app.core.uploads import read_upload_limited, require_image_matching
 from app.db.models.app_setting import AppSetting
 from app.db.models.user import User
 from app.db.session import get_db
 from app.services.admin_audit import record_admin_action
+from app.services.founder_photo import process_founder_photo
 from app.services.runtime_settings import BACKGROUND_PAGES, CATEGORY_LABELS, describe_settings, runtime_settings
 from app.services.storage_service import get_storage_service
 from app.api.routes.admin._common import (
@@ -295,3 +298,74 @@ def delete_logo(admin: User = Depends(require_admin), db: Session = Depends(get_
     return MessageResponse(message="Logo removed — the default mark is shown again")
 
 
+
+
+# ── Founder photo ─────────────────────────────────────────────────────────────
+# 2026-10-25: same bookkeeping-row pattern as the logo, but with the hardened upload handling (bounded
+# read, magic-byte check) and a re-encode that strips EXIF metadata (see services/founder_photo.py).
+# GET /app/founder/photo (app_config.py) serves it publicly, and only while the section is published;
+# the admin preview reads it through the authenticated GET below.
+_FOUNDER_PHOTO_KEY = "_founder_photo_"
+_FOUNDER_PHOTO_MAX_BYTES = 8 * 1024 * 1024
+_FOUNDER_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
+
+@router.post("/founder/photo")
+async def upload_founder_photo(
+    file: UploadFile = File(...),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    content_type = file.content_type or ""
+    if content_type not in _FOUNDER_PHOTO_TYPES:
+        raise AppError(code="INVALID_FILE_TYPE", message="Only JPEG, PNG, or WebP images are allowed", status_code=400)
+    content = await read_upload_limited(file, _FOUNDER_PHOTO_MAX_BYTES, "Photo exceeds the 8 MB limit")
+    require_image_matching(content, content_type)
+    processed = process_founder_photo(content)
+
+    storage = get_storage_service()
+    row = db.get(AppSetting, _FOUNDER_PHOTO_KEY)
+    previous_stored_key = row.value if row else None
+
+    stored_key = f"branding/founder-{uuid.uuid4()}.webp"
+    storage.save(stored_key, processed)
+    if row:
+        row.value = stored_key
+    else:
+        db.add(AppSetting(key=_FOUNDER_PHOTO_KEY, value=stored_key))
+    db.commit()
+
+    if previous_stored_key:
+        try:
+            storage.delete(previous_stored_key)
+        except Exception:
+            logger.warning("founder_photo_cleanup_failed key=%s", previous_stored_key, exc_info=True)
+
+    record_admin_action(db, admin_email=admin.email, action="founder.photo.upload")
+    return {"photo_url": f"/app/founder/photo?v={stored_key.rsplit('/', 1)[-1]}", "bytes": len(processed)}
+
+
+@router.get("/founder/photo")
+def preview_founder_photo(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Authenticated read for the admin form's preview, which works even while the section is switched off."""
+    row = db.get(AppSetting, _FOUNDER_PHOTO_KEY)
+    if not row:
+        raise AppError(code="NOT_FOUND", message="No founder photo has been uploaded", status_code=404)
+    return Response(
+        content=get_storage_service().read(row.value), media_type="image/webp", headers={"Cache-Control": "no-store"}
+    )
+
+
+@router.delete("/founder/photo")
+def delete_founder_photo(admin: User = Depends(require_admin), db: Session = Depends(get_db)):
+    row = db.get(AppSetting, _FOUNDER_PHOTO_KEY)
+    if not row:
+        raise AppError(code="NOT_FOUND", message="No founder photo has been uploaded", status_code=404)
+    try:
+        get_storage_service().delete(row.value)
+    except Exception:
+        logger.warning("founder_photo_delete_failed key=%s", row.value, exc_info=True)
+    db.delete(row)
+    db.commit()
+    record_admin_action(db, admin_email=admin.email, action="founder.photo.delete")
+    return MessageResponse(message="Founder photo removed")
