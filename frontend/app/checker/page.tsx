@@ -19,7 +19,6 @@ import { CheckerBackground } from "@/features/checker/components/checker-backgro
 import { ErrorPanel } from "@/features/checker/components/error-panel";
 import { HowToRead } from "@/features/checker/components/how-to-read";
 import { ProgressNote } from "@/features/checker/components/progress-note";
-import { ReadingRail } from "@/features/checker/components/reading-rail";
 import { ReportBand } from "@/features/checker/components/report-band";
 import { ResultSkeleton } from "@/features/checker/components/result-skeleton";
 import { ImportControls } from "@/features/shared/components/import-controls";
@@ -159,40 +158,27 @@ export default function CheckerPage() {
 
   return (
     <MainLayout background={<PageBackground page="checker" dynamic={<CheckerBackground />} />}>
-      <div className="relative h-full overflow-y-auto px-6 py-8">
-        <div className="relative z-10 mx-auto max-w-6xl space-y-6">
-          <header className="glass-card flex flex-wrap items-end justify-between gap-x-8 gap-y-4 rounded-2xl px-6 py-5">
-            <div>
-              <h1 className="font-headline text-[30px] font-bold leading-none tracking-tight text-[var(--text-primary)]">
-                AI Checker
-              </h1>
-              <p className="mt-3 max-w-xl text-[14.5px] leading-relaxed text-zinc-300">
-                Find out whether a text was written by a person, an AI, or both, and see which sentences led to the answer.
-              </p>
-            </div>
-            <ul className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px] text-zinc-400" aria-label="What you get">
-              {["Three clear answers", "Every sentence coloured", "Limits stated, not hidden"].map((item) => (
-                <li key={item} className="flex items-center gap-1.5">
-                  <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="var(--marketing-accent-text)" strokeWidth={2.5} aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                  </svg>
-                  {item}
-                </li>
-              ))}
-            </ul>
+      <div className="relative h-full overflow-y-auto px-4 py-6 md:px-6">
+        <div className="relative z-10 mx-auto max-w-6xl space-y-4">
+          <header>
+            <h1 className="font-headline text-[22px] font-bold leading-tight tracking-tight text-[var(--text-primary)]">AI Checker</h1>
+            <p className="mt-1 text-[14px] text-zinc-300">
+              See whether a text reads as human-written, AI-written or a mix, sentence by sentence.
+            </p>
           </header>
 
           {showReport && result ? (
-            <div ref={reportRef} className="scroll-mt-4 space-y-5" aria-live="polite">
-              <ReportBand result={result} onEdit={() => setIsEditing(true)} onReset={reset} onHumanize={handoff} />
-              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-                <AnnotatedDocument result={result} />
-                <ReadingRail result={result} />
+            <div ref={reportRef} className="scroll-mt-4 space-y-4" aria-live="polite">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="order-last min-w-0 lg:order-first">
+                  <AnnotatedDocument result={result} source={check.variables} />
+                </div>
+                <ReportBand result={result} onEdit={() => setIsEditing(true)} onReset={reset} onHumanize={handoff} />
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-              <section aria-label="Text to check" className="glass-card rounded-2xl p-5">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+              <section aria-label="Text to check" className="glass-card rounded-xl p-4">
                 <div role="tablist" aria-label="Input method" className="mb-4 flex gap-1 rounded-lg border border-[var(--border-subtle)] p-1">
                   {TABS.map((t) => (
                     <button
@@ -234,7 +220,7 @@ export default function CheckerPage() {
                       }}
                       placeholder="Paste the text you want to check…"
                       aria-describedby="checker-text-hint"
-                      className="font-reading min-h-[240px] w-full resize-y rounded-lg border border-[var(--border-subtle)] bg-transparent p-4 text-[16px] leading-[1.75] text-[var(--text-primary)] outline-none focus-accent placeholder:text-zinc-400 md:min-h-[360px]"
+                      className="font-reading weight-normal min-h-[220px] w-full resize-y rounded-lg border border-[var(--border-subtle)] bg-transparent p-3.5 text-[15px] leading-[1.7] text-[var(--text-primary)] outline-none focus-accent placeholder:text-zinc-400 md:min-h-[300px]"
                     />
                     <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-[var(--surface-3)]" aria-hidden>
                       <div
@@ -287,7 +273,7 @@ export default function CheckerPage() {
                         type="button"
                         onClick={() => run(text)}
                         disabled={!canRun}
-                        className="rounded-lg px-6 py-2.5 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="rounded-md px-5 py-2 text-[14px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ backgroundColor: "var(--marketing-accent)" }}
                       >
                         {check.isPending ? "Checking…" : "Check text"}
@@ -308,7 +294,7 @@ export default function CheckerPage() {
                       }}
                     />
                     {extract.isPending ? (
-                      <div className="flex min-h-[240px] flex-col justify-center gap-5 rounded-lg border border-[var(--border-medium)] px-6 py-8 md:min-h-[360px]">
+                      <div className="flex min-h-[240px] flex-col justify-center gap-5 rounded-lg border border-[var(--border-medium)] px-6 py-8 md:min-h-[300px]">
                         <div>
                           <p className="truncate text-[14px] font-medium text-[var(--text-primary)]">{extract.variables?.name}</p>
                           <p className="text-[12.5px] text-zinc-400">
@@ -318,7 +304,7 @@ export default function CheckerPage() {
                         <ProgressNote label="Reading your PDF…" hint="Uploading it and pulling out the text. You'll see the text before anything is checked." />
                       </div>
                     ) : (
-                      <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--border-medium)] px-6 text-center md:min-h-[360px]">
+                      <div className="flex min-h-[240px] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--border-medium)] px-6 text-center md:min-h-[300px]">
                         <p className="text-[14px] font-medium text-[var(--text-primary)]">Upload a PDF to check</p>
                         <p className="max-w-xs text-[12.5px] leading-relaxed text-zinc-400">
                           Up to {config.max_upload_size_mb} MB. The PDF needs selectable text; scanned pages without text
@@ -339,7 +325,7 @@ export default function CheckerPage() {
                 )}
               </section>
 
-              <aside aria-label="Result" aria-live="polite" className="glass-card self-start rounded-2xl p-5 lg:sticky lg:top-6">
+              <aside aria-label="Result" aria-live="polite" className="glass-card self-start rounded-xl p-4 lg:sticky lg:top-6">
                 {sideContent}
               </aside>
             </div>

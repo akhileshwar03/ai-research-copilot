@@ -38,14 +38,13 @@ export function SentenceMap({ sentences }: { sentences: SentenceScore[] }) {
   };
 
   return (
-    <section aria-labelledby="sentence-map-title" className="min-w-0 space-y-2">
+    <section aria-labelledby="sentence-map-title" className="min-w-0 space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <h3 id="sentence-map-title" className="text-[14px] font-semibold text-[var(--text-primary)]">
-          Sentence map
+        <h3 id="sentence-map-title" className="text-[13px] font-medium text-zinc-400">
+          Sentence map (select a block to jump to it)
         </h3>
         {overflowing && (
           <div className="flex items-center gap-2">
-            <span className="text-[12px] text-zinc-400">Scroll sideways</span>
             <button type="button" onClick={() => nudge(-1)} aria-label="Scroll the map left" className={ARROW}>
               <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -63,7 +62,7 @@ export function SentenceMap({ sentences }: { sentences: SentenceScore[] }) {
         ref={scroller}
         role="group"
         aria-label="Each block is one sentence; select one to jump to it"
-        className="flex h-10 min-w-0 gap-0.5 overflow-x-auto overflow-y-hidden pb-2"
+        className="flex h-7 min-w-0 gap-0.5 overflow-x-auto overflow-y-hidden pb-2"
       >
         {sentences.map((sentence, i) => {
           const info = SENTENCE_LABELS[sentence.label];
@@ -74,7 +73,7 @@ export function SentenceMap({ sentences }: { sentences: SentenceScore[] }) {
               onClick={() => jump(i)}
               title={`Sentence ${i + 1}: ${info.name}`}
               aria-label={`Sentence ${i + 1}: ${info.name}`}
-              className="h-5 min-w-[7px] shrink rounded-[3px] transition-opacity hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+              className="h-4 min-w-[7px] shrink rounded-[3px] transition-opacity hover:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
               style={{ flex: `${Math.max(1, countWords(sentence.text))} 1 0`, backgroundColor: TONE_COLOR[sentence.label].fill }}
             />
           );

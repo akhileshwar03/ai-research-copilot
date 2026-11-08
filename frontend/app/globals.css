@@ -551,9 +551,9 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
   /* "Paper": the surface your checked text is read on. */
   --paper-bg:   #14120f;
   --paper-text: #e9e5dc;
-  --verdict-human-mark:  rgba(52, 211, 153, 0.24);
-  --verdict-unsure-mark: rgba(251, 191, 36, 0.26);
-  --verdict-ai-mark:     rgba(255, 59, 59, 0.42);
+  --verdict-human-mark:  rgba(52, 211, 153, 0.46);
+  --verdict-unsure-mark: rgba(255, 152, 0, 0.50);
+  --verdict-ai-mark:     rgba(255, 59, 59, 0.58);
 
   --resize-handle:       rgba(255, 255, 255, 0.05);
   --resize-handle-hover: rgba(255, 255, 255, 0.15);
@@ -597,9 +597,9 @@ html.light-theme {
   --verdict-ai-fill:     #dc2626;
   --paper-bg:   #fffdf8;
   --paper-text: #2a2118;
-  --verdict-human-mark:  rgba(5, 150, 105, 0.28);
-  --verdict-unsure-mark: rgba(217, 119, 6, 0.32);
-  --verdict-ai-mark:     rgba(255, 45, 45, 0.38);
+  --verdict-human-mark:  rgba(34, 197, 94, 0.46);
+  --verdict-unsure-mark: rgba(255, 140, 0, 0.48);
+  --verdict-ai-mark:     rgba(255, 45, 45, 0.46);
 
   --resize-handle:       rgba(90, 62, 34, 0.10);
   --resize-handle-hover: rgba(90, 62, 34, 0.22);
@@ -729,6 +729,11 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
   * {
     font-weight: 700 !important;
   }
+  /* The one exception: the text you paste and the text it is shown back in (AI Checker) reads as normal prose. */
+  .weight-normal,
+  .weight-normal * {
+    font-weight: 400 !important;
+  }
 }
 
 /* ── Above-the-fold entrance: visible by default, animated by CSS only ───────── */
@@ -792,3 +797,8 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
 .indeterminate::after { content: ""; position: absolute; inset: 0; width: 38%; border-radius: inherit; background-color: var(--marketing-accent); }
 @media (prefers-reduced-motion: no-preference) { .indeterminate::after { animation: indeterminate-slide 1.15s ease-in-out infinite; } }
 @media (prefers-reduced-motion: reduce) { .indeterminate::after { width: 100%; opacity: 0.55; } }
+
+/* AI Checker landing: the sticky demo window swaps its view as the step text scrolls past. */
+@keyframes story-in { from { opacity: 0; transform: translateY(8px); } }
+.story-fade { animation: story-in 0.45s cubic-bezier(0.23, 1, 0.32, 1) both; }
+@media (prefers-reduced-motion: reduce) { .story-fade { animation: none; } }

@@ -1,34 +1,38 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TONE_COLOR, type Tone } from "@/features/checker/verdict";
+import { TONE_COLOR, splitPercents, type Tone } from "@/features/checker/verdict";
 
-const pct = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 100);
 
-/** The model's own three-way split of its estimate for the whole text, always shown. The bar grows in once on
- *  arrival. The verdict is set more cautiously than these shares, and the caption says so. */
-export function ScoreSplit({ human, mixed, ai, words }: { human: number; mixed: number; ai: number; words: number }) {
+const EXPLAIN: Record<string, string> = {
+  Human: "How confident the model is that the whole text was written by a person.",
+  Mixed: "How confident the model is that the text combines human and AI writing, for example AI text a person has edited.",
+  AI: "How confident the model is that the whole text was written, or heavily rewritten, by an AI model.",
+};
+
+/** The model's own three-way split for the whole text. Each row opens to say what the number means. The verdict is
+ *  set more cautiously than these shares. */
+export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number; ai: number; words?: number }) {
   const [shown, setShown] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     const id = setTimeout(() => setShown(true), 30);
     return () => clearTimeout(id);
   }, []);
 
-  const parts: { name: string; tone: Tone; value: number }[] = [
-    { name: "Human", tone: "human", value: human },
-    { name: "Mixed", tone: "unsure", value: mixed },
-    { name: "AI", tone: "ai", value: ai },
+  const [humanPct, mixedPct, aiPct] = splitPercents(human, mixed, ai);
+  const parts: { name: string; tone: Tone; value: number; shown: number }[] = [
+    { name: "Human", tone: "human", value: human, shown: humanPct },
+    { name: "Mixed", tone: "unsure", value: mixed, shown: mixedPct },
+    { name: "AI", tone: "ai", value: ai, shown: aiPct },
   ];
 
   return (
-    <section aria-labelledby="score-split-title" className="space-y-3">
-      <h3 id="score-split-title" className="text-[14px] font-semibold text-[var(--text-primary)]">
-        How the model scored this
-      </h3>
+    <section aria-label="How the model scored this" className="space-y-3">
       <div
         role="img"
-        aria-label={parts.map((p) => `${p.name} ${pct(p.value)}%`).join(", ")}
-        className="flex h-3 w-full gap-0.5 overflow-hidden rounded-full bg-[var(--surface-3)]"
+        aria-label={parts.map((p) => `${p.name} ${p.shown}%`).join(", ")}
+        className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-[var(--surface-3)]"
       >
         {parts.map((p) => (
           <div
@@ -38,23 +42,43 @@ export function ScoreSplit({ human, mixed, ai, words }: { human: number; mixed: 
           />
         ))}
       </div>
-      <dl className="grid grid-cols-3 gap-2">
-        {parts.map((p) => (
-          <div key={p.name} className="flex items-baseline gap-2">
-            <span
-              className="h-2 w-2 shrink-0 translate-y-[-1px] rounded-full"
-              style={{ backgroundColor: TONE_COLOR[p.tone].fill }}
-              aria-hidden
-            />
-            <dt className="text-[12.5px] text-zinc-400">{p.name}</dt>
-            <dd className="font-data text-[14px] font-semibold text-[var(--text-primary)]">{pct(p.value)}%</dd>
-          </div>
-        ))}
-      </dl>
-      <p className="text-[12px] leading-relaxed text-zinc-400">
-        The model&rsquo;s own split for these {words.toLocaleString()} words. The verdict is set more cautiously, so rely on it,
-        not on these shares.
-      </p>
+      <p className="text-[12px] text-zinc-400">How sure the model is that the whole text is&hellip;</p>
+      <ul className="space-y-1">
+        {parts.map((p) => {
+          const isOpen = open === p.name;
+          return (
+            <li key={p.name}>
+              <button
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={`split-${p.name}`}
+                onClick={() => setOpen(isOpen ? null : p.name)}
+                className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-[14px] transition-colors hover-surface"
+              >
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: TONE_COLOR[p.tone].fill }} aria-hidden />
+                <span className="flex-1 text-left text-zinc-300">{p.name}</span>
+                <span className="font-data text-[16px] font-semibold text-[var(--text-primary)]">{p.shown}%</span>
+                <svg
+                  className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {isOpen && (
+                <p id={`split-${p.name}`} className="mb-1 ml-5 mt-1 border-l-2 pl-3 text-[12.5px] leading-relaxed text-zinc-400" style={{ borderColor: TONE_COLOR[p.tone].fill }}>
+                  <span className="font-medium text-[var(--text-primary)]">Confidence, not a share of your sentences.</span>{" "}
+                  {EXPLAIN[p.name]} The verdict above is stricter, so go by it.
+                </p>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

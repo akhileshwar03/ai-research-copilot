@@ -48,6 +48,27 @@ export function splitOf(result: CheckResult) {
 }
 
 /** What to show for a result: the verdict's wording, unless the model's top answer is a mix. */
+/** Whole-number percentages of the three shares that always add up to exactly 100. Rounding each share on its own can
+ *  give 101 or 99; this rounds down, then gives the leftover points to the largest remainders, so what is shown adds
+ *  up and no share moves by more than one point. */
+export function splitPercents(human: number, mixed: number, ai: number): [number, number, number] {
+  const raw = [human, mixed, ai].map((v) => Math.max(0, v) * 100);
+  const total = raw.reduce((a, b) => a + b, 0) || 1;
+  const scaled = raw.map((v) => (v / total) * 100);
+  const floors = scaled.map(Math.floor);
+  let left = 100 - floors.reduce((a, b) => a + b, 0);
+  scaled
+    .map((v, i) => ({ i, rest: v - Math.floor(v) }))
+    .sort((a, b) => b.rest - a.rest || a.i - b.i)
+    .forEach(({ i }) => {
+      if (left > 0) {
+        floors[i] += 1;
+        left -= 1;
+      }
+    });
+  return [floors[0], floors[1], floors[2]];
+}
+
 export function presentVerdict(result: CheckResult): VerdictInfo {
   const { mixed, ai } = splitOf(result);
   return result.verdict === "likely_ai" && mixed > ai ? MIXED_VERDICT : VERDICTS[result.verdict];

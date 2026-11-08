@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { CheckerExampleCard, CheckerStory } from "@/features/landing/checker-story";
 import { DemoMotionProvider } from "@/features/landing/demo-motion";
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { LiveDemoWidget } from "@/features/landing/live-demo-widget";
@@ -140,36 +141,40 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
           </div>
         </section>
 
-        {/* ── How it works ─────────────────────────────────────────────────── */}
-        <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-8 pt-8" aria-labelledby="how-heading">
-          <Reveal>
-            <div className="text-center">
-              <h2 id="how-heading" className="font-headline text-3xl font-bold tracking-tight text-zinc-900">
-                How it works
-              </h2>
-              <p className="mx-auto mt-3 max-w-lg text-[14px] leading-7 text-zinc-500">
-                Three steps from a blank page to a result you can check.
-              </p>
+        {/* ── How it works (the checker gets a scroll-driven walkthrough instead of three cards) ── */}
+        {tool === "checker" ? (
+          <CheckerStory />
+        ) : (
+          <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-8 pt-8" aria-labelledby="how-heading">
+            <Reveal>
+              <div className="text-center">
+                <h2 id="how-heading" className="font-headline text-3xl font-bold tracking-tight text-zinc-900">
+                  How it works
+                </h2>
+                <p className="mx-auto mt-3 max-w-lg text-[14px] leading-7 text-zinc-500">
+                  Three steps from a blank page to a result you can check.
+                </p>
+              </div>
+            </Reveal>
+            <div className="mt-10 grid gap-4 sm:grid-cols-3">
+              {page.steps.map((step, i) => (
+                <Reveal key={step.title} delay={i * 80}>
+                  <div className="glass-card relative h-full overflow-hidden p-6">
+                    <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
+                    <span
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-[14px] font-bold"
+                      style={{ backgroundColor: product.accentSoft, color: product.accentText }}
+                    >
+                      {i + 1}
+                    </span>
+                    <h3 className="mt-5 text-[15.5px] font-semibold tracking-tight text-zinc-900">{step.title}</h3>
+                    <p className="mt-2 text-[13.5px] leading-6 text-zinc-600">{step.body}</p>
+                  </div>
+                </Reveal>
+              ))}
             </div>
-          </Reveal>
-          <div className="mt-10 grid gap-4 sm:grid-cols-3">
-            {page.steps.map((step, i) => (
-              <Reveal key={step.title} delay={i * 80}>
-                <div className="glass-card relative h-full overflow-hidden p-6">
-                  <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
-                  <span
-                    className="flex h-9 w-9 items-center justify-center rounded-xl text-[14px] font-bold"
-                    style={{ backgroundColor: product.accentSoft, color: product.accentText }}
-                  >
-                    {i + 1}
-                  </span>
-                  <h3 className="mt-5 text-[15.5px] font-semibold tracking-tight text-zinc-900">{step.title}</h3>
-                  <p className="mt-2 text-[13.5px] leading-6 text-zinc-600">{step.body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* ── Features + a real example ────────────────────────────────────── */}
         <section className="relative mx-auto max-w-7xl overflow-hidden px-6 py-20" aria-labelledby="feature-heading">
@@ -207,21 +212,25 @@ export function ToolLanding({ tool }: { tool: ToolSlug }) {
             </Reveal>
 
             <Reveal delay={120}>
-              <figure className="glass-card relative overflow-hidden p-6">
-                <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
-                <figcaption className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: product.accentText }}>
-                  {page.example.label}
-                </figcaption>
-                <div className="mt-4 space-y-3">
-                  {page.example.items.map((item) => (
-                    <div key={item.heading} className="rounded-xl border border-zinc-200/80 bg-white/80 p-4">
-                      <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{item.heading}</h3>
-                      <p className="mt-1.5 text-[13.5px] leading-6 text-zinc-800">{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-4 text-[12.5px] leading-5 text-zinc-500">{page.example.note}</p>
-              </figure>
+              {tool === "checker" ? (
+                <CheckerExampleCard label={page.example.label} note={page.example.note} accent={product.accent} />
+              ) : (
+                <figure className="glass-card relative overflow-hidden p-6">
+                  <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: product.accent }} aria-hidden />
+                  <figcaption className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: product.accentText }}>
+                    {page.example.label}
+                  </figcaption>
+                  <div className="mt-4 space-y-3">
+                    {page.example.items.map((item) => (
+                      <div key={item.heading} className="rounded-xl border border-zinc-200/80 bg-white/80 p-4">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">{item.heading}</h3>
+                        <p className="mt-1.5 text-[13.5px] leading-6 text-zinc-800">{item.body}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-4 text-[12.5px] leading-5 text-zinc-500">{page.example.note}</p>
+                </figure>
+              )}
             </Reveal>
           </div>
         </section>
