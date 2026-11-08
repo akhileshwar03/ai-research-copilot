@@ -2,21 +2,21 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
-import { splitPercents, VERDICTS } from "@/features/checker/verdict";
+import { splitPercents } from "@/features/checker/verdict";
 
 /* Both pieces below show REAL runs of the checker (model ck_full_1794003388): the scores are what the model
  * returned for these exact texts, not mock numbers. Colours are fixed (not theme tokens) because the marketing
  * pages are always light. */
 
-type Tone = "human" | "unsure" | "ai";
+export type Tone = "human" | "unsure" | "ai";
 
-const TONE: Record<Tone, { fill: string; text: string; mark: string; soft: string; underline: CSSProperties }> = {
+export const TONE: Record<Tone, { fill: string; text: string; mark: string; soft: string; underline: CSSProperties }> = {
   human: { fill: "#16a34a", text: "#166534", mark: "rgba(34,197,94,0.42)", soft: "rgba(34,197,94,0.14)", underline: { textDecorationLine: "none" } },
   unsure: { fill: "#f08a00", text: "#9a4a00", mark: "rgba(255,140,0,0.46)", soft: "rgba(255,140,0,0.14)", underline: { textDecorationLine: "underline", textDecorationStyle: "dashed", textDecorationColor: "#f08a00" } },
   ai: { fill: "#e5322d", text: "#b91c1c", mark: "rgba(255,45,45,0.42)", soft: "rgba(255,45,45,0.12)", underline: { textDecorationLine: "underline", textDecorationStyle: "solid", textDecorationColor: "#e5322d" } },
 };
 
-const toneOf = (p: number): Tone => (p <= 0.3 ? "human" : p >= 0.7 ? "ai" : "unsure");
+export const toneOf = (p: number): Tone => (p <= 0.3 ? "human" : p >= 0.7 ? "ai" : "unsure");
 const EASE = "cubic-bezier(0.23,1,0.32,1)";
 
 /** A passage that mixes a person's own sentences with one AI-sounding one. Real scores from the model. */
@@ -38,7 +38,7 @@ const STEPS = [
   { label: "Verdict", title: "You get a verdict, and its limits", body: "Human, Mixed and AI add up to 100%. The verdict is held to a stricter bar than the raw split, so a close call comes back as “Unsure” instead of a guess." },
 ];
 
-function Mark({ tone, on, children }: { tone: Tone; on: boolean; children: React.ReactNode }) {
+export function Mark({ tone, on, children }: { tone: Tone; on: boolean; children: React.ReactNode }) {
   const t = TONE[tone];
   return (
     <span
@@ -56,7 +56,7 @@ function Mark({ tone, on, children }: { tone: Tone; on: boolean; children: React
   );
 }
 
-function ThreeWayBar({ human, mixed, ai }: { human: number; mixed: number; ai: number }) {
+export function ThreeWayBar({ human, mixed, ai }: { human: number; mixed: number; ai: number }) {
   const [h, m, a] = splitPercents(human, mixed, ai);
   const rows: { name: string; pct: number; tone: Tone }[] = [
     { name: "Human", pct: h, tone: "human" },
@@ -104,11 +104,11 @@ function Stage({ step }: { step: number }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden px-4 py-4 sm:px-5">
+      <div className="min-h-0 flex-1 overflow-hidden px-4 py-3 sm:px-4">
         {step === 0 ? (
           <div key="paste" className="story-fade">
             <div className="rounded-xl border border-zinc-200 bg-[#fffdf8] p-4">
-              <p className="font-reading weight-normal text-[14.5px] leading-[1.75] text-[#2a2118]">{STORY_SENTENCES.map((s) => s.text).join(" ")}</p>
+              <p className="font-reading weight-normal text-[13.5px] leading-[1.7] text-[#2a2118]">{STORY_SENTENCES.map((s) => s.text).join(" ")}</p>
             </div>
             <div className="mt-3 flex items-center justify-between text-[12px] text-zinc-500">
               <span>
@@ -118,13 +118,13 @@ function Stage({ step }: { step: number }) {
             </div>
           </div>
         ) : (
-          <ol key="list" className="story-fade space-y-2.5">
+          <ol key="list" className="story-fade space-y-2">
             {STORY_SENTENCES.map((s, i) => {
               const tone = toneOf(s.p);
               return (
-                <li key={s.text} className="grid grid-cols-[1.25rem_1fr_4.75rem] items-start gap-3">
-                  <span className="font-data pt-0.5 text-[11px] text-zinc-400">{i + 1}</span>
-                  <span className="font-reading weight-normal text-[13.5px] leading-[1.7] text-[#2a2118]">
+                <li key={s.text} className="grid grid-cols-[1rem_1fr_4rem] items-start gap-2.5">
+                  <span className="font-data pt-0.5 text-[11px] text-zinc-500">{i + 1}</span>
+                  <span className="font-reading weight-normal text-[12.5px] leading-[1.6] text-[#2a2118]">
                     <Mark tone={tone} on={coloured}>
                       {s.text}
                     </Mark>
@@ -152,7 +152,7 @@ function Stage({ step }: { step: number }) {
         <div className="min-h-0 overflow-hidden">
           <div className="border-t border-zinc-200 bg-zinc-50/80 px-4 py-4 sm:px-5">
             <div className="flex items-center gap-2.5">
-              <span className="rounded-full px-2.5 py-0.5 text-[12px] font-semibold" style={{ backgroundColor: TONE.unsure.soft, color: TONE.unsure.text }}>
+              <span className="shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold" style={{ backgroundColor: TONE.unsure.soft, color: TONE.unsure.text }}>
                 Likely mixed
               </span>
               <span className="text-[12.5px] text-zinc-600">Some sentences read as human, some as AI-written.</span>
@@ -185,17 +185,17 @@ export function CheckerStory() {
   }, []);
 
   return (
-    <section id="how-it-works" className="mx-auto max-w-7xl scroll-mt-24 px-6 pb-10 pt-8" aria-labelledby="how-heading">
+    <section id="how-it-works" className="scroll-mt-24 pb-6 pt-4" aria-labelledby="how-heading">
       <div className="max-w-2xl">
         <p className="text-[11px] font-semibold uppercase tracking-widest text-[#1f7a5c]">How the checker works</p>
-        <h2 id="how-heading" className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900 md:text-4xl">
+        <h2 id="how-heading" className="mt-2 font-headline text-3xl font-bold tracking-tight text-[var(--text-primary)] md:text-4xl">
           From pasted text to a verdict, one step at a time.
         </h2>
-        <p className="mt-3 text-[14.5px] leading-7 text-zinc-600">Scroll to follow a real run. The numbers on the right are what our model returned for this passage.</p>
+        <p className="mt-3 text-[14.5px] leading-7 text-[var(--text-primary)] opacity-70">Scroll to follow a real run. The numbers on the right are what our model returned for this passage.</p>
       </div>
 
       <div ref={root} className="mt-8 grid gap-6 lg:grid-cols-2 lg:gap-14">
-        <div className="sticky top-[4.5rem] z-10 h-[420px] self-start lg:order-2 lg:top-24 lg:h-[540px]">
+        <div className="sticky top-[var(--sticky-top,1rem)] z-10 h-[400px] self-start lg:order-2 lg:top-[var(--sticky-top,1.5rem)] lg:h-[480px] lg:w-full lg:max-w-[440px] lg:justify-self-end">
           <Stage step={step} />
         </div>
         <ol className="lg:order-1">
@@ -203,8 +203,8 @@ export function CheckerStory() {
             <li key={s.label} data-step={i} className="flex min-h-[52vh] flex-col justify-center py-6 lg:min-h-[72vh]">
               <div className={`motion-reduce:transition-none ${i === step ? "opacity-100" : "opacity-35"}`} style={{ transition: `opacity 400ms ${EASE}` }}>
                 <span className="font-data flex h-9 w-9 items-center justify-center rounded-xl bg-[#1f7a5c]/10 text-[14px] font-bold text-[#1f7a5c]">{i + 1}</span>
-                <h3 className="mt-4 font-headline text-[22px] font-bold leading-snug tracking-tight text-zinc-900 md:text-[26px]">{s.title}</h3>
-                <p className="mt-3 max-w-md text-[15px] leading-7 text-zinc-600">{s.body}</p>
+                <h3 className="mt-4 font-headline text-[22px] font-bold leading-snug tracking-tight text-[var(--text-primary)] md:text-[26px]">{s.title}</h3>
+                <p className="mt-3 max-w-md text-[15px] leading-7 text-[var(--text-primary)] opacity-70">{s.body}</p>
               </div>
             </li>
           ))}
@@ -216,69 +216,51 @@ export function CheckerStory() {
 
 /** The "real run of the tool" card: a faithful miniature of the result screen, with the model's actual numbers for the page's example text. */
 const EXAMPLE_SENTENCES = [
-  { text: "Climate change is one of the most pressing challenges facing our planet today.", p: 0.962 },
-  { text: "Rising global temperatures are causing glaciers to melt, sea levels to rise, and weather patterns to become increasingly unpredictable.", p: 0.963 },
-  { text: "To address this issue, governments, businesses, and individuals must work together to reduce greenhouse gas emissions.", p: 0.964 },
-  { text: "Transitioning to renewable energy sources, such as solar and wind power, is a crucial step.", p: 0.964 },
-  { text: "By taking collective action, we can build a more sustainable future for generations to come.", p: 0.962 },
+  { text: "My grandmother never measured anything.", p: 0.463 },
+  { text: "She'd tip flour into a chipped blue bowl until it looked right, swear at the oven, and somehow the bread came out the same every Sunday.", p: 0.387 },
+  { text: "I asked her once for the recipe and she laughed.", p: 0.464 },
+  { text: "Her hands knew it, not her head.", p: 0.774 },
+  { text: "Baking is a skill that requires patience, precision, and attention to detail, and it offers numerous benefits for mental well-being.", p: 0.956 },
+  { text: "Furthermore, it is important to note that sharing homemade food can strengthen relationships and foster a sense of community.", p: 0.959 },
 ];
-const EXAMPLE_RESULT = { human: 0.0248, mixed: 0.0249, ai: 0.9503 };
+/** The model's split for this text, as the result screen computes it: human = 1 - score, AI = score - mixed. */
+const EXAMPLE_RESULT = { human: 0.0389, mixed: 0.1883, ai: 0.7728 };
 
 export function CheckerExampleCard({ label, note, accent }: { label: string; note: string; accent: string }) {
-  const v = VERDICTS.likely_ai;
   return (
-    <figure className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_34px_70px_-30px_rgba(40,25,10,0.38)]">
+    <figure className="relative ml-auto w-full max-w-[460px] overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-[0_28px_56px_-30px_rgba(40,25,10,0.38)]">
       <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} aria-hidden />
-      <figcaption className="flex items-center justify-between gap-3 px-6 pb-3 pt-6">
+      <figcaption className="flex items-center justify-between gap-3 px-5 pb-2 pt-5">
         <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: accent }}>
-          {label}
+          {label.replace(/^Example, /, "").replace(/ of the tool$/, "")}
         </span>
-        <span className="font-data rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500">78 words · 5 sentences</span>
+        <span className="font-data shrink-0 whitespace-nowrap rounded-full bg-zinc-100 px-2.5 py-0.5 text-[11px] text-zinc-500">88 words</span>
       </figcaption>
 
-      <div className="px-6">
-        <div className="rounded-xl border border-zinc-200 p-4" style={{ borderTop: `3px solid ${TONE.ai.fill}` }}>
-          <div className="flex items-center gap-2.5">
-            <span className="rounded-full px-2.5 py-0.5 text-[12.5px] font-semibold" style={{ backgroundColor: TONE.ai.soft, color: TONE.ai.text }}>
-              Likely AI
-            </span>
-          </div>
-          <p className="mt-2.5 text-[15px] font-semibold leading-snug text-zinc-900">
-            {v.headline} <span className="font-normal text-zinc-600">{v.detail}</span>
-          </p>
-          <div className="mt-4">
-            <ThreeWayBar {...EXAMPLE_RESULT} />
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-zinc-200 bg-[#fffdf8] p-4">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-400">Your text, sentence by sentence</p>
-          <p className="font-reading weight-normal text-[14px] leading-[1.8] text-[#2a2118]">
+      <div className="space-y-2.5 px-5">
+        <div className="rounded-xl border border-zinc-200 bg-[#fffdf8] p-3.5">
+          <p className="font-reading weight-normal text-[12.5px] leading-[1.75] text-[#2a2118]">
             {EXAMPLE_SENTENCES.map((s) => (
               <span key={s.text}>
-                <Mark tone="ai" on>
+                <Mark tone={toneOf(s.p)} on>
                   {s.text}
                 </Mark>{" "}
               </span>
             ))}
           </p>
-          <div aria-hidden className="mt-3 flex gap-1">
-            {EXAMPLE_SENTENCES.map((s) => (
-              <span key={s.text} className="h-3 flex-1 rounded-[3px]" style={{ backgroundColor: TONE.ai.fill }} />
-            ))}
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-zinc-500">
-            {(["human", "unsure", "ai"] as Tone[]).map((t) => (
-              <span key={t} className="flex items-center gap-1.5">
-                <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: TONE[t].fill }} />
-                {t === "human" ? "Human" : t === "unsure" ? "Unsure" : "AI"}
-              </span>
-            ))}
+        </div>
+
+        <div className="flex items-center gap-3 rounded-xl border border-zinc-200 p-3.5" style={{ borderLeft: `3px solid ${TONE.unsure.fill}` }}>
+          <span className="shrink-0 rounded-full px-2.5 py-0.5 text-[12px] font-semibold" style={{ backgroundColor: TONE.unsure.soft, color: TONE.unsure.text }}>
+            Unsure
+          </span>
+          <div className="min-w-0 flex-1">
+            <ThreeWayBar {...EXAMPLE_RESULT} />
           </div>
         </div>
       </div>
 
-      <p className="px-6 pb-6 pt-4 text-[12.5px] leading-5 text-zinc-500">{note}</p>
+      <p className="px-5 pb-4 pt-3 text-[12px] leading-5 text-zinc-500">{note}</p>
     </figure>
   );
 }

@@ -17,6 +17,7 @@ import { OtpInput } from "@/components/ui/otp-input";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
 import { BrandMark } from "@/features/shared/components/brand-mark";
 import { CursorSpotlight, Glare, Reveal } from "@/features/shared/motion/motion";
+import { peekReturnTo } from "@/shared/lib/return-to";
 
 // ─── Icons ─────────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export default function LoginPage() {
   const { remaining, start: startCountdown } = useCountdown(60);
 
   useEffect(() => {
-    if (isReady && isAuthenticated) router.replace("/");
+    if (isReady && isAuthenticated) router.replace(peekReturnTo());
   }, [isReady, isAuthenticated, router]);
 
   // Show OAuth error toasts from redirect params
@@ -117,7 +118,7 @@ export default function LoginPage() {
     if (code.replace(/\s/g, "").length < 6) return;
     try {
       await verifyOtp({ email: email.trim(), code });
-      router.replace("/");
+      router.replace(peekReturnTo());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid or expired code");
       setOtp("");

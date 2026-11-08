@@ -232,14 +232,14 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
       items: [
         {
           heading: "Text checked",
-          body: "Climate change is one of the most pressing challenges facing our planet today. Rising global temperatures are causing glaciers to melt, sea levels to rise, and weather patterns to become increasingly unpredictable. To address this issue, governments, businesses, and individuals must work together to reduce greenhouse gas emissions. Transitioning to renewable energy sources, such as solar and wind power, is a crucial step. By taking collective action, we can build a more sustainable future for generations to come.",
+          body: "My grandmother never measured anything. She'd tip flour into a chipped blue bowl until it looked right, swear at the oven, and somehow the bread came out the same every Sunday. I asked her once for the recipe and she laughed. Her hands knew it, not her head. Baking is a skill that requires patience, precision, and attention to detail, and it offers numerous benefits for mental well-being. Furthermore, it is important to note that sharing homemade food can strengthen relationships and foster a sense of community.",
         },
         {
           heading: "Result",
-          body: "Likely AI. All 5 sentences were highlighted as AI-like.",
+          body: "Unsure. The first three sentences read as uncertain and the last three as AI-like.",
         },
       ],
-      note: "This is a clear-cut case. AI text that has been edited or rewritten to sound human is harder, and the tool then often says \"unsure\" or misses it.",
+      note: "A personal story followed by stock phrases. The checker says \"unsure\" when the signals are mixed, instead of guessing.",
     },
     goodToKnow: [
       "AI detection is probabilistic. Never use a result alone to accuse someone of using AI.",
@@ -249,15 +249,35 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     faq: [
       {
         q: "How accurate is it?",
-        a: "No detector is perfect. In our own tests on several thousand texts it caught about 85\u201399% of text written by AI models and wrongly flagged about 0\u20134% of human writing, but it often missed AI text that had been edited to sound human. The figures are shown on the checker page.",
+        a: "No detector is perfect. In our own tests on several thousand texts it caught about 85\u201399% of text written by AI models and wrongly flagged about 0\u20134% of human writing. It is weaker on AI text that has been edited or rewritten to sound human. The figures are in the \"What this checker can and can't do\" panel on this page.",
       },
       {
-        q: "Can it check a PDF?",
-        a: "Yes. Upload a PDF with selectable text and you first see the text we read from it, so you can check that it looks right before it is checked.",
+        q: "Why does it sometimes say \"Unsure\"?",
+        a: "Because guessing would be worse. A text only gets \"Likely human\" or \"Likely AI\" when the model is clearly on one side. When the signals are mixed, you get \"Unsure\" and the sentences that pulled it each way, so you can judge for yourself. A wrong accusation costs more than a shrug.",
+      },
+      {
+        q: "My own writing was flagged as AI. What now?",
+        a: "It can happen: about 0\u20134% of human writing in our tests. A high score is a reason to look closer, not proof. Check which sentences were highlighted, and keep your drafts, notes and version history, which show how a piece was really written.",
+      },
+      {
+        q: "Can it tell if AI text was edited or run through a humanizer?",
+        a: "Sometimes. In our tests it caught about 65\u201390% of AI text rewritten by other humanizer tools, but only about 25\u201360% of AI text that a person had edited by hand. That is its hardest case, and the page says so instead of hiding it.",
+      },
+      {
+        q: "Which AI tools does it detect?",
+        a: "ChatGPT, Claude, Gemini and other models, including open-source ones. It reads writing patterns, not a watermark, so a brand-new model it has not seen can be harder to catch.",
+      },
+      {
+        q: "Will it match what my school's detector says?",
+        a: "Not necessarily. Querex is independent and not connected to Turnitin or any other detector, and different detectors can disagree on the same text. Use ours as a second opinion, not a prediction of someone else's score.",
       },
       {
         q: "Is my text stored?",
         a: "No. We don't save the text you check. It goes over an encrypted connection to our own checker server, is scored, and is not kept.",
+      },
+      {
+        q: "Can it check a PDF, and how long can the text be?",
+        a: "Yes to PDFs: upload one with selectable text and you first see the text we read from it, so you can fix it before it is checked. You need at least 60 words, it works on English only, and the text box shows the length limit as you paste.",
       },
       {
         q: "Is it free?",

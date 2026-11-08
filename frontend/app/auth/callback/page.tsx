@@ -21,6 +21,7 @@ import { apiRequest } from "@/services/api/client";
 import { setStoredTokens, getUserEmailFromToken } from "@/shared/lib/token-storage";
 import { useAuthStore } from "@/stores/auth-store";
 import { AtmosphereBackground } from "@/features/shared/components/atmosphere-background";
+import { peekReturnTo } from "@/shared/lib/return-to";
 
 const OAUTH_ERRORS: Record<string, string> = {
   google_auth_failed: "Google sign-in failed. Please try again.",
@@ -75,7 +76,7 @@ function AuthCallbackInner() {
           email: getUserEmailFromToken(accessToken),
         });
 
-        router.replace("/");
+        router.replace(peekReturnTo());
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : "Token exchange failed";
