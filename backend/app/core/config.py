@@ -1,5 +1,5 @@
 from functools import lru_cache
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -183,6 +183,12 @@ class Settings(BaseSettings):
     checker_token: str = ""
     cf_access_client_id: str = ""
     cf_access_client_secret: str = ""
+    @field_validator("checker_url", "checker_token", "cf_access_client_id", "cf_access_client_secret", mode="before")
+    @classmethod
+    def _strip_checker_values(cls, value):
+        # A pasted secret often carries a trailing new line or space, and HTTP refuses such a header value.
+        return value.strip() if isinstance(value, str) else value
+
     checker_connect_timeout_seconds: float = 3.0
     checker_read_timeout_seconds: float = 12.0
     # The model was trained on texts of at least 60 words; below that it would be guessing.

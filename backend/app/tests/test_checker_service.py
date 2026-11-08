@@ -254,3 +254,33 @@ def test_ping_is_false_when_unreachable_unconfigured_or_unhealthy(monkeypatch):
     assert ping_checker() is False
     monkeypatch.setattr(cs, "get_settings", lambda: _settings(checker_token=""))
     assert ping_checker() is False
+
+
+# ---- secrets must never travel in the error chain (error reports capture it)
+
+def _chain(exc: BaseException) -> list[BaseException]:
+    out, seen = [], set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc)); out.append(exc)
+        exc = exc.__cause__ or (None if exc.__suppress_context__ else exc.__context__)
+    return out
+
+
+def test_unavailable_error_does_not_carry_the_transport_error_or_its_secret():
+    def handler(request):
+        raise httpx.LocalProtocolError(f"Illegal header value {TOKEN!r}", request=request)
+
+    with pytest.raises(AppError) as err:
+        _check(_service(handler))
+    chain = _chain(err.value)
+    assert len(chain) == 1  # only the calm AppError, nothing behind it
+    assert all(TOKEN not in str(e) for e in chain)
+
+
+def test_pasted_secrets_are_trimmed_of_new_lines_and_spaces():
+    from app.core.config import Settings
+
+    s = Settings(checker_url=" https://checker.example.test\n", checker_token=TOKEN + "\n", cf_access_client_id="id \n", cf_access_client_secret="\tsecret ")
+    assert (s.checker_url, s.checker_token, s.cf_access_client_id, s.cf_access_client_secret) == (
+        "https://checker.example.test", TOKEN, "id", "secret",
+    )

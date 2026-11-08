@@ -152,9 +152,11 @@ class CheckerService:
                 headers={**_access_headers(), "X-Checker-Token": s.checker_token},
             )
         except httpx.HTTPError as exc:
+            # Not chained (`from None`): a transport error's message can contain a header value, and
+            # error reports capture the chain.
             self._breaker.failure()
             logger.warning("checker_unreachable error=%s", type(exc).__name__)
-            raise _unavailable() from exc
+            raise _unavailable() from None
 
         if resp.status_code == 413:
             raise AppError(code="TEXT_TOO_LONG", message="Text is too long for the AI checker", status_code=413)
@@ -167,7 +169,7 @@ class CheckerService:
         except ValueError as exc:
             self._breaker.failure()
             logger.error("checker_non_json_response")
-            raise _unavailable() from exc
+            raise _unavailable() from None
         self._breaker.success()
         return payload
 
@@ -191,7 +193,7 @@ class CheckerService:
         except (KeyError, TypeError, ValueError) as exc:
             self._breaker.failure()
             logger.error("checker_malformed_response")
-            raise _unavailable() from exc
+            raise _unavailable() from None
 
         return {
             "verdict": verdict,
