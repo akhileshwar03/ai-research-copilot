@@ -82,6 +82,8 @@ def test_public_app_config_is_unauthenticated_and_minimal(client):
     # test in this suite (test_admin_runtime_settings_roundtrip) legitimately changes this value
     # and shares the same test database, with no per-test reset.
     assert body["max_upload_size_mb"] == int(runtime_settings.get("max_upload_size_mb"))
+    # The AI Checker page needs the minimum text length from the backend setting, not a second hard-coded copy.
+    assert body["checker_min_words"] == 60
 
 
 def test_github_link_toggle_round_trips_to_public_config(client, admin_headers):

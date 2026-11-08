@@ -176,6 +176,18 @@ class Settings(BaseSettings):
     # but a single short chunk. 240s leaves real room for cold start + a full chunk.
     humanizer_ultra_modal_timeout_seconds: float = 240.0
 
+    # AI Checker model server: the trained checker runs as a separate service reached over an
+    # authenticated tunnel. All four values come from the environment only. If any is empty the
+    # checker answers "temporarily unavailable"; it never falls back to another detector.
+    checker_url: str = ""
+    checker_token: str = ""
+    cf_access_client_id: str = ""
+    cf_access_client_secret: str = ""
+    checker_connect_timeout_seconds: float = 3.0
+    checker_read_timeout_seconds: float = 12.0
+    # The model was trained on texts of at least 60 words; below that it would be guessing.
+    checker_min_words: int = 60
+
     jwt_secret_key: str = Field(default="change-me", min_length=8)
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60

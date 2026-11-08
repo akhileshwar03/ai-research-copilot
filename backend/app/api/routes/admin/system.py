@@ -5,6 +5,7 @@ import os
 import platform
 import sys
 import time
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, Depends, Query
@@ -22,6 +23,7 @@ from app.db.models.user import User
 from app.db.session import engine, get_db
 from app.services.admin_audit import record_admin_action
 from app.services.ai_service import AIService
+from app.services.checker_service import ping_checker
 from app.services.retention_service import run_cleanup
 from app.services.runtime_settings import runtime_settings
 from app.services.storage_service import get_storage_service
@@ -92,7 +94,7 @@ def get_storage_usage(admin: User = Depends(require_admin), db: Session = Depend
 
 @router.get("/system")
 def get_system_info(
-    probe: bool = Query(default=False, description="Also ping OpenAI and Ollama (slower)"),
+    probe: bool = Query(default=False, description="Also ping OpenAI, Ollama and the AI Checker server (slower)"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
     ai_service: AIService = Depends(get_ai_service),
@@ -124,6 +126,7 @@ def get_system_info(
 
     openai_ok: bool | None = None
     ollama_ok: bool | None = None
+    checker_ok: bool | None = None
     tavily_usage: dict | None = None
     resend_recent: dict | None = None
     if probe:
@@ -136,6 +139,7 @@ def get_system_info(
             ollama_ok = resp.status_code == 200
         except Exception:
             ollama_ok = False
+        checker_ok = ping_checker()
         # 2026-09-22: unlike OpenAI/Sentry (which need a separate, higher-
         # privilege key we don't hold), Tavily's /usage and Resend's list-
         # emails both work with the exact same secret key already configured
@@ -285,6 +289,13 @@ def get_system_info(
             "dashboard_url": "https://modal.com/apps",
         },
         {
+            "name": "AI Checker model server",
+            "category": "Live app (AI Checker)",
+            "configured": bool(settings.checker_url and settings.checker_token),
+            "tracked_here": False,
+            "dashboard_url": "https://dash.cloudflare.com",
+        },
+        {
             "name": "Tavily",
             "category": "Live app (Real-time AI web search)",
             "configured": bool(settings.tavily_api_key),
@@ -368,6 +379,16 @@ def get_system_info(
             "ultra_model": settings.humanizer_ultra_model,
             "ultra_ollama_url": settings.humanizer_ultra_ollama_url,
             "ultra_ok": ollama_ok,
+        },
+        "checker": {
+            "configured": bool(
+                settings.checker_url
+                and settings.checker_token
+                and settings.cf_access_client_id
+                and settings.cf_access_client_secret
+            ),
+            "host": urlparse(settings.checker_url).hostname or None,
+            "ok": checker_ok,
         },
         "web_search": {"configured": bool(settings.tavily_api_key), "usage": tavily_usage},
         "email": {"provider": email_provider, "from": settings.email_from, "recent": resend_recent},

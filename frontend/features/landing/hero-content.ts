@@ -9,7 +9,7 @@ import { PRODUCTS } from "@/features/landing/products";
 export const HERO_CHIPS: Record<string, [string, string]> = {
   "Research Copilot": ["Streams in real time", "Page-level citations"],
   Humanizer: ["Word-level diff", "Streams live"],
-  "AI Checker": ["Sentence-level highlights", "States its own confidence"],
+  "AI Checker": ["Sentence-level highlights", "Says 'unsure' when it is"],
   "Real-time AI": ["Live web search", "Clickable, numbered sources"],
   "Paper Analyzer": ["Measured from the PDF", "APA · MLA · IEEE"],
 };
@@ -18,7 +18,7 @@ export const HERO_CHIPS: Record<string, [string, string]> = {
 export const SHOWS_ITS_WORK: { tool: string; fact: string }[] = [
   { tool: "Research Copilot", fact: "Page-level citations, with a viewer that jumps to the page" },
   { tool: "Humanizer", fact: "A word-level diff of every change it makes" },
-  { tool: "AI Checker", fact: "A confidence level, stated even when it is low" },
+  { tool: "AI Checker", fact: "An honest \"unsure\" instead of a guess, with the sentences behind every verdict" },
   { tool: "Real-time AI", fact: "Numbered, clickable sources for every answer" },
   { tool: "Paper Analyzer", fact: "Margins, spacing and fonts measured from the PDF" },
 ];

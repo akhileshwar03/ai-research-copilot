@@ -208,52 +208,56 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     name: "AI Checker",
     h1: "Check whether text was written by AI, and see why.",
     headline: { lead: "Check whether text was written by AI,", emphasis: "and see why." },
-    chips: ["Sentence-level highlights", "States its own confidence"],
+    chips: ["Sentence-level highlights", "Says \"unsure\" when it is"],
     features: {
-      title: "Decisive answers, not hedging.",
-      body: "Detect AI-generated text with sentence-level highlighting and a paragraph-by-paragraph breakdown, plus a free grammar and style pass bundled in. Every result carries an honest disclaimer, not false certainty.",
+      title: "An honest answer, including \"unsure\".",
+      body: "Find out whether text was written by a person, an AI, or both, with the exact sentences that stand out. Every result states its limits instead of false certainty.",
       bullets: [
-        "Sentence-level highlighting of the exact flagged text",
-        "Advanced Scan: a paragraph-by-paragraph AI-probability breakdown",
-        "Free Writing Feedback: grammar, spelling and clarity issues",
-        "States its own false-positive risk instead of overclaiming",
+        "Three clear answers: likely human, unsure or likely AI",
+        "Sentence-by-sentence highlighting of what stands out",
+        "Reads PDFs as well as pasted text",
+        "Plain-language limits on what it catches and what it misses",
       ],
     },
-    cta: { title: "Know what you are reading.", body: "Paste a passage or upload a PDF and see the verdict, the flagged sentences and the signals behind it." },
+    cta: { title: "Know what you are reading.", body: "Paste a passage or upload a PDF and see the verdict and the sentences behind it." },
     intro:
-      "Paste text or upload a PDF and get a probability that it is AI-generated, with sentence-level highlights and the writing signals behind the verdict, so the result is explainable rather than just a number.",
+      "Paste text or upload a PDF and get one of three answers: likely human, unsure or likely AI, with the sentences that stand out highlighted. The result says what it means and how far to trust it, instead of just a number.",
     steps: [
-      { title: "Paste text or upload a PDF", body: "Check a passage directly, or a whole document." },
-      { title: "Read the verdict", body: "See the AI probability, a confidence level and which sentences look most machine-written." },
-      { title: "Look at the signals", body: "Sentence variation, vocabulary diversity, overused AI phrases, transition openers and personal voice are shown individually." },
+      { title: "Paste text or upload a PDF", body: "Check a passage directly, or a whole document. Text needs at least 60 words." },
+      { title: "Read the verdict", body: "You get likely human, unsure or likely AI, in plain words." },
+      { title: "See what stands out", body: "Sentences that look AI-written are highlighted, so you can see where the verdict comes from." },
     ],
     example: {
       label: "Example, a real run of the tool",
       items: [
         {
           heading: "Text checked",
-          body: "Artificial intelligence has fundamentally transformed the landscape of modern research. Furthermore, it is important to note that these systems leverage vast datasets to deliver robust and comprehensive insights. In conclusion, the integration of AI represents a pivotal paradigm shift across numerous domains, enabling unprecedented efficiency and innovation.",
+          body: "Climate change is one of the most pressing challenges facing our planet today. Rising global temperatures are causing glaciers to melt, sea levels to rise, and weather patterns to become increasingly unpredictable. To address this issue, governments, businesses, and individuals must work together to reduce greenhouse gas emissions. Transitioning to renewable energy sources, such as solar and wind power, is a crucial step. By taking collective action, we can build a more sustainable future for generations to come.",
         },
         {
           heading: "Result",
-          body: "98% AI probability, \"likely AI\". Five phrases commonly overused in AI writing were flagged, one in three sentences opened with a transition, and no personal voice was found. Confidence was marked low because the text is short (47 words).",
+          body: "Likely AI. All 5 sentences were highlighted as AI-like.",
         },
       ],
-      note: "Short texts give low-confidence results, and the tool says so.",
+      note: "This is a clear-cut case. AI text that has been edited or rewritten to sound human is harder, and the tool then often says \"unsure\" or misses it.",
     },
     goodToKnow: [
-      "AI detection is probabilistic. Never use a score alone to accuse someone of using AI.",
-      "Longer text gives more reliable results than a few sentences.",
-      "There is also a Writing Feedback mode that flags grammar, spelling, style, clarity and word-choice issues, with a suggested fix for each.",
+      "AI detection is probabilistic. Never use a result alone to accuse someone of using AI.",
+      "It needs at least 60 words and works on English text only.",
+      "It is weaker on AI text that a person has edited or that was rewritten to sound human, and it can occasionally flag human writing.",
     ],
     faq: [
       {
         q: "How accurate is it?",
-        a: "No detector is perfect. It combines a language-model judgement with measurable writing signals and reports its confidence, including when it is low.",
+        a: "No detector is perfect. In our own tests on several thousand texts it caught about 85\u201399% of text written by AI models and wrongly flagged about 0\u20134% of human writing, but it often missed AI text that had been edited to sound human. The figures are shown on the checker page.",
       },
       {
         q: "Can it check a PDF?",
-        a: "Yes. Upload a PDF and it checks the document's text.",
+        a: "Yes. Upload a PDF with selectable text and it checks the document's text.",
+      },
+      {
+        q: "Is my text stored?",
+        a: "No. We don't save the text you check. It goes over an encrypted connection to our own checker server, is scored, and is not kept.",
       },
       {
         q: "Is it free?",

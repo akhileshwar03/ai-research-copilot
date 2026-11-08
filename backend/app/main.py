@@ -59,6 +59,9 @@ if settings.sentry_dsn:
         # Full error capture; a modest trace sample so performance data doesn't
         # dominate the (free-tier) event quota on a low-traffic app.
         traces_sample_rate=0.1,
+        # Never attach request bodies to error reports: users submit private text (AI Checker,
+        # Humanizer, chat), and a crash report must not carry it.
+        max_request_body_size="never",
         before_send=drop_deliberate_unavailability,
         integrations=[FastApiIntegration(), LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)],
     )

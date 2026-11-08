@@ -1,36 +1,24 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
 class CheckTextRequest(BaseModel):
     text: str = Field(min_length=1)
-    advanced: bool = False
 
 
-class CheckSignals(BaseModel):
-    burstiness: float
-    lexical_diversity: float
-    ai_phrase_hits: int
-    function_word_ratio: float
-    mean_word_length: float
-    trigram_repetition_rate: float
-    transition_opener_rate: float
-    personal_voice_score: float
-    heuristic_score: float
-    llm_probability: float | None
-
-
-class ParagraphScore(BaseModel):
+class SentenceScore(BaseModel):
     text: str
-    ai_probability: float
-    verdict: str
+    ai_score: float | None
+    flagged: bool
 
 
 class CheckResult(BaseModel):
-    ai_probability: float
-    verdict: str
-    confidence: str
-    signals: CheckSignals
-    ai_sentences: list[str] = []
-    paragraphs: list[ParagraphScore] = []
-    explanation: str
+    verdict: Literal["likely_human", "uncertain", "likely_ai"]
+    # Probability the model puts on "not purely human" (AI-written, AI-edited or mixed), 0-1.
+    ai_score: float
+    # Share of that probability the model assigns to mixed human + AI text.
+    mixed_probability: float
+    word_count: int
+    sentences: list[SentenceScore]
     disclaimer: str

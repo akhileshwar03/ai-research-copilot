@@ -36,7 +36,6 @@ const TOOL_FILTERS = [
   { value: "humanizer", label: "Humanizer" },
   { value: "humanizer_ultra", label: "Humanizer (Ultra)" },
   { value: "checker", label: "AI Checker" },
-  { value: "writing_feedback", label: "Writing Feedback" },
   { value: "realtime", label: "Real-time AI" },
   { value: "extract", label: "Text extraction" },
   { value: "paper_analyzer", label: "Paper Analyzer" },

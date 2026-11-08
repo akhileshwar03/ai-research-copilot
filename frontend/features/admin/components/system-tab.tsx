@@ -38,7 +38,7 @@ export function SystemTab() {
   const isHealthy = Boolean(
     info?.database.ok &&
     info?.vector_store.ok &&
-    (!probe || (info?.openai.ok !== false && info?.humanizer.ultra_ok !== false))
+    (!probe || (info?.openai.ok !== false && info?.humanizer.ultra_ok !== false && info?.checker.ok !== false))
   );
 
   return (
@@ -297,7 +297,7 @@ export function SystemTab() {
             {/* AI Providers Card */}
             <SectionCard
               title="AI Models &amp; Inference Engines"
-              description="Live LLM backends: OpenAI model configurations, self-hosted Ultra Human fine-tune, and Tavily grounding search."
+              description="Live model backends: OpenAI, the AI Checker model server, the self-hosted Ultra Human fine-tune, and Tavily grounding search."
             >
               <Row
                 label="OpenAI API"
@@ -309,8 +309,18 @@ export function SystemTab() {
                 }
               />
               <Row
-                label="Chat &amp; Checker Model"
+                label="Chat Model"
                 value={<span className="font-mono text-[11.5px] text-zinc-300">{info.openai.chat_model}</span>}
+              />
+              <Row
+                label="AI Checker model server"
+                value={
+                  <span className="flex items-center gap-2">
+                    {info.checker.host && <span className="font-mono text-[11.5px] text-zinc-300">{info.checker.host}</span>}
+                    <ConfiguredBadge on={info.checker.configured} />
+                    <OkBadge ok={info.checker.ok} />
+                  </span>
+                }
               />
               <Row
                 label="Humanizer Rewrite Model"

@@ -536,6 +536,14 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
 
   --text-primary:   rgba(255, 255, 255, 0.9);
 
+  /* AI Checker verdicts: state colors, always paired with a text label (never color alone). */
+  --verdict-human:      #34d399;
+  --verdict-human-soft: rgba(52, 211, 153, 0.12);
+  --verdict-unsure:      #fbbf24;
+  --verdict-unsure-soft: rgba(251, 191, 36, 0.12);
+  --verdict-ai:      #f87171;
+  --verdict-ai-soft: rgba(248, 113, 113, 0.16);
+
   --resize-handle:       rgba(255, 255, 255, 0.05);
   --resize-handle-hover: rgba(255, 255, 255, 0.15);
 }
@@ -566,6 +574,13 @@ html.light-theme {
   --border-strong:  rgba(90, 62, 34, 0.24);
 
   --text-primary:   rgba(38, 28, 18, 0.92);
+
+  --verdict-human:      #065f46;
+  --verdict-human-soft: rgba(6, 95, 70, 0.10);
+  --verdict-unsure:      #92400e;
+  --verdict-unsure-soft: rgba(146, 64, 14, 0.10);
+  --verdict-ai:      #b91c1c;
+  --verdict-ai-soft: rgba(185, 28, 28, 0.12);
 
   --resize-handle:       rgba(90, 62, 34, 0.10);
   --resize-handle-hover: rgba(90, 62, 34, 0.22);
@@ -719,4 +734,18 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
 [data-demo-motion="paused"] .animate-float-slow,
 [data-demo-motion="paused"] .animate-float-slower {
   animation-play-state: paused !important;
+}
+
+/* AI Checker: a sentence the model marks as AI-like. Underline + tint, so it still reads without color. */
+.flagged-sentence {
+  background-color: var(--verdict-ai-soft);
+  color: inherit;
+  border-radius: 3px;
+  padding: 1px 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  text-decoration: underline;
+  text-decoration-color: var(--verdict-ai);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }

@@ -30,7 +30,6 @@ from app.services.realtime_service import RealtimeService
 from app.services.realtime_session_service import RealtimeSessionService
 from app.services.session_service import SessionService
 from app.services.web_search_service import WebSearchService
-from app.services.writing_feedback_service import WritingFeedbackService
 
 
 @lru_cache
@@ -108,12 +107,9 @@ def get_humanizer_ultra_service() -> HumanizerUltraService:
     return HumanizerUltraService()
 
 
+@lru_cache
 def get_checker_service() -> CheckerService:
-    return CheckerService(ai_service=get_ai_service())
-
-
-def get_writing_feedback_service() -> WritingFeedbackService:
-    return WritingFeedbackService(ai_service=get_ai_service())
+    return CheckerService()
 
 
 def get_paper_analyzer_service() -> PaperAnalyzerService:

@@ -34,7 +34,7 @@ const CATEGORY_DESCRIPTIONS: Record<string, string> = {
   humanizer:
     "Controls for the Humanizer tool: which backend serves the fine-tuned 'Ultra Human' mode (local/Modal/off), request size limits, and per-IP rate limits.",
   checker:
-    "Limits for AI Checker and Writing Feedback: max text length accepted and per-IP hourly rate limits for each.",
+    "Limits for the AI Checker: max text length accepted and the per-IP hourly rate limit.",
   realtime: "Per-IP hourly rate limit for the Real-time AI (web-search-grounded chat) tool.",
   extract: "Per-IP hourly rate limit for URL/image text extraction.",
   paper_analyzer: "Limits for Paper Analyzer: max PDF pages accepted per request and the per-IP hourly rate limit.",
@@ -53,7 +53,7 @@ const SETTING_LABELS: Record<string, string> = {
   ),
   tool_research_copilot_enabled: "Research Copilot",
   tool_humanizer_enabled: "Humanizer",
-  tool_checker_enabled: "AI Checker & Writing Feedback",
+  tool_checker_enabled: "AI Checker",
   tool_realtime_enabled: "Real-time AI",
   tool_paper_analyzer_enabled: "Paper Analyzer",
   tool_extract_enabled: "URL / image text extraction",
@@ -81,8 +81,6 @@ const SETTING_LABELS: Record<string, string> = {
   humanize_rate_limit_per_hour: "Rate limit (requests/hour per IP)",
   checker_max_chars: "AI Checker max characters per request",
   checker_rate_limit_per_hour: "AI Checker rate limit (requests/hour per IP)",
-  feedback_max_chars: "Writing Feedback max characters per request",
-  feedback_rate_limit_per_hour: "Writing Feedback rate limit (requests/hour per IP)",
   realtime_rate_limit_per_hour: "Rate limit (requests/hour per IP)",
   extract_rate_limit_per_hour: "Rate limit (requests/hour per IP)",
   paper_analyzer_max_pages: "Max PDF pages per request",

@@ -5,16 +5,14 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.api.dependencies.auth import get_current_user_email
 from app.api.dependencies.tools import require_tool
-from app.api.dependencies.services import get_checker_service, get_writing_feedback_service
+from app.api.dependencies.services import get_checker_service
 from app.core.constants import ALLOWED_UPLOAD_EXTENSIONS
 from app.core.exceptions import AppError
 from app.core.rate_limit import limiter
 from app.core.uploads import read_upload_limited, require_pdf
 from app.schemas.checker import CheckResult, CheckTextRequest
-from app.schemas.writing_feedback import WritingFeedbackRequest, WritingFeedbackResult
 from app.services.checker_service import CheckerService
-from app.services.runtime_settings import checker_rate_limit, feedback_rate_limit, runtime_settings
-from app.services.writing_feedback_service import WritingFeedbackService
+from app.services.runtime_settings import checker_rate_limit, runtime_settings
 
 router = APIRouter(prefix="/checker")
 
@@ -29,7 +27,6 @@ def _extract_pdf_text(content: bytes) -> str:
         raise AppError(code="UNREADABLE_PDF", message="Could not read this PDF file", status_code=422) from exc
 
 
-
 @router.post("/text", response_model=CheckResult, dependencies=[require_tool("checker")])
 @limiter.limit(checker_rate_limit)
 async def check_text(
@@ -38,7 +35,7 @@ async def check_text(
     email: str = Depends(get_current_user_email),
     service: CheckerService = Depends(get_checker_service),
 ):
-    return await service.check_text(body.text, advanced=body.advanced)
+    return await service.check_text(body.text)
 
 
 @router.post("/document", response_model=CheckResult, dependencies=[require_tool("checker")])
@@ -74,13 +71,3 @@ async def check_document(
 
     return await service.check_text(text)
 
-
-@router.post("/feedback", response_model=WritingFeedbackResult, dependencies=[require_tool("checker")])
-@limiter.limit(feedback_rate_limit)
-async def writing_feedback(
-    request: Request,
-    body: WritingFeedbackRequest,
-    email: str = Depends(get_current_user_email),
-    service: WritingFeedbackService = Depends(get_writing_feedback_service),
-):
-    return await service.analyze(body.text)

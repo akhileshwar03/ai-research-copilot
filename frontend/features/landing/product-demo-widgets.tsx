@@ -203,7 +203,6 @@ export function HumanizerDemoWidget() {
 // ─── AI Checker ─────────────────────────────────────────────────────────────
 
 interface CheckerScript {
-  percent: number;
   verdict: string;
   tone: "bad" | "warn" | "good";
   passage: string;
@@ -211,10 +210,11 @@ interface CheckerScript {
   flagEnd: number;
 }
 
+// The verdict words and the highlighted sentence mirror the real product's result (likely human, unsure or
+// likely AI, plus the sentences that stand out). It deliberately shows no percentage: the product doesn't either.
 const CHECKER_SCRIPTS: CheckerScript[] = [
   {
-    percent: 94,
-    verdict: "AI-generated",
+    verdict: "Likely AI",
     tone: "bad",
     passage:
       "In today's rapidly evolving landscape, it is important to note that organizations must leverage cutting-edge solutions to stay competitive.",
@@ -222,7 +222,6 @@ const CHECKER_SCRIPTS: CheckerScript[] = [
     flagEnd: 115,
   },
   {
-    percent: 8,
     verdict: "Likely human",
     tone: "good",
     passage: "Honestly, the whole thing took longer than I expected — mostly because I kept rewriting the intro.",
@@ -230,8 +229,7 @@ const CHECKER_SCRIPTS: CheckerScript[] = [
     flagEnd: 0,
   },
   {
-    percent: 61,
-    verdict: "Possibly AI",
+    verdict: "Unsure",
     tone: "warn",
     passage: "The results demonstrate a significant improvement, thereby validating the proposed methodology.",
     flagStart: 27,
@@ -239,10 +237,10 @@ const CHECKER_SCRIPTS: CheckerScript[] = [
   },
 ];
 
-const TONE_COLORS: Record<CheckerScript["tone"], { ring: string; badgeBg: string; badgeText: string; mark: string }> = {
-  bad: { ring: "#e0574f", badgeBg: "bg-red-50", badgeText: "text-red-600", mark: "bg-red-100 text-red-700" },
-  warn: { ring: "#c9a227", badgeBg: "bg-amber-50", badgeText: "text-amber-600", mark: "bg-amber-100 text-amber-700" },
-  good: { ring: "#1f9d6f", badgeBg: "bg-emerald-50", badgeText: "text-emerald-600", mark: "bg-emerald-100 text-emerald-700" },
+const TONE_COLORS: Record<CheckerScript["tone"], { badgeBg: string; badgeText: string; mark: string }> = {
+  bad: { badgeBg: "bg-red-50", badgeText: "text-red-600", mark: "bg-red-100 text-red-700" },
+  warn: { badgeBg: "bg-amber-50", badgeText: "text-amber-600", mark: "bg-amber-100 text-amber-700" },
+  good: { badgeBg: "bg-emerald-50", badgeText: "text-emerald-600", mark: "bg-emerald-100 text-emerald-700" },
 };
 
 type CheckerPhase = "scanning" | "revealed";
@@ -250,7 +248,6 @@ type CheckerPhase = "scanning" | "revealed";
 export function AICheckerDemoWidget() {
   const [i, setI] = useState(0);
   const [phase, setPhase] = useState<CheckerPhase>(() => (prefersReducedMotion() ? "revealed" : "scanning"));
-  const [dial, setDial] = useState(() => (prefersReducedMotion() ? CHECKER_SCRIPTS[0].percent : 0));
   const paused = useDemoPaused();
   const script = CHECKER_SCRIPTS[i];
   const colors = TONE_COLORS[script.tone];
@@ -263,20 +260,10 @@ export function AICheckerDemoWidget() {
     }
     const t = setTimeout(() => {
       setPhase("scanning");
-      setDial(0);
       setI((n) => (n + 1) % CHECKER_SCRIPTS.length);
     }, 3200);
     return () => clearTimeout(t);
   }, [phase, paused]);
-
-  useEffect(() => {
-    if (phase !== "revealed" || paused) return;
-    if (dial >= script.percent) return;
-    const t = setTimeout(() => setDial((d) => Math.min(script.percent, d + 2)), 14);
-    return () => clearTimeout(t);
-  }, [phase, dial, script.percent, paused]);
-
-  const circumference = 2 * Math.PI * 42;
 
   return (
     <div className="relative mx-auto w-full max-w-[440px]">
@@ -289,30 +276,13 @@ export function AICheckerDemoWidget() {
         <DotsHeader>
           <span className="ml-1 text-[11px] font-medium text-zinc-500">AI Checker</span>
           <span className="ml-auto rounded-full bg-[#1f7d6f1f] px-2 py-1 text-[10px] font-semibold text-[#145c51]">
-            {phase === "scanning" ? "Scanning…" : "Advanced Scan"}
+            {phase === "scanning" ? "Checking…" : "Result"}
           </span>
         </DotsHeader>
         <div className="flex flex-col items-center gap-3 px-4 py-6">
-          <svg viewBox="0 0 100 100" className="h-24 w-24 -rotate-90">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(0,0,0,0.06)" strokeWidth="9" />
-            <circle
-              cx="50"
-              cy="50"
-              r="42"
-              fill="none"
-              stroke={colors.ring}
-              strokeWidth="9"
-              strokeLinecap="round"
-              strokeDasharray={`${circumference * (dial / 100)} ${circumference}`}
-              style={{ transition: "stroke-dasharray 0.1s linear" }}
-            />
-          </svg>
-          <div className="-mt-16 text-center">
-            <span className="font-mono text-2xl font-bold text-zinc-900">{dial}%</span>
-          </div>
           <span
             className={[
-              "mt-8 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 transition-opacity duration-300",
+              "rounded-full px-4 py-1.5 text-[13px] font-semibold ring-1 transition-opacity duration-300",
               colors.badgeBg,
               colors.badgeText,
               "ring-current/15",

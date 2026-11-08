@@ -52,6 +52,17 @@ services:
       - key: R2_BUCKET_NAME
         sync: false
 
+      # AI Checker model server. All four must be set or the AI Checker answers
+      # "temporarily unavailable" (there is no fallback detector).
+      - key: CHECKER_URL
+        sync: false
+      - key: CHECKER_TOKEN
+        sync: false
+      - key: CF_ACCESS_CLIENT_ID
+        sync: false
+      - key: CF_ACCESS_CLIENT_SECRET
+        sync: false
+
     # NOTE: uploads_dir (local disk) is only used as a fallback when R2 env
     # vars above aren't set. With R2 configured, no Render disk is needed —
     # files and vector embeddings (pgvector, in the same Neon DB) both

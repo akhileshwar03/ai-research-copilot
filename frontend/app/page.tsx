@@ -316,19 +316,19 @@ export default function LandingPage() {
                 AI Checker
               </p>
               <h2 className="mt-2 font-headline text-3xl font-bold tracking-tight text-zinc-900">
-                Decisive answers, not hedging.
+                An honest answer, including &ldquo;unsure&rdquo;.
               </h2>
               <p className="mt-4 text-[14.5px] leading-7 text-zinc-600">
-                Detect AI-generated text with sentence-level highlighting and a
-                paragraph-by-paragraph breakdown — plus a free grammar and style pass
-                bundled in. Every result carries an honest disclaimer, not false certainty.
+                Find out whether text was written by a person, an AI, or both, with the
+                exact sentences that stand out. Every result states its limits instead of
+                false certainty.
               </p>
               <ul className="mt-6 space-y-3">
                 {[
-                  "Sentence-level highlighting of the exact flagged text",
-                  "Advanced Scan — a paragraph-by-paragraph AI-probability breakdown",
-                  "Free Writing Feedback — grammar, spelling, and clarity issues",
-                  "States its own false-positive risk instead of overclaiming",
+                  "Three clear answers: likely human, unsure or likely AI",
+                  "Sentence-by-sentence highlighting of what stands out",
+                  "Reads PDFs as well as pasted text",
+                  "Plain-language limits on what it catches and what it misses",
                 ].map((line) => (
                   <li key={line} className="flex items-start gap-2.5 text-[13.5px] text-zinc-700">
                     <span

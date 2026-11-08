@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.tools import TOOL_SETTING_KEYS
+from app.core.config import get_settings
 from app.core.exceptions import AppError
 from app.db.models.app_setting import AppSetting
 from app.db.session import get_db
@@ -42,6 +43,7 @@ class PublicAppConfig(BaseModel):
     chat_max_chars: int
     humanize_max_words: int
     checker_max_chars: int
+    checker_min_words: int
     max_upload_size_mb: int
     github_link_enabled: bool
     github_repo_url: str
@@ -108,6 +110,7 @@ def public_app_config(db: Session = Depends(get_db)):
         chat_max_chars=int(runtime_settings.get("chat_max_chars")),
         humanize_max_words=int(runtime_settings.get("humanize_max_words")),
         checker_max_chars=int(runtime_settings.get("checker_max_chars")),
+        checker_min_words=get_settings().checker_min_words,
         max_upload_size_mb=int(runtime_settings.get("max_upload_size_mb")),
         github_link_enabled=bool(runtime_settings.get("github_link_enabled")),
         github_repo_url=str(runtime_settings.get("github_repo_url") or ""),

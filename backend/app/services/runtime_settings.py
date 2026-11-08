@@ -207,7 +207,7 @@ def _defs() -> dict[str, SettingDef]:
         # ── Feature switches ────────────────────────────────────────────────
         "tool_research_copilot_enabled": _bool_setting("Research Copilot (document chat) is available", "features"),
         "tool_humanizer_enabled": _bool_setting("Humanizer is available", "features"),
-        "tool_checker_enabled": _bool_setting("AI Checker and Writing Feedback are available", "features"),
+        "tool_checker_enabled": _bool_setting("AI Checker is available", "features"),
         "tool_realtime_enabled": _bool_setting("Real-time AI is available", "features"),
         "tool_paper_analyzer_enabled": _bool_setting("Paper Analyzer is available", "features"),
         "tool_extract_enabled": _bool_setting("URL / image text extraction is available", "features"),
@@ -322,7 +322,7 @@ def _defs() -> dict[str, SettingDef]:
             500,
             "Minimum words required per Humaniser request (0 = no minimum). Very short text reads "
             "as low-confidence to any AI detector regardless of authorship, so rewriting it can't "
-            "reliably move the needle — see the AI Checker's own confidence threshold.",
+            "reliably move the needle.",
             "humanizer",
         ),
         "humanize_max_words": SettingDef(
@@ -332,12 +332,6 @@ def _defs() -> dict[str, SettingDef]:
         # ── AI Checker ──────────────────────────────────────────────────────
         "checker_max_chars": SettingDef(int, 200, 50000, "Maximum characters accepted per AI Checker request", "checker"),
         "checker_rate_limit_per_hour": SettingDef(int, 1, 1000, "AI Checker requests allowed per IP per hour", "checker"),
-        "feedback_max_chars": SettingDef(
-            int, 200, 50000, "Maximum characters accepted per Writing Feedback request", "checker"
-        ),
-        "feedback_rate_limit_per_hour": SettingDef(
-            int, 1, 1000, "Writing Feedback requests allowed per IP per hour", "checker"
-        ),
         # ── Real-time AI ────────────────────────────────────────────────────
         "realtime_rate_limit_per_hour": SettingDef(int, 1, 1000, "Real-time AI requests allowed per IP per hour", "realtime"),
         # ── Text extraction ─────────────────────────────────────────────────
@@ -458,8 +452,6 @@ def _env_defaults() -> dict[str, SettingValue]:
         "checker_max_chars": 20000,
         "checker_rate_limit_per_hour": 30,
         "realtime_rate_limit_per_hour": 30,
-        "feedback_max_chars": 20000,
-        "feedback_rate_limit_per_hour": 30,
         "extract_rate_limit_per_hour": 20,
         "paper_analyzer_max_pages": 60,
         "paper_analyzer_rate_limit_per_hour": 20,
@@ -688,10 +680,6 @@ def checker_rate_limit() -> str:
 
 def realtime_rate_limit() -> str:
     return f"{int(runtime_settings.get('realtime_rate_limit_per_hour'))}/hour"
-
-
-def feedback_rate_limit() -> str:
-    return f"{int(runtime_settings.get('feedback_rate_limit_per_hour'))}/hour"
 
 
 def extract_rate_limit() -> str:

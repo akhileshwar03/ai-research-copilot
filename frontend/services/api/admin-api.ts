@@ -269,6 +269,7 @@ export interface SystemInfo {
   vector_store: { ok: boolean | null };
   storage: { backend: "r2" | "local"; uploads_dir: string | null };
   openai: { configured: boolean; chat_model: string; ok: boolean | null };
+  checker: { configured: boolean; host: string | null; ok: boolean | null };
   humanizer: {
     rewrite_model: string;
     classify_model: string;

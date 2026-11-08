@@ -1,57 +1,29 @@
 import { apiRequest } from "@/services/api/client";
 
-export interface CheckSignals {
-  burstiness: number;
-  lexical_diversity: number;
-  ai_phrase_hits: number;
-  // Optional: a response from a backend deploy that predates these fields
-  // (e.g. mid-rollout, or a cached response) won't have them — the UI must
-  // degrade gracefully rather than assume they're always present.
-  function_word_ratio?: number;
-  mean_word_length?: number;
-  trigram_repetition_rate?: number;
-  transition_opener_rate?: number;
-  personal_voice_score?: number;
-  heuristic_score: number;
-  llm_probability: number | null;
-}
+export type Verdict = "likely_human" | "uncertain" | "likely_ai";
 
-export interface ParagraphScore {
+export interface SentenceScore {
   text: string;
-  ai_probability: number;
-  verdict: "likely_human" | "uncertain" | "likely_ai";
+  ai_score: number | null;
+  flagged: boolean;
 }
 
 export interface CheckResult {
-  ai_probability: number;
-  verdict: "likely_human" | "uncertain" | "likely_ai";
-  confidence: "low" | "moderate";
-  signals: CheckSignals;
-  ai_sentences: string[];
-  paragraphs: ParagraphScore[];
-  explanation: string;
+  verdict: Verdict;
+  /** Probability the model puts on "not purely human" (AI-written, AI-edited or mixed), 0-1. */
+  ai_score: number;
+  /** The model's probability for a human + AI mix, 0-1. */
+  mixed_probability: number;
+  word_count: number;
+  sentences: SentenceScore[];
   disclaimer: string;
 }
 
-export interface FeedbackIssue {
-  original: string;
-  suggestion: string;
-  type: "grammar" | "spelling" | "style" | "clarity" | "word-choice";
-  explanation: string;
-}
-
-export interface WritingFeedbackResult {
-  issues: FeedbackIssue[];
-  overall_score: number;
-  summary: string;
-  word_count: number;
-}
-
 export const checkerApi = {
-  checkText: (text: string, advanced = false) =>
+  checkText: (text: string) =>
     apiRequest<CheckResult>("/checker/text", {
       method: "POST",
-      body: JSON.stringify({ text, advanced }),
+      body: JSON.stringify({ text }),
     }),
 
   checkDocument: (file: File) => {
@@ -62,10 +34,4 @@ export const checkerApi = {
       body: formData,
     });
   },
-
-  writingFeedback: (text: string) =>
-    apiRequest<WritingFeedbackResult>("/checker/feedback", {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }),
 };

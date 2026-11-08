@@ -7,7 +7,7 @@ one admin panel, and one set of runtime controls:
 |---|---|---|
 | **Research Copilot** | Chat with your PDFs. Page-cited, document-grounded answers; multi-document compare; one-click research actions (summary, key findings, full report, compare, references, study questions); follow-up suggestions. | `POST /chat`, `/upload`, `/documents`, `/sessions` |
 | **Humanizer** | Rewrites AI-sounding text. *Basic* is a 3-pass GPT pipeline (analyze → best-of-N rewrite → verify); *Ultra Human* is a locally-served fine-tuned LoRA (Qwen2.5-7B). | `POST /humanize`, `/humanize/ultra`, `/humanizer/runs` |
-| **AI Checker** | AI-probability detection with per-paragraph signals, plus Writing Feedback. | `POST /checker/text`, `/checker/document`, `/checker/feedback` |
+| **AI Checker** | Tells you if text was written by a person, an AI, or both: a verdict plus the sentences that stand out. Served by our own trained model. | `POST /checker/text`, `/checker/document` |
 | **Real-time AI** | Web-grounded chat (Tavily search) with cited sources and its own session history. | `POST /realtime/chat`, `/realtime/sessions` |
 | **Paper Analyzer** | Measures a PDF's real layout (margins, spacing, fonts) against a style guide. | `POST /paper-analyzer/analyze` |
 

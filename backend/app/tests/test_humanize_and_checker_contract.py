@@ -1,6 +1,6 @@
 """HTTP-level contract tests for /humanize and /checker/* — auth gating,
-validation errors, and response shape. Real service logic (heuristics, LLM
-combination) is covered by test_checker_service.py / test_humanizer_service.py;
+validation errors, and response shape. Real service logic (the checker client, the
+humanizer pipeline) is covered by test_checker_service.py / test_humanizer_service.py;
 these tests exercise the route wiring against the Fake*Service overrides in
 conftest.py.
 """
@@ -112,32 +112,34 @@ def test_checker_text_success(client, auth_headers):
     assert resp.status_code == 200
     body = resp.json()
     assert body["verdict"] == "uncertain"
-    assert "disclaimer" in body and body["disclaimer"]
-    assert "signals" in body
+    assert body["disclaimer"]
 
 
-# 2026-09-28: real bug found live in production — CheckerService.compute_heuristics()
-# computed five new signals (function_word_ratio, mean_word_length,
-# trigram_repetition_rate, transition_opener_rate, personal_voice_score) and the
-# service layer's own unit tests passed, but the route's `response_model=CheckResult`
-# Pydantic schema (app/schemas/checker.py) was never updated to declare them —
-# FastAPI/Pydantic silently drops any field not declared on the response model, so
-# every real HTTP response kept shipping the OLD signal shape despite the service
-# genuinely computing the new one. Service-layer tests calling CheckerService
-# directly can never catch this class of bug; only a real HTTP round-trip through
-# the actual route can, which is what this asserts.
-def test_checker_text_new_heuristic_signals_survive_the_http_response_model(client, auth_headers):
-    resp = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers)
-    assert resp.status_code == 200
-    signals = resp.json()["signals"]
-    for key in (
-        "function_word_ratio",
-        "mean_word_length",
-        "trigram_repetition_rate",
-        "transition_opener_rate",
-        "personal_voice_score",
-    ):
-        assert key in signals, f"{key} was silently dropped by the response_model"
+# Service-layer tests call CheckerService directly and cannot see a field that the route's
+# `response_model` silently drops, so this asserts the real HTTP shape round-trips.
+def test_checker_text_response_keeps_every_declared_field(client, auth_headers):
+    body = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers).json()
+    assert set(body) == {"verdict", "ai_score", "mixed_probability", "word_count", "sentences", "disclaimer"}
+    assert set(body["sentences"][0]) == {"text", "ai_score", "flagged"}
+
+
+def test_checker_text_reports_unavailable_as_a_calm_503(client, auth_headers):
+    from app.api.dependencies import services as service_deps
+    from app.core.exceptions import AppError
+    from app.main import app
+
+    class Down:
+        async def check_text(self, text):
+            raise AppError(code="CHECKER_UNAVAILABLE", message="The AI checker is temporarily unavailable.", status_code=503)
+
+    previous = app.dependency_overrides[service_deps.get_checker_service]
+    app.dependency_overrides[service_deps.get_checker_service] = lambda: Down()
+    try:
+        resp = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers)
+    finally:
+        app.dependency_overrides[service_deps.get_checker_service] = previous
+    assert resp.status_code == 503
+    assert "CHECKER_UNAVAILABLE" in resp.text and "temporarily unavailable" in resp.text
 
 
 def test_checker_text_rejects_empty(client, auth_headers):
@@ -188,24 +190,3 @@ def test_checker_document_rejects_pdf_with_no_extractable_text(client, auth_head
     )
     assert resp.status_code == 422
 
-
-# ── Writing Feedback ─────────────────────────────────────────────────────────
-
-
-def test_writing_feedback_requires_auth(client):
-    resp = client.post("/api/v1/checker/feedback", json={"text": "hello there"})
-    assert resp.status_code == 401
-
-
-def test_writing_feedback_success(client, auth_headers):
-    resp = client.post("/api/v1/checker/feedback", json={"text": "some text to review"}, headers=auth_headers)
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["overall_score"] == 80
-    assert len(body["issues"]) == 1
-    assert body["issues"][0]["type"] == "style"
-
-
-def test_writing_feedback_rejects_empty(client, auth_headers):
-    resp = client.post("/api/v1/checker/feedback", json={"text": ""}, headers=auth_headers)
-    assert resp.status_code in (400, 422)

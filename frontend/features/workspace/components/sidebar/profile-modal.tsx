@@ -620,23 +620,19 @@ const TUTORIAL_GROUPS: TutorialGroup[] = [
   {
     icon: "✅",
     tool: "AI Checker",
-    tagline: "AI-probability detection and writing feedback",
+    tagline: "Tells you if text was written by a person, an AI, or both",
     steps: [
       {
         title: "Paste text or upload a PDF",
-        desc: "Check the AI Detector tab. You can paste text directly, upload a PDF, import a URL, or upload an image (text is extracted automatically).",
+        desc: "Paste text directly, upload a PDF, import a URL, or upload an image (text is extracted automatically). The text needs at least 60 words.",
       },
       {
         title: "Read the verdict",
-        desc: "You get an AI-probability score, a confidence read, and a set of contributing signals. Turn on Advanced Scan for a paragraph-by-paragraph breakdown — slower, but more precise about which parts read as AI-written.",
-      },
-      {
-        title: "Get writing feedback",
-        desc: "Switch to the Writing Feedback tab for structural and clarity notes on the same text, independent of the AI-detection verdict.",
+        desc: "You get one of three answers: likely human, unsure or likely AI. Unsure is a real answer: the signals were mixed. Sentences that look AI-written are highlighted below the verdict.",
       },
       {
         title: "Send flagged text to the Humanizer",
-        desc: "If a result flags text as likely AI-written, an \"Apply humanization?\" prompt can hand that exact text straight to the Humanizer to rewrite.",
+        desc: "If a result says likely AI, a button can hand that exact text straight to the Humanizer to rewrite.",
       },
     ],
   },
@@ -831,7 +827,7 @@ const TOOL_SUMMARIES: ToolSummary[] = [
   {
     icon: "✅",
     title: "AI Checker",
-    desc: "AI-probability detection with an optional paragraph-by-paragraph Advanced Scan, plus a separate Writing Feedback mode — with a direct handoff to the Humanizer for anything flagged.",
+    desc: "Tells you whether text looks human-written, AI-written or unclear, with the sentences that stand out highlighted, and a direct handoff to the Humanizer for anything flagged.",
   },
   {
     icon: "✍️",

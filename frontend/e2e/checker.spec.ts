@@ -1,85 +1,57 @@
 import { test, expect } from "@playwright/test";
 import { signIn, uniqueEmail } from "./helpers";
 
-// Deliberately loaded with checker_service.py's own _AI_TELL_PHRASES list
-// ("delve into", "moreover", "it's important to note", "seamless",
-// "paradigm shift", "unlock the potential", "in conclusion") plus uniform
-// sentence lengths and repetitive phrasing (low burstiness/lexical
-// diversity) — both the heuristic scorer and the LLM prompt (which flags
-// "generic transitions... overused stock phrases" as top evidence) key off
-// exactly this, so this text should reliably land as AI-GENERATED rather
-// than in the ambiguous 0.4-0.6 "uncertain" band. At 70+ words it also
-// clears MIN_WORDS_FOR_CONFIDENCE=60, avoiding the "low confidence" caveat
-// that short text gets regardless of signal.
+// The AI Checker is served by a separate model server. The e2e backend only
+// reaches one if CHECKER_URL, CHECKER_TOKEN, CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET are exported in the
+// shell that runs Playwright (point CHECKER_URL at a running copy of the checker model service). Without
+// them the checker correctly answers "temporarily unavailable", so these tests skip instead of failing.
+test.skip(!process.env.CHECKER_URL, "Set CHECKER_URL (and the other CHECKER_* values) to run the AI Checker e2e tests.");
+
+// A typical AI-written paragraph, 60+ words so it clears the minimum.
 const AI_LIKE_TEXT = `
-In today's world, it's important to delve into the many benefits of this approach.
-Moreover, this solution offers a seamless experience for every user. Furthermore,
-it's important to note that this represents a genuine paradigm shift in how we
-think about the problem. Additionally, this framework helps unlock the potential
-of every team that adopts it. Moreover, the seamless integration delivers a
-paradigm shift that benefits everyone involved. In conclusion, it's important
-to note that this seamless, paradigm-shifting approach helps unlock real value
-for every organization moving forward.
+Climate change is one of the most pressing challenges facing our planet today. Rising global temperatures
+are causing glaciers to melt, sea levels to rise, and weather patterns to become increasingly unpredictable.
+To address this issue, governments, businesses, and individuals must work together to reduce greenhouse gas
+emissions. Transitioning to renewable energy sources, such as solar and wind power, is a crucial step. By
+taking collective action, we can build a more sustainable future for generations to come.
 `.trim();
 
-test("AI Detector flags obviously AI-generated text", async ({ page }) => {
+test("the checker waits for enough words, then returns a verdict with a sentence view", async ({ page }) => {
   await signIn(page, uniqueEmail("checker"));
   await page.goto("/checker");
 
-  // "AI Detector" is the default mode, but click explicitly for
-  // determinism rather than relying on default state.
-  const detectorTab = page.getByRole("button", { name: "AI Detector" });
-  await expect(detectorTab).toBeVisible({ timeout: 15_000 });
-  await detectorTab.click();
+  const textbox = page.getByLabel("Text to check");
+  const check = page.getByRole("button", { name: "Check text" });
+  await expect(textbox).toBeVisible({ timeout: 15_000 });
 
-  await page.getByPlaceholder("Paste text here…").fill(AI_LIKE_TEXT);
+  // Too short: the button stays disabled and the page says how many words are missing.
+  await textbox.fill("Only a few words here.");
+  await expect(check).toBeDisabled();
+  await expect(page.getByText(/Add \d+ more to run the check/)).toBeVisible();
 
-  const runButton = page.getByRole("button", { name: "Run detection" });
-  await expect(runButton).toBeEnabled();
-  await runButton.click();
+  // Long enough: the check runs and one of the three verdicts appears. The exact verdict comes from a live
+  // model, so this asserts the structure, not which of the three it picks.
+  await textbox.fill(AI_LIKE_TEXT);
+  await expect(check).toBeEnabled();
+  await check.click();
 
-  // Synchronous (not streamed) — the verdict pill appearing is the real
-  // completion signal, more reliable than polling the button's own label
-  // ("Scanning…" -> disabled the whole time it's pending anyway).
-  const verdict = page.getByText(/HUMAN-WRITTEN|MIXED SIGNALS|AI-GENERATED/);
+  const verdict = page.getByText(/^(Likely human|Unsure|Likely AI)$/).first();
   await expect(verdict).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: "Sentence view" })).toBeVisible();
 
-  // The verdict itself involves a live LLM call blended with deterministic
-  // heuristics (checker_service.py's _verdict thresholds), so it's not
-  // 100% guaranteed reproducible — but text this saturated with literal
-  // AI-tell phrases and flat, repetitive phrasing should reliably clear
-  // the >0.6 probability threshold for AI-GENERATED, not land in the
-  // ambiguous middle band.
-  await expect(verdict).toHaveText("AI-GENERATED");
-
-  // A real percentage from the gauge, not a placeholder/zero value.
-  // .first(): the gauge, an "AI N%"/"Human N%" breakdown, and a model-
-  // estimate line all separately contain a percentage.
-  await expect(page.getByText(/%/).first()).toBeVisible();
-
-  // Confirms the 60-word floor was actually cleared — a false "short text"
-  // caveat would mean the test's own input assumptions were wrong.
-  await expect(page.getByText(/text is short/i)).not.toBeVisible();
+  // The page states its limits, and never shows a bare percentage as the answer.
+  await expect(page.getByRole("heading", { name: /what this checker can and can.t do/i })).toBeVisible();
 });
 
-test("Writing Feedback mode produces real, non-empty feedback", async ({ page }) => {
-  await signIn(page, uniqueEmail("checker-feedback"));
+test("a non-PDF file is refused before it is uploaded", async ({ page }) => {
+  await signIn(page, uniqueEmail("checker-pdf"));
   await page.goto("/checker");
 
-  await page.getByRole("button", { name: "Writing Feedback" }).click();
-
-  // The placeholder is identical between AI Detector and Writing Feedback
-  // (both "Paste text here…") — scoping to whichever is visible after the
-  // mode switch is enough since only one panel renders at a time.
-  await page.getByPlaceholder("Paste text here…").fill(AI_LIKE_TEXT);
-
-  const checkButton = page.getByRole("button", { name: "Check writing" });
-  await expect(checkButton).toBeEnabled();
-  await checkButton.click();
-
-  // Real completion signal: writing-feedback-panel.tsx renders either
-  // "No issues found" or "N issue(s) found" once result is set — a
-  // genuine response landed, not just the button reverting from
-  // "Reviewing…" back to its idle label.
-  await expect(page.getByText(/no issues found|\d+ issues? found/i)).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("tab", { name: "Upload PDF" }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("not a pdf"),
+  });
+  await expect(page.getByRole("alert")).toContainText("Only PDF files are supported");
 });

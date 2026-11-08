@@ -217,50 +217,18 @@ class FakeHumanizerService:
 
 
 class FakeCheckerService:
-    async def check_text(self, text: str, advanced: bool = False) -> dict:
+    async def check_text(self, text: str) -> dict:
         stripped = text.strip()
         if not stripped:
             from app.core.exceptions import AppError
             raise AppError(code="EMPTY_TEXT", message="Text must not be empty", status_code=400)
         return {
-            "ai_probability": 0.42,
             "verdict": "uncertain",
-            "confidence": "low",
-            "signals": {
-                "burstiness": 0.5,
-                "lexical_diversity": 0.8,
-                "ai_phrase_hits": 0,
-                "function_word_ratio": 0.4,
-                "mean_word_length": 5.0,
-                "trigram_repetition_rate": 0.02,
-                "transition_opener_rate": 0.05,
-                "personal_voice_score": 1.0,
-                "heuristic_score": 42.0,
-                "llm_probability": 0.42,
-            },
-            "explanation": "fake explanation",
-            "disclaimer": "fake disclaimer",
-        }
-
-
-class FakeWritingFeedbackService:
-    async def analyze(self, text: str) -> dict:
-        stripped = text.strip()
-        if not stripped:
-            from app.core.exceptions import AppError
-            raise AppError(code="EMPTY_TEXT", message="Text must not be empty", status_code=400)
-        return {
-            "issues": [
-                {
-                    "original": "fake issue span",
-                    "suggestion": "fake fixed span",
-                    "type": "style",
-                    "explanation": "fake explanation",
-                }
-            ],
-            "overall_score": 80,
-            "summary": "fake summary",
+            "ai_score": 0.42,
+            "mixed_probability": 0.1,
             "word_count": len(stripped.split()),
+            "sentences": [{"text": "A fake sentence.", "ai_score": 0.7, "flagged": True}],
+            "disclaimer": "fake disclaimer",
         }
 
 
@@ -337,7 +305,6 @@ def client() -> TestClient:
     # run in one request and expect to see it in a later list/delete request.
     app.dependency_overrides[service_deps.get_humanizer_service] = lambda: fake_humanizer
     app.dependency_overrides[service_deps.get_checker_service] = lambda: FakeCheckerService()
-    app.dependency_overrides[service_deps.get_writing_feedback_service] = lambda: FakeWritingFeedbackService()
     app.dependency_overrides[service_deps.get_ai_service] = lambda: FakeAIServiceForExtract()
     app.dependency_overrides[service_deps.get_realtime_service] = lambda: FakeRealtimeService()
     app.dependency_overrides[service_deps.get_paper_analyzer_service] = lambda: FakePaperAnalyzerService()

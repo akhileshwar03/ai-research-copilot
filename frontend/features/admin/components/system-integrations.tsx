@@ -184,7 +184,9 @@ export function ApiUsageSection({
 
 const SERVICE_DESCRIPTIONS: Record<string, string> = {
   OpenAI:
-    "The core LLM provider for the live app. Powers: Research Copilot's document chat (OPENAI_CHAT_MODEL), AI Checker + Writing Feedback, and Humanizer's standard 'Basic' mode. If this key is missing or invalid, those three tools fail outright.",
+    "The core LLM provider for the live app. Powers: Research Copilot's document chat (OPENAI_CHAT_MODEL) and Humanizer's standard 'Basic' mode. If this key is missing or invalid, those tools fail outright.",
+  "AI Checker model server":
+    "The trained AI Checker model, served by its own model server (CHECKER_URL, CHECKER_TOKEN, CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET). If any value is missing or the server is unreachable, the AI Checker tells users it is temporarily unavailable; there is no fallback detector.",
   "Modal (Ultra Human GPU hosting)":
     "GPU hosting for Humanizer's 'Ultra Human' mode (the fine-tuned LoRA model) when humanizer_ultra_backend is set to 'modal'. Scale-up path when Ultra Human serves multiple concurrent users.",
   Tavily:

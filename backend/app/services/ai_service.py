@@ -20,11 +20,9 @@ class AIService:
             callbacks=[TokenUsageCallback(settings.openai_chat_model)],
         )
         # Separate, near-deterministic client for classification/analysis tasks
-        # (AI Checker, Writing Feedback, image OCR transcription) — these want a
-        # stable, repeatable answer, not the creative variation that's correct
-        # for the humanizer's rewriting. Sharing one temperature=0.3 client
-        # across both caused the checker's displayed verdict to swing between
-        # likely_human and likely_ai on identical input, run to run.
+        # (chat routing, follow-up suggestions) — these want a stable, repeatable
+        # answer, not the creative variation that's correct for the humanizer's
+        # rewriting.
         self.classifier_llm = ChatOpenAI(
             api_key=settings.openai_api_key,
             model=settings.openai_chat_model,
@@ -135,7 +133,7 @@ class AIService:
 
     async def classify(self, messages: list[tuple[str, str]]) -> str:
         """Single non-streaming, near-deterministic completion for
-        classification/analysis tasks (AI Checker, Writing Feedback) where a
+        classification/analysis tasks (chat routing, follow-up suggestions) where a
         stable answer matters more than creative variation."""
         response = await self.classifier_llm.ainvoke(messages)
         return response.content

@@ -28,6 +28,7 @@ export interface PublicAppConfig {
   chat_max_chars: number;
   humanize_max_words: number;
   checker_max_chars: number;
+  checker_min_words: number;
   max_upload_size_mb: number;
   github_link_enabled: boolean;
   github_repo_url: string;
@@ -62,6 +63,7 @@ const FALLBACK: PublicAppConfig = {
   chat_max_chars: 4000,
   humanize_max_words: 3000,
   checker_max_chars: 20000,
+  checker_min_words: 60,
   max_upload_size_mb: 20,
   // Falls back to hidden, not to a hardcoded repo URL — if the config request fails,
   // showing nothing is the safe default, not silently exposing a repo an admin may
