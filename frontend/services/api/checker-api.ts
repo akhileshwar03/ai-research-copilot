@@ -28,12 +28,4 @@ export const checkerApi = {
       body: JSON.stringify({ text }),
     }),
 
-  checkDocument: (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
-    return apiRequest<CheckResult>("/checker/document", {
-      method: "POST",
-      body: formData,
-    });
-  },
 };

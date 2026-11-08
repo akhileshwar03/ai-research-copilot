@@ -1,5 +1,5 @@
-"""Shared "rich input" text extraction — pulling text from a URL or an
-image — used by both the Humanizer and the AI Checker so neither has to
+"""Shared "rich input" text extraction — pulling text from a URL, an
+image or a PDF — used by both the Humanizer and the AI Checker so neither has to
 special-case where its input text came from.
 
 Image extraction deliberately uses the chat model's own vision capability
@@ -11,6 +11,7 @@ credentials already configured everywhere else in this service.
 """
 
 import base64
+import io
 import ipaddress
 import logging
 import re
@@ -125,3 +126,47 @@ async def extract_text_from_image(image_bytes: bytes, mime_type: str, ai_service
     if not stripped or stripped == "NO_TEXT_FOUND":
         raise AppError(code="NO_TEXT_EXTRACTED", message="No readable text found in that image", status_code=422)
     return stripped[:_MAX_EXTRACTED_CHARS]
+
+
+_PARAGRAPH_BREAK = re.compile(r"\n\s*\n+")
+_HYPHENATED_LINE_END = re.compile(r"(?<=[A-Za-z])-\n(?=[a-z])")
+_SENTENCE_END = re.compile(r"""[.!?]["')\]]*$""")
+
+
+def _unwrap_pdf_lines(text: str) -> str:
+    """PDF text comes out hard-wrapped, one line break per printed line. Rejoin the lines of a paragraph (and mend
+    words hyphenated across lines) so the text reads as prose; a line that ends a sentence keeps its break."""
+    text = _HYPHENATED_LINE_END.sub("", text)
+    paragraphs = []
+    for block in _PARAGRAPH_BREAK.split(text):
+        out = ""
+        for line in (ln.strip() for ln in block.split("\n")):
+            if not line:
+                continue
+            if out:
+                out += "\n" if _SENTENCE_END.search(out) else " "
+            out += line
+        if out:
+            paragraphs.append(re.sub(r"[ \t]+", " ", out))
+    return "\n\n".join(paragraphs)
+
+
+def extract_text_from_pdf(content: bytes) -> str:
+    """The selectable text of a PDF (no OCR), cleaned up to read as prose. Synchronous and CPU-bound: call it from a
+    worker thread. A corrupt file or a scan with no text is a clean 422, never a 500."""
+    from pypdf import PdfReader
+
+    try:
+        reader = PdfReader(io.BytesIO(content))
+        raw = "\n".join(page.extract_text() or "" for page in reader.pages)
+    except Exception as exc:  # pypdf raises a wide family (PdfStreamError, KeyError, RecursionError, ...)
+        raise AppError(code="UNREADABLE_PDF", message="Could not read this PDF file", status_code=422) from exc
+
+    text = _unwrap_pdf_lines(raw).strip()
+    if not text:
+        raise AppError(
+            code="NO_TEXT_EXTRACTED",
+            message="This document has no extractable text (it may be a scanned image). OCR isn't supported yet",
+            status_code=422,
+        )
+    return text[:_MAX_EXTRACTED_CHARS]

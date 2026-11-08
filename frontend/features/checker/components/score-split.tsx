@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SENTENCE_LABELS, TONE_COLOR, type Tone } from "@/features/checker/verdict";
+import { TONE_COLOR, type Tone } from "@/features/checker/verdict";
 
 const pct = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 100);
 
@@ -52,8 +52,8 @@ export function ScoreSplit({ human, mixed, ai, words }: { human: number; mixed: 
         ))}
       </dl>
       <p className="text-[12px] leading-relaxed text-zinc-400">
-        The model&rsquo;s own split for these {words.toLocaleString()} words. The verdict above is set more cautiously, so
-        rely on it, not on these shares. {SENTENCE_LABELS.unsure.name} and Mixed are the in-between answers.
+        The model&rsquo;s own split for these {words.toLocaleString()} words. The verdict is set more cautiously, so rely on it,
+        not on these shares.
       </p>
     </section>
   );

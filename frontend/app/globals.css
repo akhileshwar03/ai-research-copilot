@@ -548,6 +548,9 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
   --verdict-unsure-fill: #fbbf24;
   --verdict-ai-fill:     #f87171;
   /* Stronger tints for highlighted sentences, so green, amber and red read as colours behind text. */
+  /* "Paper": the surface your checked text is read on. */
+  --paper-bg:   #14120f;
+  --paper-text: #e9e5dc;
   --verdict-human-mark:  rgba(52, 211, 153, 0.24);
   --verdict-unsure-mark: rgba(251, 191, 36, 0.26);
   --verdict-ai-mark:     rgba(248, 113, 113, 0.28);
@@ -592,6 +595,8 @@ html.light-theme {
   --verdict-human-fill:  #059669;
   --verdict-unsure-fill: #cc6c05;
   --verdict-ai-fill:     #dc2626;
+  --paper-bg:   #fffdf8;
+  --paper-text: #2a2118;
   --verdict-human-mark:  rgba(5, 150, 105, 0.28);
   --verdict-unsure-mark: rgba(217, 119, 6, 0.32);
   --verdict-ai-mark:     rgba(220, 38, 38, 0.24);
@@ -767,3 +772,23 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
 .sentence-mark--human { background-color: var(--verdict-human-mark); text-decoration-line: none; }
 .sentence-mark--unsure { background-color: var(--verdict-unsure-mark); text-decoration-style: dashed; text-decoration-color: var(--verdict-unsure); }
 .sentence-mark--ai { background-color: var(--verdict-ai-mark); text-decoration-style: solid; text-decoration-color: var(--verdict-ai); }
+
+/* AI Checker: the document under examination. A reading surface (serif on paper), not another frosted card. */
+.paper-surface {
+  background-color: var(--paper-bg);
+  color: var(--paper-text);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 24px 48px -28px rgba(0, 0, 0, 0.55);
+}
+.font-reading { font-family: var(--font-display); }
+
+/* The verdict arrives once, as a state change (no looping motion). */
+@keyframes verdict-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: no-preference) { .verdict-in { animation: verdict-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; } }
+
+/* An indeterminate progress bar for work whose length we cannot know (reading a PDF, checking a text). */
+@keyframes indeterminate-slide { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+.indeterminate { position: relative; overflow: hidden; background-color: color-mix(in srgb, var(--marketing-accent) 28%, transparent); }
+.indeterminate::after { content: ""; position: absolute; inset: 0; width: 38%; border-radius: inherit; background-color: var(--marketing-accent); }
+@media (prefers-reduced-motion: no-preference) { .indeterminate::after { animation: indeterminate-slide 1.15s ease-in-out infinite; } }
+@media (prefers-reduced-motion: reduce) { .indeterminate::after { width: 100%; opacity: 0.55; } }

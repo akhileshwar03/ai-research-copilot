@@ -35,7 +35,7 @@ export const VERDICTS: Record<Verdict, VerdictInfo> = {
 /** Shown instead of "Likely AI" when the model's top answer is a human + AI mix. The verdict itself means "not
  *  purely human", so without this a mostly-mixed text would read "Likely AI" beside a bar that says Mixed. */
 export const MIXED_VERDICT: VerdictInfo = {
-  tone: "ai",
+  tone: "unsure",
   label: "Likely mixed",
   headline: "This looks like a mix of human and AI writing.",
   detail: "Some sentences read as human, some as AI-written. The sentence map shows where.",
@@ -67,6 +67,18 @@ export const TONE_COLOR: Record<Tone, { text: string; soft: string; fill: string
   unsure: { text: "var(--verdict-unsure)", soft: "var(--verdict-unsure-soft)", fill: "var(--verdict-unsure-fill)" },
   ai: { text: "var(--verdict-ai)", soft: "var(--verdict-ai-soft)", fill: "var(--verdict-ai-fill)" },
 };
+
+/** Cuts text to at most `max` characters, ending at the last full sentence when there is one. */
+export function trimToLimit(text: string, max: number): string {
+  const cut = text.slice(0, max);
+  const lastSentence = cut.match(/[\s\S]*[.!?]["')\]]?(?=\s|$)/);
+  return (lastSentence ? lastSentence[0] : cut).trim();
+}
+
+/** A file size people can read: KB below one megabyte, MB above. */
+export function formatFileSize(bytes: number): string {
+  return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 /** Counts words the same way the backend does, so the minimum shown here matches the one enforced there. */
 export function countWords(text: string): number {

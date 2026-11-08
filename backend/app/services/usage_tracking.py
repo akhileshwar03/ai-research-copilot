@@ -28,10 +28,10 @@ TOOL_ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/humanize"): "humanizer",
     ("POST", "/humanize/ultra"): "humanizer_ultra",
     ("POST", "/checker/text"): "checker",
-    ("POST", "/checker/document"): "checker",
     ("POST", "/realtime/chat"): "realtime",
     ("POST", "/extract/url"): "extract",
     ("POST", "/extract/image"): "extract",
+    ("POST", "/extract/pdf"): "extract",
     ("POST", "/paper-analyzer/analyze"): "paper_analyzer",
 }
 

@@ -50,7 +50,7 @@ export function AboutChecker() {
         <div>
           <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">How it works</h3>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-[13.5px] leading-relaxed text-zinc-400">
-            <li>You paste text or upload a PDF.</li>
+            <li>You paste text or upload a PDF. For a PDF, you first see the text we read from it, and can fix it.</li>
             <li>A model trained on human and AI writing reads the whole text, then each sentence.</li>
             <li>You get a verdict (likely human, unsure or likely AI) and the sentences that stand out.</li>
           </ol>

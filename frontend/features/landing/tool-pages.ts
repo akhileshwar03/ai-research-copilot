@@ -253,7 +253,7 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
       },
       {
         q: "Can it check a PDF?",
-        a: "Yes. Upload a PDF with selectable text and it checks the document's text.",
+        a: "Yes. Upload a PDF with selectable text and you first see the text we read from it, so you can check that it looks right before it is checked.",
       },
       {
         q: "Is my text stored?",

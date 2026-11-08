@@ -5,40 +5,6 @@ these tests exercise the route wiring against the Fake*Service overrides in
 conftest.py.
 """
 
-import io
-
-
-def _build_minimal_pdf(text: str) -> bytes:
-    """Hand-built, dependency-free PDF with real extractable text (no
-    reportlab/fpdf in this venv)."""
-    objects = [
-        b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    ]
-    stream = f"BT /F1 18 Tf 72 700 Td ({text}) Tj ET".encode("latin-1")
-    objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"\nendstream")
-
-    out = io.BytesIO()
-    out.write(b"%PDF-1.4\n")
-    offsets = []
-    for i, obj in enumerate(objects, start=1):
-        offsets.append(out.tell())
-        out.write(f"{i} 0 obj\n".encode())
-        out.write(obj)
-        out.write(b"\nendobj\n")
-    xref_offset = out.tell()
-    n = len(objects) + 1
-    out.write(f"xref\n0 {n}\n".encode())
-    out.write(b"0000000000 65535 f \n")
-    for off in offsets:
-        out.write(f"{off:010d} 00000 n \n".encode())
-    out.write(f"trailer\n<< /Size {n} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode())
-    return out.getvalue()
-
-
 # ── Humaniser ────────────────────────────────────────────────────────────────
 
 
@@ -145,48 +111,3 @@ def test_checker_text_reports_unavailable_as_a_calm_503(client, auth_headers):
 def test_checker_text_rejects_empty(client, auth_headers):
     resp = client.post("/api/v1/checker/text", json={"text": ""}, headers=auth_headers)
     assert resp.status_code in (400, 422)
-
-
-# ── AI Checker: document ─────────────────────────────────────────────────────
-
-
-def test_checker_document_requires_auth(client):
-    pdf_bytes = _build_minimal_pdf("hello")
-    resp = client.post(
-        "/api/v1/checker/document",
-        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-    )
-    assert resp.status_code == 401
-
-
-def test_checker_document_rejects_non_pdf(client, auth_headers):
-    resp = client.post(
-        "/api/v1/checker/document",
-        files={"file": ("test.txt", b"hello", "text/plain")},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 400
-
-
-def test_checker_document_extracts_text_and_checks_it(client, auth_headers):
-    pdf_bytes = _build_minimal_pdf("This document contains real extractable text.")
-    resp = client.post(
-        "/api/v1/checker/document",
-        files={"file": ("test.pdf", pdf_bytes, "application/pdf")},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["verdict"] == "uncertain"  # via FakeCheckerService
-
-
-def test_checker_document_rejects_pdf_with_no_extractable_text(client, auth_headers):
-    # A PDF with an empty content stream has nothing for pypdf to extract.
-    pdf_bytes = _build_minimal_pdf("")
-    resp = client.post(
-        "/api/v1/checker/document",
-        files={"file": ("blank.pdf", pdf_bytes, "application/pdf")},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 422
-

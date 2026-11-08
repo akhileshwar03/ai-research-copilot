@@ -624,7 +624,7 @@ const TUTORIAL_GROUPS: TutorialGroup[] = [
     steps: [
       {
         title: "Paste text or upload a PDF",
-        desc: "Paste text directly, upload a PDF, import a URL, or upload an image (text is extracted automatically). The text needs at least 60 words.",
+        desc: "Paste text directly, upload a PDF, import a URL, or upload an image. For files and links, the extracted text appears in the text box first so you can review it. The text needs at least 60 words.",
       },
       {
         title: "Read the verdict",

@@ -37,7 +37,7 @@ test("the checker waits for enough words, then returns a verdict with a sentence
 
   const verdict = page.getByText(/^(Likely human|Unsure|Likely mixed|Likely AI)$/).first();
   await expect(verdict).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole("heading", { name: "Sentence view" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your text, sentence by sentence" })).toBeVisible();
 
   // The page states its limits, and never shows a bare percentage as the answer.
   await expect(page.getByRole("heading", { name: /what this checker can and can.t do/i })).toBeVisible();

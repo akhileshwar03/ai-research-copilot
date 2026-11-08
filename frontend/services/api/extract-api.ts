@@ -11,6 +11,15 @@ export const extractApi = {
       body: JSON.stringify({ url }),
     }),
 
+  fromPdf: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiRequest<ExtractedText>("/extract/pdf", {
+      method: "POST",
+      body: formData,
+    });
+  },
+
   fromImage: (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
