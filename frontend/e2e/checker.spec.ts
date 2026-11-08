@@ -35,7 +35,7 @@ test("the checker waits for enough words, then returns a verdict with a sentence
   await expect(check).toBeEnabled();
   await check.click();
 
-  const verdict = page.getByText(/^(Likely human|Unsure|Likely AI)$/).first();
+  const verdict = page.getByText(/^(Likely human|Unsure|Likely mixed|Likely AI)$/).first();
   await expect(verdict).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole("heading", { name: "Sentence view" })).toBeVisible();
 

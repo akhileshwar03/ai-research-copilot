@@ -10,7 +10,7 @@ class CheckTextRequest(BaseModel):
 class SentenceScore(BaseModel):
     text: str
     ai_score: float | None
-    flagged: bool
+    label: Literal["human", "unsure", "ai"]
 
 
 class CheckResult(BaseModel):

@@ -1,4 +1,4 @@
-import type { Verdict } from "@/services/api/checker-api";
+import type { CheckResult, Verdict } from "@/services/api/checker-api";
 
 export type Tone = "human" | "unsure" | "ai";
 
@@ -32,11 +32,40 @@ export const VERDICTS: Record<Verdict, VerdictInfo> = {
   },
 };
 
+/** Shown instead of "Likely AI" when the model's top answer is a human + AI mix. The verdict itself means "not
+ *  purely human", so without this a mostly-mixed text would read "Likely AI" beside a bar that says Mixed. */
+export const MIXED_VERDICT: VerdictInfo = {
+  tone: "ai",
+  label: "Likely mixed",
+  headline: "This looks like a mix of human and AI writing.",
+  detail: "Some sentences read as human, some as AI-written. The sentence map shows where.",
+};
+
+/** The model's three-way split of a result: human, mixed, and AI-only shares of its estimate. */
+export function splitOf(result: CheckResult) {
+  const mixed = result.mixed_probability;
+  return { human: 1 - result.ai_score, mixed, ai: Math.max(0, result.ai_score - mixed) };
+}
+
+/** What to show for a result: the verdict's wording, unless the model's top answer is a mix. */
+export function presentVerdict(result: CheckResult): VerdictInfo {
+  const { mixed, ai } = splitOf(result);
+  return result.verdict === "likely_ai" && mixed > ai ? MIXED_VERDICT : VERDICTS[result.verdict];
+}
+
+/** The three colours a sentence can get. The sentence model only separates human-origin from AI-origin text, so
+ *  there is no per-sentence "mixed": the in-between band is "unsure". */
+export const SENTENCE_LABELS: Record<Tone, { name: string; meaning: string }> = {
+  human: { name: "Human", meaning: "reads as human-written" },
+  unsure: { name: "Unsure", meaning: "the model can't tell" },
+  ai: { name: "AI", meaning: "reads as AI-written or AI-edited" },
+};
+
 /** CSS custom properties for a tone (defined in app/globals.css, with light and dark values). */
-export const TONE_COLOR: Record<Tone, { text: string; soft: string }> = {
-  human: { text: "var(--verdict-human)", soft: "var(--verdict-human-soft)" },
-  unsure: { text: "var(--verdict-unsure)", soft: "var(--verdict-unsure-soft)" },
-  ai: { text: "var(--verdict-ai)", soft: "var(--verdict-ai-soft)" },
+export const TONE_COLOR: Record<Tone, { text: string; soft: string; fill: string }> = {
+  human: { text: "var(--verdict-human)", soft: "var(--verdict-human-soft)", fill: "var(--verdict-human-fill)" },
+  unsure: { text: "var(--verdict-unsure)", soft: "var(--verdict-unsure-soft)", fill: "var(--verdict-unsure-fill)" },
+  ai: { text: "var(--verdict-ai)", soft: "var(--verdict-ai-soft)", fill: "var(--verdict-ai-fill)" },
 };
 
 /** Counts words the same way the backend does, so the minimum shown here matches the one enforced there. */

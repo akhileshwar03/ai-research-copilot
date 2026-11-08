@@ -75,15 +75,15 @@ def test_verdicts_are_mapped(server_verdict, app_verdict):
     assert result["disclaimer"]
 
 
-def test_scores_are_rounded_and_sentences_flagged_at_the_threshold():
+def test_scores_are_rounded_and_sentences_are_labelled_by_band():
     sentences = [
-        {"text": "Low.", "p_ai": 0.49}, {"text": "Edge.", "p_ai": 0.5},
-        {"text": "High.", "p_ai": 0.91234}, {"text": "Unscored.", "p_ai": None},
+        {"text": "Human.", "p_ai": 0.05}, {"text": "Edge human.", "p_ai": 0.3}, {"text": "Between.", "p_ai": 0.5},
+        {"text": "Edge AI.", "p_ai": 0.7}, {"text": "AI.", "p_ai": 0.91234}, {"text": "Unscored.", "p_ai": None},
     ]
     result = _check(_service(_ok(_payload(verdict="ai", score=0.987654, mixed=0.123456, sentences=sentences))))
     assert result["ai_score"] == 0.9877 and result["mixed_probability"] == 0.1235
-    assert [s["flagged"] for s in result["sentences"]] == [False, True, True, False]
-    assert result["sentences"][3]["ai_score"] is None
+    assert [s["label"] for s in result["sentences"]] == ["human", "human", "unsure", "ai", "ai", "unsure"]
+    assert result["sentences"][5]["ai_score"] is None
 
 
 def test_request_carries_text_and_every_credential_header():

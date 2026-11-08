@@ -1,6 +1,6 @@
-import { TONE_COLOR, VERDICTS } from "@/features/checker/verdict";
+import { MIXED_VERDICT, TONE_COLOR, VERDICTS } from "@/features/checker/verdict";
 
-const ORDER = ["likely_human", "uncertain", "likely_ai"] as const;
+const ORDER = ["likely_human", "uncertain", "likely_mixed", "likely_ai"] as const;
 
 /** Empty state for the result panel: teaches what the three answers mean before the first check. */
 export function IdlePanel({ minWords }: { minWords: number }) {
@@ -9,17 +9,17 @@ export function IdlePanel({ minWords }: { minWords: number }) {
       <div>
         <h2 className="text-[14px] font-semibold text-[var(--text-primary)]">Your result will appear here</h2>
         <p className="mt-1 text-[13px] leading-relaxed text-zinc-400">
-          You get one of three answers, and the sentences that led to it.
+          You get one of these answers, and the sentences that led to it.
         </p>
       </div>
       <dl className="space-y-3">
         {ORDER.map((key) => {
-          const info = VERDICTS[key];
+          const info = key === "likely_mixed" ? MIXED_VERDICT : VERDICTS[key];
           return (
             <div key={key} className="flex gap-3">
               <span
                 className="mt-[7px] h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: TONE_COLOR[info.tone].text }}
+                style={{ backgroundColor: TONE_COLOR[info.tone].fill }}
                 aria-hidden
               />
               <div>
@@ -40,5 +40,6 @@ export function IdlePanel({ minWords }: { minWords: number }) {
 const IDLE_MEANING: Record<(typeof ORDER)[number], string> = {
   likely_human: "No strong signs of AI writing.",
   uncertain: "The signals are mixed. Neither answer is safe to rely on.",
+  likely_mixed: "Some sentences read as human, some as AI-written.",
   likely_ai: "Looks written or edited by an AI model. The sentences that stand out are highlighted.",
 };

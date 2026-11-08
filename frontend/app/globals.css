@@ -543,6 +543,14 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
   --verdict-unsure-soft: rgba(251, 191, 36, 0.12);
   --verdict-ai:      #f87171;
   --verdict-ai-soft: rgba(248, 113, 113, 0.16);
+  /* Fills for bars, blocks and dots (graphics need 3:1, not the 4.5:1 that text needs). */
+  --verdict-human-fill:  #34d399;
+  --verdict-unsure-fill: #fbbf24;
+  --verdict-ai-fill:     #f87171;
+  /* Stronger tints for highlighted sentences, so green, amber and red read as colours behind text. */
+  --verdict-human-mark:  rgba(52, 211, 153, 0.24);
+  --verdict-unsure-mark: rgba(251, 191, 36, 0.26);
+  --verdict-ai-mark:     rgba(248, 113, 113, 0.28);
 
   --resize-handle:       rgba(255, 255, 255, 0.05);
   --resize-handle-hover: rgba(255, 255, 255, 0.15);
@@ -581,6 +589,12 @@ html.light-theme {
   --verdict-unsure-soft: rgba(146, 64, 14, 0.10);
   --verdict-ai:      #b91c1c;
   --verdict-ai-soft: rgba(185, 28, 28, 0.12);
+  --verdict-human-fill:  #059669;
+  --verdict-unsure-fill: #cc6c05;
+  --verdict-ai-fill:     #dc2626;
+  --verdict-human-mark:  rgba(5, 150, 105, 0.28);
+  --verdict-unsure-mark: rgba(217, 119, 6, 0.32);
+  --verdict-ai-mark:     rgba(220, 38, 38, 0.24);
 
   --resize-handle:       rgba(90, 62, 34, 0.10);
   --resize-handle-hover: rgba(90, 62, 34, 0.22);
@@ -736,16 +750,20 @@ html.light-theme .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rg
   animation-play-state: paused !important;
 }
 
-/* AI Checker: a sentence the model marks as AI-like. Underline + tint, so it still reads without color. */
-.flagged-sentence {
-  background-color: var(--verdict-ai-soft);
+/* AI Checker: one sentence coloured by what the model hears. Tint + underline style, so the three states still
+   differ without colour: human = tint only, unsure = dashed underline, AI = solid underline. */
+.sentence-mark {
   color: inherit;
   border-radius: 3px;
   padding: 1px 2px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
-  text-decoration: underline;
-  text-decoration-color: var(--verdict-ai);
+  text-decoration-line: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+  scroll-margin-block: 5rem;
 }
+.sentence-mark:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.sentence-mark--human { background-color: var(--verdict-human-mark); text-decoration-line: none; }
+.sentence-mark--unsure { background-color: var(--verdict-unsure-mark); text-decoration-style: dashed; text-decoration-color: var(--verdict-unsure); }
+.sentence-mark--ai { background-color: var(--verdict-ai-mark); text-decoration-style: solid; text-decoration-color: var(--verdict-ai); }

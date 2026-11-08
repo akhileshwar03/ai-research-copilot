@@ -120,7 +120,7 @@ def test_checker_text_success(client, auth_headers):
 def test_checker_text_response_keeps_every_declared_field(client, auth_headers):
     body = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers).json()
     assert set(body) == {"verdict", "ai_score", "mixed_probability", "word_count", "sentences", "disclaimer"}
-    assert set(body["sentences"][0]) == {"text", "ai_score", "flagged"}
+    assert set(body["sentences"][0]) == {"text", "ai_score", "label"}
 
 
 def test_checker_text_reports_unavailable_as_a_calm_503(client, auth_headers):

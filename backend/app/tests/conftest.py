@@ -227,7 +227,7 @@ class FakeCheckerService:
             "ai_score": 0.42,
             "mixed_probability": 0.1,
             "word_count": len(stripped.split()),
-            "sentences": [{"text": "A fake sentence.", "ai_score": 0.7, "flagged": True}],
+            "sentences": [{"text": "A fake sentence.", "ai_score": 0.9, "label": "ai"}],
             "disclaimer": "fake disclaimer",
         }
 

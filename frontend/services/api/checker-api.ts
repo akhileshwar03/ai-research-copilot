@@ -2,10 +2,12 @@ import { apiRequest } from "@/services/api/client";
 
 export type Verdict = "likely_human" | "uncertain" | "likely_ai";
 
+export type SentenceLabel = "human" | "unsure" | "ai";
+
 export interface SentenceScore {
   text: string;
   ai_score: number | null;
-  flagged: boolean;
+  label: SentenceLabel;
 }
 
 export interface CheckResult {
