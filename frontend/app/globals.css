@@ -553,7 +553,7 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
   --paper-text: #e9e5dc;
   --verdict-human-mark:  rgba(52, 211, 153, 0.24);
   --verdict-unsure-mark: rgba(251, 191, 36, 0.26);
-  --verdict-ai-mark:     rgba(248, 113, 113, 0.28);
+  --verdict-ai-mark:     rgba(255, 59, 59, 0.42);
 
   --resize-handle:       rgba(255, 255, 255, 0.05);
   --resize-handle-hover: rgba(255, 255, 255, 0.15);
@@ -599,7 +599,7 @@ html.light-theme {
   --paper-text: #2a2118;
   --verdict-human-mark:  rgba(5, 150, 105, 0.28);
   --verdict-unsure-mark: rgba(217, 119, 6, 0.32);
-  --verdict-ai-mark:     rgba(220, 38, 38, 0.24);
+  --verdict-ai-mark:     rgba(255, 45, 45, 0.38);
 
   --resize-handle:       rgba(90, 62, 34, 0.10);
   --resize-handle-hover: rgba(90, 62, 34, 0.22);
