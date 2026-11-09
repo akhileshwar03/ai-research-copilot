@@ -121,10 +121,10 @@ function VerdictScale() {
 /** The model's three-way confidence for one example text, as a stacked bar that adds up to 100. */
 function SplitBar() {
   const [h, m, a] = splitPercents(EXAMPLE.human, EXAMPLE.mixed, EXAMPLE.ai);
-  const rows: { name: string; pct: number; tone: Tone }[] = [
-    { name: "Human", pct: h, tone: "human" },
-    { name: "Mixed", pct: m, tone: "unsure" },
-    { name: "AI", pct: a, tone: "ai" },
+  const rows: { name: string; pct: number; fill: string }[] = [
+    { name: "Human", pct: h, fill: TONE_COLOR.human.fill },
+    { name: "Mixed", pct: m, fill: "var(--verdict-mixed-fill)" },
+    { name: "AI", pct: a, fill: TONE_COLOR.ai.fill },
   ];
   return (
     <Figure
@@ -133,14 +133,14 @@ function SplitBar() {
     >
       <div aria-hidden className="flex h-3.5 w-full gap-0.5 overflow-hidden rounded-full">
         {rows.map((r) => (
-          <div key={r.name} style={{ width: `${r.pct}%`, backgroundColor: TONE_COLOR[r.tone].fill }} />
+          <div key={r.name} style={{ width: `${r.pct}%`, backgroundColor: r.fill }} />
         ))}
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-3 text-[13px]">
         {rows.map((r) => (
           <div key={r.name}>
             <dt className="flex items-center gap-1.5 opacity-80">
-              <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: TONE_COLOR[r.tone].fill }} />
+              <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: r.fill }} />
               {r.name}
             </dt>
             <dd className="font-data mt-0.5 text-[18px] font-semibold">{r.pct}%</dd>

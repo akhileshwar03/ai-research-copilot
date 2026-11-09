@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TONE_COLOR, splitPercents, type Tone } from "@/features/checker/verdict";
+import { TONE_COLOR, splitPercents } from "@/features/checker/verdict";
 
 
 const EXPLAIN: Record<string, string> = {
@@ -21,10 +21,10 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
   }, []);
 
   const [humanPct, mixedPct, aiPct] = splitPercents(human, mixed, ai);
-  const parts: { name: string; tone: Tone; value: number; shown: number }[] = [
-    { name: "Human", tone: "human", value: human, shown: humanPct },
-    { name: "Mixed", tone: "unsure", value: mixed, shown: mixedPct },
-    { name: "AI", tone: "ai", value: ai, shown: aiPct },
+  const parts: { name: string; fill: string; value: number; shown: number }[] = [
+    { name: "Human", fill: TONE_COLOR.human.fill, value: human, shown: humanPct },
+    { name: "Mixed", fill: "var(--verdict-mixed-fill)", value: mixed, shown: mixedPct },
+    { name: "AI", fill: TONE_COLOR.ai.fill, value: ai, shown: aiPct },
   ];
 
   return (
@@ -38,7 +38,7 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
           <div
             key={p.name}
             className="h-full motion-safe:transition-[width] motion-safe:duration-700 motion-safe:ease-out"
-            style={{ width: shown ? `${p.value * 100}%` : "0%", backgroundColor: TONE_COLOR[p.tone].fill }}
+            style={{ width: shown ? `${p.value * 100}%` : "0%", backgroundColor: p.fill }}
           />
         ))}
       </div>
@@ -55,7 +55,7 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
                 onClick={() => setOpen(isOpen ? null : p.name)}
                 className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-[14px] transition-colors hover-surface"
               >
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: TONE_COLOR[p.tone].fill }} aria-hidden />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.fill }} aria-hidden />
                 <span className="flex-1 text-left text-zinc-300">{p.name}</span>
                 <span className="font-data text-[16px] font-semibold text-[var(--text-primary)]">{p.shown}%</span>
                 <svg
@@ -70,7 +70,7 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
                 </svg>
               </button>
               {isOpen && (
-                <p id={`split-${p.name}`} className="mb-1 ml-5 mt-1 border-l-2 pl-3 text-[12.5px] leading-relaxed text-zinc-400" style={{ borderColor: TONE_COLOR[p.tone].fill }}>
+                <p id={`split-${p.name}`} className="mb-1 ml-5 mt-1 border-l-2 pl-3 text-[12.5px] leading-relaxed text-zinc-400" style={{ borderColor: p.fill }}>
                   <span className="font-medium text-[var(--text-primary)]">Confidence, not a share of your sentences.</span>{" "}
                   {EXPLAIN[p.name]} The verdict above is stricter, so go by it.
                 </p>

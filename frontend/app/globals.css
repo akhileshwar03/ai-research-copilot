@@ -546,6 +546,8 @@ html.light-theme .atmosphere-contrast-scrim { background: transparent; }
   /* Fills for bars, blocks and dots (graphics need 3:1, not the 4.5:1 that text needs). */
   --verdict-human-fill:  #34d399;
   --verdict-unsure-fill: #fbbf24;
+  /* "Mixed" in the Human / Mixed / AI bar. Its own colour, so it is not read as the orange "Unsure" of the sentences. */
+  --verdict-mixed-fill:  #a78bfa;
   --verdict-ai-fill:     #f87171;
   /* Stronger tints for highlighted sentences, so green, amber and red read as colours behind text. */
   /* "Paper": the surface your checked text is read on. */
@@ -594,6 +596,7 @@ html.light-theme {
   --verdict-ai-soft: rgba(185, 28, 28, 0.12);
   --verdict-human-fill:  #059669;
   --verdict-unsure-fill: #cc6c05;
+  --verdict-mixed-fill:  #7c5cd6;
   --verdict-ai-fill:     #dc2626;
   --paper-bg:   #fffdf8;
   --paper-text: #2a2118;

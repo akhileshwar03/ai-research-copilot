@@ -16,6 +16,9 @@ export const TONE: Record<Tone, { fill: string; text: string; mark: string; soft
   ai: { fill: "#e5322d", text: "#b91c1c", mark: "rgba(255,45,45,0.42)", soft: "rgba(255,45,45,0.12)", underline: { textDecorationLine: "underline", textDecorationStyle: "solid", textDecorationColor: "#e5322d" } },
 };
 
+/** "Mixed" in the Human / Mixed / AI bar: its own colour, so it is not read as the orange "Unsure" of the sentences. */
+const MIXED_FILL = "#7c5cd6";
+
 export const toneOf = (p: number): Tone => (p <= 0.3 ? "human" : p >= 0.7 ? "ai" : "unsure");
 const EASE = "cubic-bezier(0.23,1,0.32,1)";
 
@@ -58,22 +61,22 @@ export function Mark({ tone, on, children }: { tone: Tone; on: boolean; children
 
 export function ThreeWayBar({ human, mixed, ai }: { human: number; mixed: number; ai: number }) {
   const [h, m, a] = splitPercents(human, mixed, ai);
-  const rows: { name: string; pct: number; tone: Tone }[] = [
-    { name: "Human", pct: h, tone: "human" },
-    { name: "Mixed", pct: m, tone: "unsure" },
-    { name: "AI", pct: a, tone: "ai" },
+  const rows: { name: string; pct: number; fill: string }[] = [
+    { name: "Human", pct: h, fill: TONE.human.fill },
+    { name: "Mixed", pct: m, fill: MIXED_FILL },
+    { name: "AI", pct: a, fill: TONE.ai.fill },
   ];
   return (
     <div>
       <div aria-hidden className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-zinc-200">
         {rows.map((r) => (
-          <div key={r.name} style={{ width: `${r.pct}%`, backgroundColor: TONE[r.tone].fill }} />
+          <div key={r.name} style={{ width: `${r.pct}%`, backgroundColor: r.fill }} />
         ))}
       </div>
       <dl className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-[12.5px] text-zinc-600">
         {rows.map((r) => (
           <div key={r.name} className="flex items-center gap-1.5">
-            <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: TONE[r.tone].fill }} />
+            <span aria-hidden className="h-2 w-2 rounded-full" style={{ backgroundColor: r.fill }} />
             <dt>{r.name}</dt>
             <dd className="font-data font-semibold text-zinc-900">{r.pct}%</dd>
           </div>
