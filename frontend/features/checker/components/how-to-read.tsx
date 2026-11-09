@@ -30,7 +30,7 @@ export function HowToRead({ minWords }: { minWords: number }) {
           ))}
         </ul>
         <p className="mt-3 border-t border-[var(--border-subtle)] pt-3 text-[12px] text-zinc-400">
-          Needs at least {minWords} words of English text.
+          Needs at least {minWords} words of English text, in 3 or more sentences.
         </p>
       </div>
     </div>

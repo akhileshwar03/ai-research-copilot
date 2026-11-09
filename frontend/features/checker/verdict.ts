@@ -22,7 +22,7 @@ export const VERDICTS: Record<Verdict, VerdictInfo> = {
     tone: "unsure",
     label: "Unsure",
     headline: "The checker can't decide.",
-    detail: "The signals are mixed, so neither answer is safe to rely on. A longer sample often helps.",
+    detail: "The signals are mixed, so neither answer is safe to rely on.",
   },
   likely_ai: {
     tone: "ai",
@@ -69,9 +69,28 @@ export function splitPercents(human: number, mixed: number, ai: number): [number
   return [floors[0], floors[1], floors[2]];
 }
 
+/** "Unsure" says what the model actually leaned towards, and only suggests a longer sample when the text is short.
+ *  A fixed "a longer sample often helps" read as wrong under a 15-sentence text whose every sentence was marked AI. */
+function unsureInfo(result: CheckResult): VerdictInfo {
+  const base = VERDICTS.uncertain;
+  let detail = base.detail;
+  if (result.ai_score >= 0.85) {
+    detail = "The model leans towards AI-written, but not strongly enough to say so with confidence. Check the highlighted sentences.";
+  } else if (result.ai_score <= 0.5) {
+    detail = "The model leans towards human-written, but not clearly enough to say so with confidence.";
+  }
+  if (result.word_count < SHORT_TEXT_WORDS) detail += " A longer sample often helps.";
+  return { ...base, detail };
+}
+
+/** Below this many words, "a longer sample often helps" is fair advice. */
+const SHORT_TEXT_WORDS = 200;
+
 export function presentVerdict(result: CheckResult): VerdictInfo {
   const { mixed, ai } = splitOf(result);
-  return result.verdict === "likely_ai" && mixed > ai ? MIXED_VERDICT : VERDICTS[result.verdict];
+  if (result.verdict === "likely_ai" && mixed > ai) return MIXED_VERDICT;
+  if (result.verdict === "uncertain") return unsureInfo(result);
+  return VERDICTS[result.verdict];
 }
 
 /** The three colours a sentence can get. The sentence model only separates human-origin from AI-origin text, so
@@ -104,4 +123,10 @@ export function formatFileSize(bytes: number): string {
 /** Counts words the same way the backend does, so the minimum shown here matches the one enforced there. */
 export function countWords(text: string): number {
   return text.match(/[A-Za-z0-9']+/g)?.length ?? 0;
+}
+
+/** Counts sentences the way the checker's server does (it splits after . ! ? and at line breaks, and ignores
+ *  fragments with fewer than two letters). The server refuses fewer than three, so this lets us say so up front. */
+export function countSentences(text: string): number {
+  return text.split(/(?<=[.!?])["')\]]*\s+|\n+/).filter((part) => (part.match(/[A-Za-z]/g)?.length ?? 0) >= 2).length;
 }

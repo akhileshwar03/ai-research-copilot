@@ -63,6 +63,16 @@ def _too_short(minimum: int) -> AppError:
     )
 
 
+def _too_few_sentences(words: int) -> AppError:
+    """The model server also refuses a text of under three sentences, however many words it has. Saying "enter at
+    least 60 words" to someone who typed 70 is wrong and baffling, so this case has its own message."""
+    return AppError(
+        code="TEXT_TOO_FEW_SENTENCES",
+        message=f"Your text has {words} words but fewer than 3 sentences. Add a few more sentences, or break long ones up with full stops, for a reliable result.",
+        status_code=422,
+    )
+
+
 def _is_configured() -> bool:
     s = get_settings()
     return all([s.checker_url, s.checker_token, s.cf_access_client_id, s.cf_access_client_secret])
@@ -187,6 +197,10 @@ class CheckerService:
     def _to_result(self, payload: dict, minimum: int) -> dict:
         try:
             if payload.get("verdict") == "insufficient_text":
+                # The server reports the word count it saw. At or over the minimum, the words are not the problem.
+                seen = payload.get("words")
+                if isinstance(seen, int) and seen >= minimum:
+                    raise _too_few_sentences(seen)
                 raise _too_short(minimum)
             verdict = _VERDICTS[payload["verdict"]]
             score = float(payload["score"])

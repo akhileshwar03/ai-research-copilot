@@ -11,7 +11,7 @@ import { clearReturnTo, setReturnTo } from "@/shared/lib/return-to";
 import { checkerApi } from "@/services/api/checker-api";
 import { extractApi } from "@/services/api/extract-api";
 import { clearCheckerDraft, readCheckerDraft, saveCheckerDraft } from "@/features/checker/draft";
-import { countWords, formatFileSize, trimToLimit } from "@/features/checker/verdict";
+import { countSentences, countWords, formatFileSize, trimToLimit } from "@/features/checker/verdict";
 import { SAMPLES } from "@/features/checker/samples";
 import { AnnotatedDocument } from "@/features/checker/components/annotated-document";
 import { ErrorPanel } from "@/features/checker/components/error-panel";
@@ -20,6 +20,9 @@ import { ProgressNote } from "@/features/checker/components/progress-note";
 import { ReportBand } from "@/features/checker/components/report-band";
 import { ResultSkeleton } from "@/features/checker/components/result-skeleton";
 import { ImportControls } from "@/features/shared/components/import-controls";
+
+/** The checker server refuses a text of fewer sentences than this (see checker_service.py on the model server). */
+const MIN_SENTENCES = 3;
 
 type Tab = "text" | "document";
 
@@ -149,12 +152,17 @@ export function CheckerWorkspace({ signedIn }: { signedIn: boolean }) {
   const errorMessage =
     inputError ?? (failure instanceof Error ? failure.message : failure ? "Something went wrong. Please try again." : null);
 
+  // The checker also needs at least three sentences, however many words there are (two long sentences are refused).
+  const sentenceCount = countSentences(text);
+  const tooFewSentences = !tooShort && words > 0 && sentenceCount < MIN_SENTENCES;
   const wordHint =
     words === 0
       ? `Paste at least ${minWords} words.`
       : tooShort
         ? `${words.toLocaleString()} ${words === 1 ? "word" : "words"}. Add ${(minWords - words).toLocaleString()} more to run the check.`
-        : `${words.toLocaleString()} words`;
+        : tooFewSentences
+          ? `${words.toLocaleString()} words, but only ${sentenceCount} ${sentenceCount === 1 ? "sentence" : "sentences"}. The checker needs at least ${MIN_SENTENCES}: add ${MIN_SENTENCES - sentenceCount} more, or break a long one up.`
+          : `${words.toLocaleString()} words`;
 
   let sideContent;
   if (check.isPending) {

@@ -223,7 +223,7 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     intro:
       "Paste text or upload a PDF and get one of three answers: likely human, unsure or likely AI, with the sentences that stand out highlighted. The result says what it means and how far to trust it, instead of just a number.",
     steps: [
-      { title: "Paste text or upload a PDF", body: "Check a passage directly, or a whole document. Text needs at least 60 words." },
+      { title: "Paste text or upload a PDF", body: "Check a passage directly, or a whole document. Text needs at least 60 words in 3 or more sentences." },
       { title: "Read the verdict", body: "You get likely human, unsure or likely AI, in plain words." },
       { title: "See what stands out", body: "Sentences that look AI-written are highlighted, so you can see where the verdict comes from." },
     ],
@@ -243,7 +243,7 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
     },
     goodToKnow: [
       "AI detection is probabilistic. Never use a result alone to accuse someone of using AI.",
-      "It needs at least 60 words and works on English text only.",
+      "It needs at least 60 words in 3 or more sentences and works on English text only.",
       "It is weaker on AI text that a person has edited or that was rewritten to sound human, and it can occasionally flag human writing.",
     ],
     faq: [
@@ -277,7 +277,7 @@ export const TOOL_PAGES: Record<ToolSlug, ToolPageContent> = {
       },
       {
         q: "Can it check a PDF, and how long can the text be?",
-        a: "Yes to PDFs: upload one with selectable text and you first see the text we read from it, so you can fix it before it is checked. You need at least 60 words, it works on English only, and the text box shows the length limit as you paste.",
+        a: "Yes to PDFs: upload one with selectable text and you first see the text we read from it, so you can fix it before it is checked. You need at least 60 words in 3 or more sentences, it works on English only, and the text box shows the length limit as you paste.",
       },
       {
         q: "Is it free?",

@@ -126,6 +126,14 @@ def test_too_many_characters_is_rejected_locally():
     assert err.value.code == "TEXT_TOO_LONG" and err.value.status_code == 413
 
 
+def test_enough_words_but_too_few_sentences_gets_its_own_message():
+    # 70 words in two sentences: the server refuses it, and "enter at least 60 words" would be the wrong thing to say.
+    with pytest.raises(AppError) as err:
+        _check(_service(_ok({"verdict": "insufficient_text", "words": 70, "min_words": 60})))
+    assert err.value.code == "TEXT_TOO_FEW_SENTENCES" and err.value.status_code == 422
+    assert "70 words" in err.value.message and "3 sentences" in err.value.message
+
+
 def test_server_saying_insufficient_text_becomes_too_short():
     with pytest.raises(AppError) as err:
         _check(_service(_ok({"verdict": "insufficient_text", "words": 40, "min_words": 60})))

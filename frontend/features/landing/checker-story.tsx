@@ -31,7 +31,7 @@ const STORY_WORDS = 84;
 const STORY_RESULT = { human: 0.02, mixed: 0.9541, ai: 0.0259 };
 
 const STEPS = [
-  { label: "Paste", title: "Paste text or upload a PDF", body: "Check a passage directly, or upload a PDF and see the text we read from it first. It needs at least 60 words and works on English." },
+  { label: "Paste", title: "Paste text or upload a PDF", body: "Check a passage directly, or upload a PDF and see the text we read from it first. It needs at least 60 words in 3 or more sentences, and works on English." },
   { label: "Split", title: "We clean it and split it into sentences", body: "Formatting and emoji are stripped, then the text is cut into sentences and grouped into passages the model can read in one go." },
   { label: "Score", title: "Our trained model scores every sentence", body: "A model we trained on human and AI writing reads each passage and gives every sentence a probability of being AI-written." },
   { label: "Colour", title: "Sentences are coloured by that score", body: "Green at 30% or below, red at 70% or above, orange in between. You can see exactly where the verdict comes from." },

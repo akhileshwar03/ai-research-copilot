@@ -51,6 +51,13 @@ describe("presentVerdict", () => {
     expect(presentVerdict(result({ verdict: "likely_human", ai_score: 0.1 })).label).toBe("Likely human");
     expect(presentVerdict(result({ verdict: "uncertain", ai_score: 0.6, mixed_probability: 0.9 })).label).toBe("Unsure");
   });
+  it("says which way an unsure result leans, and only suggests a longer sample for short texts", () => {
+    const long = presentVerdict(result({ verdict: "uncertain", ai_score: 0.96, mixed_probability: 0.03, word_count: 400 }));
+    expect(long.detail).toContain("leans towards AI-written");
+    expect(long.detail).not.toContain("longer sample");
+    const short = presentVerdict(result({ verdict: "uncertain", ai_score: 0.96, mixed_probability: 0.03, word_count: 80 }));
+    expect(short.detail).toContain("longer sample");
+  });
 });
 
 describe("splitOf", () => {
