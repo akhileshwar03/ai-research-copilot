@@ -40,18 +40,23 @@ export function PageBackground({ page, dynamic }: { page: BackgroundPage; dynami
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${buildApiUrl(bg.image_url)})`, filter: "blur(0.75px) saturate(0.94)" }}
+          style={{
+            backgroundImage: `url(${buildApiUrl(bg.image_url)})`,
+            // The landing page is a touch of blur under a strong cream wash. The tool pages carry dense UI over the
+            // same kind of image, so they get that same wash plus a little more real blur (scaled up a hair so the
+            // blurred edge never shows).
+            filter: page === "landing" ? "blur(0.75px) saturate(0.94)" : "blur(3px) saturate(0.94)",
+            transform: page === "landing" ? undefined : "scale(1.03)",
+          }}
         />
         {overlay ? (
           <div className="absolute inset-0" style={{ background: overlay }} />
         ) : (
-          // 2026-09-20: real, reported issue, twice — 45% then 25% were BOTH still
-          // too strong; a real side-by-side against a dynamic AtmosphereBackground
-          // page (visibly rich and colorful) showed the static image reduced to a
-          // near-white ghost. The flat wash plus the strong vignette below were
-          // compounding on top of each other. Cut hard this time instead of
-          // creeping down again.
-          <div className="absolute inset-0 opacity-10" style={{ backgroundColor: "var(--app-bg)" }} />
+          // History: 45% and then 25% were both reported as too strong (the image looked like a near-white ghost next
+          // to a dynamic background), so this was cut to 10%. It is now 40%, together with a real 3px blur on the
+          // image, because at 10% the image sat crisp and busy behind dense UI while the landing page's (about 50%
+          // cream wash) read soft. Checked against the live Humanizer. If it ever looks washed out again, lower this.
+          <div className="absolute inset-0 opacity-40" style={{ backgroundColor: "var(--app-bg)" }} />
         )}
         <div className="atmosphere-vignette absolute inset-0" />
       </div>
