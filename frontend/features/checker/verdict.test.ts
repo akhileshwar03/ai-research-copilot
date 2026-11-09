@@ -49,13 +49,25 @@ describe("presentVerdict", () => {
   });
   it("keeps the verdict's own wording for human and unsure", () => {
     expect(presentVerdict(result({ verdict: "likely_human", ai_score: 0.1 })).label).toBe("Likely human");
-    expect(presentVerdict(result({ verdict: "uncertain", ai_score: 0.6, mixed_probability: 0.9 })).label).toBe("Unsure");
+    expect(presentVerdict(result({ verdict: "uncertain", ai_score: 0.6, mixed_probability: 0.1 })).label).toBe("Unsure");
   });
-  it("says which way an unsure result leans, and only suggests a longer sample for short texts", () => {
-    const long = presentVerdict(result({ verdict: "uncertain", ai_score: 0.96, mixed_probability: 0.03, word_count: 400 }));
-    expect(long.detail).toContain("leans towards AI-written");
+  it("calls an unsure result mixed when the model's top answer is a mix", () => {
+    // Human 4%, Mixed 81%, AI 15%: the model's top answer is the mix, so "Unsure" would contradict its own bar.
+    const r = presentVerdict(result({ verdict: "uncertain", ai_score: 0.96, mixed_probability: 0.81 }));
+    expect(r.label).toBe("Likely mixed");
+    expect(r.detail).toContain("edited");
+  });
+  it("keeps a likely-human result human even if the mix share is larger than the AI share", () => {
+    expect(presentVerdict(result({ verdict: "likely_human", ai_score: 0.3, mixed_probability: 0.2 })).label).toBe("Likely human");
+  });
+  it("says which way a plain unsure leans", () => {
+    expect(presentVerdict(result({ verdict: "uncertain", ai_score: 0.93, mixed_probability: 0.03, word_count: 400 })).headline).toContain("leans towards AI");
+    expect(presentVerdict(result({ verdict: "uncertain", ai_score: 0.45, mixed_probability: 0.1, word_count: 400 })).headline).toContain("leans towards human");
+  });
+  it("only suggests a longer sample for short texts", () => {
+    const long = presentVerdict(result({ verdict: "uncertain", ai_score: 0.93, mixed_probability: 0.03, word_count: 400 }));
     expect(long.detail).not.toContain("longer sample");
-    const short = presentVerdict(result({ verdict: "uncertain", ai_score: 0.96, mixed_probability: 0.03, word_count: 80 }));
+    const short = presentVerdict(result({ verdict: "uncertain", ai_score: 0.93, mixed_probability: 0.03, word_count: 80 }));
     expect(short.detail).toContain("longer sample");
   });
 });

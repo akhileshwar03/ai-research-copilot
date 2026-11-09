@@ -32,13 +32,15 @@ export const VERDICTS: Record<Verdict, VerdictInfo> = {
   },
 };
 
-/** Shown instead of "Likely AI" when the model's top answer is a human + AI mix. The verdict itself means "not
- *  purely human", so without this a mostly-mixed text would read "Likely AI" beside a bar that says Mixed. */
+/** Shown instead of "Likely AI" or "Unsure" when the model's top answer is a human + AI mix. The verdict itself means
+ *  "not purely human", so without this a mostly-mixed text would read "Likely AI" or "Unsure" beside a bar that says
+ *  Mixed. The model has no separate answer for rewritten or paraphrased text (that was trained in as AI), so this does
+ *  not claim to detect it; it only says what a mix can mean. */
 export const MIXED_VERDICT: VerdictInfo = {
   tone: "unsure",
   label: "Likely mixed",
   headline: "This looks like a mix of human and AI writing.",
-  detail: "Some sentences read as human, some as AI-written. The sentence map shows where.",
+  detail: "Some sentences read as human, some as AI-written, and the sentence map shows where. It can also mean AI text that a person has edited.",
 };
 
 /** The model's three-way split of a result: human, mixed, and AI-only shares of its estimate. */
@@ -69,26 +71,31 @@ export function splitPercents(human: number, mixed: number, ai: number): [number
   return [floors[0], floors[1], floors[2]];
 }
 
-/** "Unsure" says what the model actually leaned towards, and only suggests a longer sample when the text is short.
- *  A fixed "a longer sample often helps" read as wrong under a 15-sentence text whose every sentence was marked AI. */
+/** "Unsure" says which way the model leaned, and only suggests a longer sample when the text is short. A fixed
+ *  "a longer sample often helps" read as wrong under a 15-sentence text whose every sentence was marked AI. */
 function unsureInfo(result: CheckResult): VerdictInfo {
   const base = VERDICTS.uncertain;
-  let detail = base.detail;
-  if (result.ai_score >= 0.85) {
-    detail = "The model leans towards AI-written, but not strongly enough to say so with confidence. Check the highlighted sentences.";
-  } else if (result.ai_score <= 0.5) {
-    detail = "The model leans towards human-written, but not clearly enough to say so with confidence.";
+  let { headline, detail } = base;
+  if (result.ai_score >= LEANS_AI_FROM) {
+    headline = "The checker leans towards AI, but not enough to say so.";
+    detail = "Strong enough to look closer, not strong enough to call it. Check the highlighted sentences.";
+  } else if (result.ai_score <= LEANS_HUMAN_UP_TO) {
+    headline = "The checker leans towards human, but not enough to say so.";
+    detail = "Nothing stands out strongly as AI, but it is not clearly human either.";
   }
   if (result.word_count < SHORT_TEXT_WORDS) detail += " A longer sample often helps.";
-  return { ...base, detail };
+  return { ...base, headline, detail };
 }
 
 /** Below this many words, "a longer sample often helps" is fair advice. */
 const SHORT_TEXT_WORDS = 200;
+/** An "Unsure" whose overall score is at or above this leans AI; at or below the second, it leans human. */
+const LEANS_AI_FROM = 0.85;
+const LEANS_HUMAN_UP_TO = 0.5;
 
 export function presentVerdict(result: CheckResult): VerdictInfo {
-  const { mixed, ai } = splitOf(result);
-  if (result.verdict === "likely_ai" && mixed > ai) return MIXED_VERDICT;
+  const { human, mixed, ai } = splitOf(result);
+  if (result.verdict !== "likely_human" && mixed > ai && mixed > human) return MIXED_VERDICT;
   if (result.verdict === "uncertain") return unsureInfo(result);
   return VERDICTS[result.verdict];
 }
