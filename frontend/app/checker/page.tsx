@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 
 import MainLayout from "@/components/layout/main-layout";
+import { getStoredTokens } from "@/shared/lib/token-storage";
 import { useAuthGuard } from "@/features/auth/hooks/use-auth-guard";
 import { CheckerHero } from "@/features/checker/components/checker-hero";
 import { CheckerBackground } from "@/features/checker/components/checker-background";
@@ -15,23 +16,37 @@ import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
 
+/** True on the client when this browser already holds a sign-in. The server (and the first client render, which has
+ *  to match it) say false. */
+function useLikelySignedIn() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => Boolean(getStoredTokens().accessToken),
+    () => false,
+  );
+}
+
 /** The tool and its explanation on one page. Signed-in users get the app's own frame; visitors get the public one
  *  (same content), and are asked to sign in only when they press Check. */
 export default function CheckerPage() {
   const { isReady, isAuthenticated } = useAuthGuard({ redirect: false });
+  const likelySignedIn = useLikelySignedIn();
 
-  if (!isReady) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
-        <div
-          className="h-6 w-6 animate-spin rounded-full border-2"
-          style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
-        />
-      </div>
-    );
-  }
-
+  // While we don't yet know who is here, show the public page: it is what the server sends, so search engines read
+  // the real text straight away. Someone who is probably signed in sees a spinner instead of a flash of it.
+  if (!isReady) return likelySignedIn ? <Spinner /> : <PublicShell />;
   return isAuthenticated ? <AppShell /> : <PublicShell />;
+}
+
+function Spinner() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-[var(--app-bg)]">
+      <div
+        className="h-6 w-6 animate-spin rounded-full border-2"
+        style={{ borderColor: "var(--border-medium)", borderTopColor: "var(--marketing-accent)" }}
+      />
+    </div>
+  );
 }
 
 function Heading() {

@@ -116,14 +116,16 @@ export function CheckerHero() {
   return (
     <header id="checker-tool" className="scroll-mt-24 lg:grid lg:grid-cols-[1.25fr_0.75fr] lg:items-center lg:gap-12">
       <div>
-        <p className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: "#c5691f" }}>
-          Querex AI Checker
-        </p>
-        <h1 className="mt-3 font-headline text-[32px] font-bold leading-[1.15] tracking-tight text-[var(--text-primary)] sm:text-[38px] lg:text-[40px] xl:text-[44px]">
-          Written by{" "}
-          <span className="sentence-mark sentence-mark--human whitespace-nowrap rounded-md px-1.5">a person</span>,{" "}
-          <span className="sentence-mark sentence-mark--ai whitespace-nowrap rounded-md px-1.5">an AI</span>, or{" "}
-          <span className="sentence-mark sentence-mark--unsure whitespace-nowrap rounded-md px-1.5">both</span>?
+        <h1 className="font-headline text-[32px] font-bold leading-[1.15] tracking-tight text-[var(--text-primary)] sm:text-[38px] lg:text-[40px] xl:text-[44px]">
+          <span className="block text-[12px] font-semibold uppercase leading-normal tracking-[0.18em]" style={{ color: "#c5691f" }}>
+            Querex AI Checker
+          </span>
+          <span className="sr-only">: </span>
+          <span className="mt-3 block">
+            Written by <span className="sentence-mark sentence-mark--human whitespace-nowrap rounded-md px-1.5">a person</span>,{" "}
+            <span className="sentence-mark sentence-mark--ai whitespace-nowrap rounded-md px-1.5">an AI</span>, or{" "}
+            <span className="sentence-mark sentence-mark--unsure whitespace-nowrap rounded-md px-1.5">both</span>?
+          </span>
         </h1>
         <p className="mt-4 max-w-xl text-[15.5px] leading-7 text-[var(--text-primary)] opacity-75">
           Paste text or upload a PDF and see, sentence by sentence, what reads as human and what reads as AI. When the signals are mixed, it says so instead of guessing.
