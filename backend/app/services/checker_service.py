@@ -37,6 +37,12 @@ SENTENCE_AI_MIN = 0.7
 
 _VERDICTS = {"human": "likely_human", "unsure": "uncertain", "ai": "likely_ai"}
 
+# A wrong accusation costs far more than a miss, so "Likely AI" needs the sentences to agree with the overall score:
+# at least this share of the scored sentences must be marked AI. On 1,882 held-out human texts this removed 7 of the 13
+# that the overall score alone called AI, for about 1% fewer AI texts called AI (see the 2026-11-09 false-positive
+# analysis). Anything it holds back is shown as "Unsure", never as "Likely human".
+LIKELY_AI_MIN_RED_SHARE = 0.5
+
 
 def _sentence_label(ai_score: float | None) -> str:
     if ai_score is None:
@@ -45,6 +51,20 @@ def _sentence_label(ai_score: float | None) -> str:
         return "human"
     return "ai" if ai_score >= SENTENCE_AI_MIN else "unsure"
 _WORD_RE = re.compile(r"[A-Za-z0-9']+")
+
+
+def _hold_back_unsupported_ai(verdict: str, sentences: list[dict]) -> str:
+    """Downgrade "likely_ai" to "uncertain" when too few sentences are marked AI to back the overall score."""
+    if verdict != "likely_ai":
+        return verdict
+    scored = [item["ai_score"] for item in sentences if item["ai_score"] is not None]
+    if not scored:
+        return verdict
+    red_share = sum(score >= SENTENCE_AI_MIN for score in scored) / len(scored)
+    if red_share < LIKELY_AI_MIN_RED_SHARE:
+        logger.info("checker_ai_verdict_held_back red_share=%.2f sentences=%d", red_share, len(scored))
+        return "uncertain"
+    return verdict
 
 
 def _unavailable() -> AppError:
@@ -213,6 +233,7 @@ class CheckerService:
                 for item in payload["sentences"]
             ]
             words = int(payload["words"])
+            verdict = _hold_back_unsupported_ai(verdict, sentences)
         except AppError:
             raise
         except (KeyError, TypeError, ValueError) as exc:

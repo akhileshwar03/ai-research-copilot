@@ -70,9 +70,40 @@ def _check(service, text=TEXT):
 
 @pytest.mark.parametrize("server_verdict, app_verdict", [("human", "likely_human"), ("unsure", "uncertain"), ("ai", "likely_ai")])
 def test_verdicts_are_mapped(server_verdict, app_verdict):
-    result = _check(_service(_ok(_payload(verdict=server_verdict))))
+    # Sentences that agree with an "ai" verdict, so the sentence check below does not apply.
+    agreeing = [{"text": f"Sentence {i}.", "p_ai": 0.9} for i in range(4)] if server_verdict == "ai" else None
+    result = _check(_service(_ok(_payload(verdict=server_verdict, sentences=agreeing))))
     assert result["verdict"] == app_verdict
     assert result["disclaimer"]
+
+
+def _sentences(*p_ai):
+    return [{"text": f"Sentence {i}.", "p_ai": p} for i, p in enumerate(p_ai)]
+
+
+def test_likely_ai_is_held_back_when_too_few_sentences_agree():
+    # 1 of 4 sentences marked AI: the overall score alone is not enough to say "Likely AI".
+    result = _check(_service(_ok(_payload(verdict="ai", sentences=_sentences(0.9, 0.1, 0.2, 0.4)))))
+    assert result["verdict"] == "uncertain"
+
+
+def test_likely_ai_stands_when_half_the_sentences_agree():
+    result = _check(_service(_ok(_payload(verdict="ai", sentences=_sentences(0.9, 0.8, 0.1, 0.2)))))
+    assert result["verdict"] == "likely_ai"
+
+
+def test_unscored_sentences_do_not_count_against_likely_ai():
+    result = _check(_service(_ok(_payload(verdict="ai", sentences=_sentences(0.9, None, None, 0.95)))))
+    assert result["verdict"] == "likely_ai"
+    # and when nothing is scored there is nothing to disagree with
+    result = _check(_service(_ok(_payload(verdict="ai", sentences=_sentences(None, None, None)))))
+    assert result["verdict"] == "likely_ai"
+
+
+@pytest.mark.parametrize("server_verdict, app_verdict", [("human", "likely_human"), ("unsure", "uncertain")])
+def test_the_sentence_check_only_touches_likely_ai(server_verdict, app_verdict):
+    result = _check(_service(_ok(_payload(verdict=server_verdict, sentences=_sentences(0.9, 0.9, 0.9)))))
+    assert result["verdict"] == app_verdict
 
 
 def test_scores_are_rounded_and_sentences_are_labelled_by_band():
