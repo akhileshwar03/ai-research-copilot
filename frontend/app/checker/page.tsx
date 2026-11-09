@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useLayoutEffect } from "react";
 
 import MainLayout from "@/components/layout/main-layout";
@@ -8,6 +9,8 @@ import { CheckerHero } from "@/features/checker/components/checker-hero";
 import { CheckerBackground } from "@/features/checker/components/checker-background";
 import { CheckerExplainer } from "@/features/checker/components/checker-explainer";
 import { CheckerWorkspace } from "@/features/checker/components/checker-workspace";
+import { GithubNavLink } from "@/features/landing/github-nav-link";
+import { FooterCopyright, SupportEmailLink } from "@/features/landing/footer-dynamic";
 import { LandingFooter, LandingNav } from "@/features/landing/landing-chrome";
 import { SiteBackground } from "@/features/landing/site-background";
 import { PageBackground } from "@/features/shared/components/page-background";
@@ -40,6 +43,26 @@ function Heading() {
   );
 }
 
+/** A slim ending for the signed-in page, so it closes the way the public page does. */
+function AppFooter() {
+  const link = "transition-opacity hover:opacity-100";
+  return (
+    <footer className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--border-subtle)] pt-6 text-[12.5px] text-zinc-400">
+      <FooterCopyright />
+      <nav aria-label="Legal and contact" className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <Link href="/privacy" className={link}>
+          Privacy Policy
+        </Link>
+        <Link href="/terms" className={link}>
+          Terms of Service
+        </Link>
+        <SupportEmailLink className={link} />
+        <GithubNavLink className={link} />
+      </nav>
+    </footer>
+  );
+}
+
 function AppShell() {
   return (
     <MainLayout background={<PageBackground page="checker" dynamic={<CheckerBackground />} />}>
@@ -48,6 +71,7 @@ function AppShell() {
           <Heading />
           <CheckerWorkspace signedIn />
           <CheckerExplainer signedIn />
+          <AppFooter />
         </div>
       </div>
     </MainLayout>
@@ -71,7 +95,7 @@ function PublicShell() {
       <PageBackground page="landing" dynamic={<SiteBackground />} />
       {/* The public nav is sticky, so anything that sticks below it has to start under it. */}
       <div className="relative z-10" style={{ "--sticky-top": "5.5rem" } as React.CSSProperties}>
-        <LandingNav active="AI Checker" />
+        <LandingNav active="AI Checker" signInReturnTo="/checker" />
         <div className="mx-auto max-w-6xl space-y-6 px-4 pb-20 pt-8 md:px-6 md:pt-10">
           <CheckerHero />
           <CheckerWorkspace signedIn={false} />

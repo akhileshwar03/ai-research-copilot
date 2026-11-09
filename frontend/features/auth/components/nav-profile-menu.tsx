@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { WorkspaceProfileFooter } from "@/components/layout/workspace-profile-footer";
 import { useAuth } from "@/features/auth/hooks/use-auth";
+import { setReturnTo } from "@/shared/lib/return-to";
 
 /**
  * The landing page's own account control — previously a separate, bespoke
@@ -14,7 +15,8 @@ import { useAuth } from "@/features/auth/hooks/use-auth";
  * not two that can drift apart. The "not ready" / "not authenticated" cases
  * stay here since WorkspaceProfileFooter assumes an authenticated user.
  */
-export function NavProfileMenu() {
+/** `returnTo`: the page to come back to after signing in, when this menu is on a page that works for visitors. */
+export function NavProfileMenu({ returnTo }: { returnTo?: string }) {
   const { isReady, isAuthenticated } = useAuth();
 
   if (!isReady) {
@@ -26,6 +28,7 @@ export function NavProfileMenu() {
     return (
       <Link
         href="/login"
+        onClick={() => returnTo && setReturnTo(returnTo)}
         className="rounded-lg bg-zinc-900 px-4 py-2 text-[13px] font-semibold text-white shadow-md shadow-zinc-900/20 transition hover:bg-zinc-700"
       >
         Sign in

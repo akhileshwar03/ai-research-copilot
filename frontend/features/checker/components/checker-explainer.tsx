@@ -65,35 +65,33 @@ export function CheckerExplainer({ signedIn }: { signedIn: boolean }) {
       </section>
 
       {!signedIn && (
-        <>
-          <section className="relative overflow-hidden rounded-3xl bg-zinc-900/85 px-8 py-12 text-center md:px-12">
-            <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(500px 260px at 50% 0%, ${product.glow}, transparent 70%)` }} aria-hidden />
-            <h2 className="relative font-headline text-3xl font-bold tracking-tight text-white">{page.cta.title}</h2>
-            <p className="relative mx-auto mt-3 max-w-md text-[14px] leading-7" style={{ color: "rgba(255,255,255,0.78)" }}>{page.cta.body}</p>
-            <div className="relative mt-7">
-              <a href="#checker-tool" className="inline-block rounded-xl bg-white px-8 py-3.5 text-[15px] font-semibold text-zinc-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-zinc-100">
-                Check some text
-              </a>
-            </div>
-          </section>
-
-          <section aria-labelledby="checker-more">
-            <h2 id="checker-more" className="font-headline text-2xl font-bold tracking-tight text-[var(--text-primary)]">
-              More from Querex
-            </h2>
-            <p className="mt-2 text-[13.5px] text-[var(--text-primary)] opacity-70">Five tools, one account.</p>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {others.map((p) => (
-                <Link key={p.name} href={p.href} className="glass-card group relative block overflow-hidden rounded-xl p-5 transition-transform duration-300 hover:-translate-y-1">
-                  <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: p.accent }} aria-hidden />
-                  <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{p.name}</h3>
-                  <p className="mt-2 text-[13px] leading-6 text-[var(--text-primary)] opacity-70">{p.tagline}</p>
-                </Link>
-              ))}
-            </div>
-          </section>
-        </>
+        <section className="relative overflow-hidden rounded-3xl bg-zinc-900/85 px-8 py-12 text-center md:px-12">
+          <div className="pointer-events-none absolute inset-0" style={{ background: `radial-gradient(500px 260px at 50% 0%, ${product.glow}, transparent 70%)` }} aria-hidden />
+          <h2 className="relative font-headline text-3xl font-bold tracking-tight text-white">{page.cta.title}</h2>
+          <p className="relative mx-auto mt-3 max-w-md text-[14px] leading-7" style={{ color: "rgba(255,255,255,0.78)" }}>{page.cta.body}</p>
+          <div className="relative mt-7">
+            <a href="#checker-tool" className="inline-block rounded-xl bg-white px-8 py-3.5 text-[15px] font-semibold text-zinc-900 shadow-lg transition hover:-translate-y-0.5 hover:bg-zinc-100">
+              Check some text
+            </a>
+          </div>
+        </section>
       )}
+
+      <section aria-labelledby="checker-more">
+        <h2 id="checker-more" className="font-headline text-2xl font-bold tracking-tight text-[var(--text-primary)]">
+          More from Querex
+        </h2>
+        <p className="mt-2 text-[13.5px] text-[var(--text-primary)] opacity-70">Five tools, one account.</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {others.map((p) => (
+            <Link key={p.name} href={p.href} className="glass-card group relative block overflow-hidden rounded-xl p-5 transition-transform duration-300 hover:-translate-y-1">
+              <span className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: p.accent }} aria-hidden />
+              <h3 className="text-[15px] font-semibold text-[var(--text-primary)]">{p.name}</h3>
+              <p className="mt-2 text-[13px] leading-6 text-[var(--text-primary)] opacity-70">{p.tagline}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

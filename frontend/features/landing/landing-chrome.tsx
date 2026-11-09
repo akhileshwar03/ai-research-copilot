@@ -7,7 +7,7 @@ import { PRODUCTS } from "@/features/landing/products";
 import { BrandMark } from "@/features/shared/components/brand-mark";
 
 /** Sticky frosted nav shared by the homepage and the per-tool landing pages. `active` highlights a tool. */
-export function LandingNav({ active }: { active?: string }) {
+export function LandingNav({ active, signInReturnTo }: { active?: string; signInReturnTo?: string }) {
   return (
 <nav className="glass-bar sticky top-0 z-40 border-b">
   <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
@@ -36,7 +36,7 @@ export function LandingNav({ active }: { active?: string }) {
     </div>
     <div className="flex items-center gap-2">
       <GithubNavLink className="rounded-lg px-3.5 py-2 text-[13px] font-medium text-zinc-500 transition hover:text-zinc-900" />
-      <NavProfileMenu />
+      <NavProfileMenu returnTo={signInReturnTo} />
     </div>
   </div>
 </nav>
