@@ -157,7 +157,7 @@ export function CheckerWorkspace({ signedIn }: { signedIn: boolean }) {
   const tooFewSentences = !tooShort && words > 0 && sentenceCount < MIN_SENTENCES;
   const wordHint =
     words === 0
-      ? `Paste at least ${minWords} words.`
+      ? `Paste at least ${minWords} words, in ${MIN_SENTENCES} or more sentences.`
       : tooShort
         ? `${words.toLocaleString()} ${words === 1 ? "word" : "words"}. Add ${(minWords - words).toLocaleString()} more to run the check.`
         : tooFewSentences
