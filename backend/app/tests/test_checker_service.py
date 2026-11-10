@@ -323,3 +323,35 @@ def test_pasted_secrets_are_trimmed_of_new_lines_and_spaces():
     assert (s.checker_url, s.checker_token, s.cf_access_client_id, s.cf_access_client_secret) == (
         "https://checker.example.test", TOKEN, "id", "secret",
     )
+
+
+# ---- look-alike and invisible characters are cleaned before the text is scored
+
+def test_lookalike_letters_are_folded_back_to_latin():
+    assert cs._clean_text("This tеxt hаs Cyrillic lооk-аlikes") == "This text has Cyrillic look-alikes"
+
+
+def test_invisible_characters_are_removed():
+    assert cs._clean_text("zero\u200bwidth and soft\u00adhyphen\ufeff") == "zerowidth and softhyphen"
+
+
+def test_plain_english_is_left_alone():
+    plain = "Plain English, with punctuation: it's fine (really)."
+    assert cs._clean_text(plain) == plain
+
+
+def test_a_mostly_non_latin_text_is_not_turned_into_lookalike_gibberish():
+    russian = "Это обычный русский текст без латинских букв."
+    assert cs._clean_text(russian) == russian
+
+
+def test_the_cleaned_text_is_what_the_server_receives_and_what_is_counted():
+    seen = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, json=_payload())
+
+    dirty = ("Th\u200bis tеxt " + "word " * 80).strip()
+    _check(_service(handler), dirty)
+    assert "\u200b" not in seen["body"]["text"] and "е" not in seen["body"]["text"]
