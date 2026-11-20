@@ -8,30 +8,34 @@ import { TONE_COLOR, type Tone } from "@/features/checker/verdict";
 const R = 52;
 const HALF = Math.PI * R;
 
-/** A half-dial from Human (left) to AI (right) with a needle. It is the same position the verdict implies, so it is
- *  only drawn for the two clear verdicts; "Unsure" and "Mixed" have no honest place on a human-to-AI line. */
-function Dial({ position, color, label }: { position: number; color: string; label: string }) {
+/** A half-dial from Human (left) to AI (right). The arc is filled by how confident the verdict is, from the end the
+ *  verdict points at: a human result fills green from the Human end, an AI result fills red from the AI end. The needle
+ *  sits at where the text falls between the two. It is only drawn for the two clear verdicts; "Unsure" and "Mixed" have no
+ *  honest place on a human-to-AI line. */
+function Dial({ position, fillPct, from, color, label }: { position: number; fillPct: number; from: "left" | "right"; color: string; label: string }) {
   const [shown, setShown] = useState(0);
   useEffect(() => {
     // setTimeout, not requestAnimationFrame: rAF never fires in a backgrounded tab (see ProbabilityGauge).
-    const id = setTimeout(() => setShown(position), 30);
+    const id = setTimeout(() => setShown(Math.min(1, Math.max(0, fillPct / 100))), 30);
     return () => clearTimeout(id);
-  }, [position]);
+  }, [fillPct]);
 
-  const angle = -90 + Math.min(1, Math.max(0, shown)) * 180;
+  const angle = -90 + Math.min(1, Math.max(0, position)) * 180;
   return (
     <svg viewBox="0 0 130 78" role="img" aria-label={label} className="h-[72px] w-[120px] shrink-0">
       <path d="M13 65 A52 52 0 0 1 117 65" fill="none" stroke="var(--border-subtle)" strokeWidth="8" strokeLinecap="round" />
-      <path
-        d="M13 65 A52 52 0 0 1 117 65"
-        fill="none"
-        stroke={color}
-        strokeWidth="8"
-        strokeLinecap="round"
-        strokeDasharray={HALF}
-        strokeDashoffset={HALF * (1 - Math.min(1, Math.max(0, shown)))}
-        className="motion-safe:transition-[stroke-dashoffset] motion-safe:duration-700 motion-safe:ease-out"
-      />
+      <g transform={from === "right" ? "translate(130 0) scale(-1 1)" : undefined}>
+        <path
+          d="M13 65 A52 52 0 0 1 117 65"
+          fill="none"
+          stroke={color}
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={HALF}
+          strokeDashoffset={HALF * (1 - shown)}
+          className="motion-safe:transition-[stroke-dashoffset] motion-safe:duration-700 motion-safe:ease-out"
+        />
+      </g>
       <g
         style={{ transform: `rotate(${angle}deg)`, transformOrigin: "65px 65px" }}
         className="motion-safe:transition-transform motion-safe:duration-700 motion-safe:ease-out"
@@ -98,7 +102,15 @@ export function VerdictMeter({
             </p>
           )}
         </div>
-        {showNumber && <Dial position={position} color={color.fill} label={`Dial: ${side} confidence ${percent} percent${capped ? " or more" : ""}`} />}
+        {showNumber && (
+          <Dial
+            position={position}
+            fillPct={percent ?? 0}
+            from={side === "AI" ? "right" : "left"}
+            color={color.fill}
+            label={`Dial: ${side} confidence ${percent} percent${capped ? " or more" : ""}`}
+          />
+        )}
       </div>
       <p className="text-[14px] leading-relaxed text-zinc-300">
         {headline} {detail}
