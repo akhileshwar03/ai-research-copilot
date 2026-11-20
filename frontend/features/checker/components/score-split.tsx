@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TONE_COLOR, splitPercents } from "@/features/checker/verdict";
+import { AI_DISPLAY_CAP, TONE_COLOR, splitPercents } from "@/features/checker/verdict";
 
 
 const EXPLAIN: Record<string, string> = {
@@ -21,6 +21,8 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
   }, []);
 
   const [humanPct, mixedPct, aiPct] = splitPercents(human, mixed, ai);
+  /** The AI row is held at the same cap as the headline, so it can never read 100%. */
+  const label = (name: string, n: number) => (name === "AI" && n >= AI_DISPLAY_CAP ? `${AI_DISPLAY_CAP}%+` : `${n}%`);
   const parts: { name: string; fill: string; value: number; shown: number }[] = [
     { name: "Human", fill: TONE_COLOR.human.fill, value: human, shown: humanPct },
     { name: "Mixed", fill: "var(--verdict-mixed-fill)", value: mixed, shown: mixedPct },
@@ -31,7 +33,7 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
     <section aria-label="How the model scored this" className="space-y-3">
       <div
         role="img"
-        aria-label={parts.map((p) => `${p.name} ${p.shown}%`).join(", ")}
+        aria-label={parts.map((p) => `${p.name} ${label(p.name, p.shown)}`).join(", ")}
         className="flex h-2.5 w-full gap-0.5 overflow-hidden rounded-full bg-[var(--surface-3)]"
       >
         {parts.map((p) => (
@@ -57,7 +59,7 @@ export function ScoreSplit({ human, mixed, ai }: { human: number; mixed: number;
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: p.fill }} aria-hidden />
                 <span className="flex-1 text-left text-zinc-300">{p.name}</span>
-                <span className="font-data text-[16px] font-semibold text-[var(--text-primary)]">{p.shown}%</span>
+                <span className="font-data text-[16px] font-semibold text-[var(--text-primary)]">{label(p.name, p.shown)}</span>
                 <svg
                   className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
                   fill="none"

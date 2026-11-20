@@ -355,3 +355,79 @@ def test_the_cleaned_text_is_what_the_server_receives_and_what_is_counted():
     dirty = ("Th\u200bis tеxt " + "word " * 80).strip()
     _check(_service(handler), dirty)
     assert "\u200b" not in seen["body"]["text"] and "е" not in seen["body"]["text"]
+
+
+# ---- pv10 six-level rules (selected by the model id the server reports)
+
+def _pv10(score, mixed=0.02, sent=None, human=None, ai=None):
+    p_human = 1 - score if human is None else human
+    p_ai = max(0.0, score - mixed) if ai is None else ai
+    payload = _payload(verdict="unsure", score=score, mixed=mixed, sentences=sent)
+    payload["p"] = {"human": p_human, "ai": p_ai, "mixed": mixed}
+    payload["model"] = "ck_pv10_s2"
+    return payload
+
+
+def _level(payload):
+    r = _check(_service(_ok(payload)))
+    return r["level"], r["lean"], r["verdict"]
+
+
+@pytest.mark.parametrize(
+    "score,level,legacy",
+    [
+        (0.05, "human", "likely_human"),
+        (0.10, "human", "likely_human"),
+        (0.30, "likely_human", "likely_human"),
+        (0.50, "likely_human", "likely_human"),
+        (0.60, "unsure", "uncertain"),
+        (0.95, "unsure", "uncertain"),
+        (0.99, "unsure", "uncertain"),
+        (0.9970, "likely_ai", "likely_ai"),
+        (0.9985, "ai", "likely_ai"),
+    ],
+)
+def test_pv10_levels_follow_the_score_bands(score, level, legacy):
+    got_level, _, got_legacy = _level(_pv10(score))
+    assert (got_level, got_legacy) == (level, legacy)
+
+
+def test_pv10_unsure_says_which_way_it_leans():
+    assert _level(_pv10(0.7))[:2] == ("unsure", "human")
+    assert _level(_pv10(0.97))[:2] == ("unsure", "ai")
+
+
+def test_pv10_mixed_when_the_model_says_mixed():
+    level, lean, legacy = _level(_pv10(0.99, mixed=0.6, ai=0.3, human=0.01))
+    assert (level, legacy) == ("mixed", "uncertain")
+    assert lean == "ai"
+    assert _level(_pv10(0.6, mixed=0.55, ai=0.04, human=0.4))[:2] == ("mixed", "human")
+
+
+def test_pv10_mixed_when_long_text_windows_split_between_human_and_ai():
+    sent = [{"text": f"S{i}.", "p_ai": 0.97 if i < 15 else 0.03} for i in range(30)]
+    level, lean, _ = _level(_pv10(0.99, sent=sent))
+    assert level == "mixed" and lean in ("ai", "human")
+
+
+def test_pv10_short_text_never_uses_the_window_rule():
+    sent = [{"text": f"S{i}.", "p_ai": 0.97 if i < 4 else 0.03} for i in range(10)]
+    assert _level(_pv10(0.9990, sent=sent))[0] == "ai"
+
+
+def test_pv10_sentences_use_the_pv10_colour_bands_and_the_pv10_disclaimer():
+    sent = [{"text": "a.", "p_ai": 0.05}, {"text": "b.", "p_ai": 0.5}, {"text": "c.", "p_ai": 0.99}, {"text": "d.", "p_ai": 0.2}]
+    r = _check(_service(_ok(_pv10(0.5, sent=sent))))
+    assert [s["label"] for s in r["sentences"]] == ["human", "unsure", "ai", "unsure"]
+    assert "1 human text in 160" in r["disclaimer"]
+
+
+def test_older_model_keeps_the_old_rules_and_has_no_level():
+    r = _check(_service(_ok(_payload(verdict="ai", score=0.99, sentences=_sentences(0.9, 0.9, 0.9)))))
+    assert r["level"] is None and r["lean"] is None and r["verdict"] == "likely_ai"
+
+
+def test_the_sentence_agreement_hold_back_is_not_applied_to_pv10():
+    # Under the older model, a likely-AI verdict with too few AI sentences is held back; for pv10 it measurably did nothing.
+    r = _check(_service(_ok(_pv10(0.9990, sent=_sentences(0.1, 0.1, 0.1, 0.1)))))
+    assert r["level"] == "ai"

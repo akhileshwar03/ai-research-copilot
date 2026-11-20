@@ -1,4 +1,4 @@
-import type { CheckResult, Verdict } from "@/services/api/checker-api";
+import type { CheckResult, Level, Verdict } from "@/services/api/checker-api";
 
 export type Tone = "human" | "unsure" | "ai";
 
@@ -30,6 +30,20 @@ export const VERDICTS: Record<Verdict, VerdictInfo> = {
     headline: "This looks AI-written or AI-edited.",
     detail: "The sentences that stand out most are highlighted below.",
   },
+};
+
+/** The two clear levels the newer model adds on top of "Likely human" and "Likely AI". */
+const STRONG_HUMAN: VerdictInfo = {
+  tone: "human",
+  label: "Human",
+  headline: "This reads as human-written.",
+  detail: "The checker found no sign of AI writing, and it is confident.",
+};
+const STRONG_AI: VerdictInfo = {
+  tone: "ai",
+  label: "AI",
+  headline: "This reads as AI-written or AI-edited.",
+  detail: "The checker is confident. The sentences that stand out most are highlighted below.",
 };
 
 /** Shown instead of "Likely AI" or "Unsure" when the model's top answer is a human + AI mix. The verdict itself means
@@ -71,6 +85,27 @@ export function splitPercents(human: number, mixed: number, ai: number): [number
   return [floors[0], floors[1], floors[2]];
 }
 
+/** The one number shown beside the verdict: the model's own estimate for the side the verdict picked, taken from the
+ *  same three-way split as the Human / Mixed / AI rows so the page never shows two different figures. It is null for
+ *  "Unsure" and "Mixed", where the model is least reliable and a headline number would look more certain than it is.
+ *  `position` places the needle on the Human-to-AI dial (0 to 1). */
+/** The AI confidence is shown capped at this: a clearly AI text reads "95%+", never "100%". In our tests the model's raw
+ *  "99% AI" was right about 79% of the time, and its percentages could not be calibrated well enough to show more. */
+export const AI_DISPLAY_CAP = 95;
+
+export function headlineOf(result: CheckResult): { percent: number | null; side: "Human" | "AI" | null; position: number; capped: boolean } {
+  const position = Math.min(1, Math.max(0, result.ai_score));
+  const level = result.level;
+  const noNumber = level ? level === "unsure" || level === "mixed" : presentVerdict(result) === MIXED_VERDICT || result.verdict === "uncertain";
+  if (noNumber) return { percent: null, side: null, position, capped: false };
+  const { human, mixed, ai } = splitOf(result);
+  const [humanPct, , aiPct] = splitPercents(human, mixed, ai);
+  const humanSide = level ? level === "human" || level === "likely_human" : result.verdict === "likely_human";
+  return humanSide
+    ? { percent: humanPct, side: "Human", position, capped: false }
+    : { percent: Math.min(aiPct, AI_DISPLAY_CAP), side: "AI", position, capped: aiPct >= AI_DISPLAY_CAP };
+}
+
 /** "Unsure" says which way the model leaned, and only suggests a longer sample when the text is short. A fixed
  *  "a longer sample often helps" read as wrong under a 15-sentence text whose every sentence was marked AI. */
 function unsureInfo(result: CheckResult): VerdictInfo {
@@ -93,7 +128,35 @@ const SHORT_TEXT_WORDS = 200;
 const LEANS_AI_FROM = 0.85;
 const LEANS_HUMAN_UP_TO = 0.5;
 
+/** What to say for each level of the newer model. "Unsure" keeps its lean from the server; "Mixed" says what a mix can mean. */
+function presentLevel(level: Level, result: CheckResult): VerdictInfo {
+  switch (level) {
+    case "human":
+      return STRONG_HUMAN;
+    case "likely_human":
+      return VERDICTS.likely_human;
+    case "likely_ai":
+      return VERDICTS.likely_ai;
+    case "ai":
+      return STRONG_AI;
+    case "mixed":
+      return { ...MIXED_VERDICT, label: "Mixed" };
+    default: {
+      const base = VERDICTS.uncertain;
+      // Only the AI lean is stated: the server's "human" lean covers scores where the model's own split already puts
+      // more weight on AI than on human, so saying "leans towards human" would sit beside numbers that say the opposite.
+      const headline = result.lean === "ai" ? "The checker leans towards AI, but not enough to say so." : base.headline;
+      const detail =
+        result.lean === "ai"
+          ? "Strong enough to look closer, not strong enough to call it. Check the highlighted sentences."
+          : "Nothing stands out strongly as AI, but it is not clearly human either.";
+      return { ...base, headline, detail: result.word_count < SHORT_TEXT_WORDS ? `${detail} A longer sample often helps.` : detail };
+    }
+  }
+}
+
 export function presentVerdict(result: CheckResult): VerdictInfo {
+  if (result.level) return presentLevel(result.level, result);
   const { human, mixed, ai } = splitOf(result);
   if (result.verdict !== "likely_human" && mixed > ai && mixed > human) return MIXED_VERDICT;
   if (result.verdict === "uncertain") return unsureInfo(result);

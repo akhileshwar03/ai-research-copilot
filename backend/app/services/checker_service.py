@@ -30,6 +30,16 @@ DISCLAIMER = (
     "this result to accuse or penalise anyone."
 )
 
+# Said with the numbers from our own held-out tests of the pv10 model (about 9,000 human and 5,700 AI texts, a hard mix that
+# includes rewritten and attacked AI): roughly 1 human text in 160 was called AI or likely AI and roughly 1 AI text in 12
+# was called human or likely human. These are test figures, not a promise about any one text.
+DISCLAIMER_PV10 = (
+    "An estimate, not proof. In our tests this checker called about 1 human text in 160 AI or likely AI, and "
+    "called about 1 AI text in 12 human or likely human; it is weakest on AI text that was edited or rewritten "
+    "to sound human. \"Unsure\" and \"Mixed\" mean the model could not call it one way. Do not use this result to "
+    "accuse or penalise anyone."
+)
+
 # The sentence head separates "human-origin" from "AI-origin" sentences and is strongly two-sided. On held-out
 # sentences these cut points colour about 92% of human sentences "human" (about 4% "ai") and about 80% of
 # AI-origin sentences "ai"; roughly 6% fall between and are "unsure".
@@ -45,13 +55,75 @@ _VERDICTS = {"human": "likely_human", "unsure": "uncertain", "ai": "likely_ai"}
 LIKELY_AI_MIN_RED_SHARE = 0.5
 
 
-def _sentence_label(ai_score: float | None) -> str:
+def _sentence_label(ai_score: float | None, human_max: float = SENTENCE_HUMAN_MAX, ai_min: float = SENTENCE_AI_MIN) -> str:
     if ai_score is None:
         return "unsure"
-    if ai_score <= SENTENCE_HUMAN_MAX:
+    if ai_score <= human_max:
         return "human"
-    return "ai" if ai_score >= SENTENCE_AI_MIN else "unsure"
+    return "ai" if ai_score >= ai_min else "unsure"
 _WORD_RE = re.compile(r"[A-Za-z0-9']+")
+
+# ---- pv10 six-level rules
+#
+# The pv10 model is selected by the model id the checker server reports (the launcher sets CHECKER_MODEL_ID), so the
+# server and these rules always change together and rolling back the server rolls the rules back with it. Every number
+# below was fixed on validation data (plus two development sets) by a rule written down before scoring, then tested
+# once on texts the model had not been tuned on.
+PV10_MODEL_PREFIX = "ck_pv10"
+PV10_HI = 0.9981            # score above this: "AI" (99.75th percentile of pooled human scores)
+PV10_LIKELY_AI = 0.9956     # above this: "likely AI" (99.5th percentile)
+PV10_HUMAN = 0.10           # at or below: "human" (largest cut with at most 1% of pooled AI at or below it)
+PV10_LIKELY_HUMAN = 0.50    # at or below: "likely human" (raised from 0.35: at most +1 point of AI called human-ish)
+PV10_MIXED_P = 0.5          # the model's own mixed probability at or above this: "mixed"
+PV10_MIXT = 0.4             # long texts whose sentence windows disagree this much: "mixed"
+PV10_MIXT_MIN_SENTENCES = 20
+PV10_UNSURE_AI_FROM = 0.95  # between "unsure toward human" and "unsure toward AI"
+# Sentence colours for pv10: at most about 4% of human-origin sentences coloured "ai" and 4% of AI-origin "human"
+# on held-out sentences (the old cut points of 0.3 / 0.7 coloured 9% of human sentences "ai" with this model).
+PV10_SENTENCE_HUMAN_MAX = 0.09
+PV10_SENTENCE_AI_MIN = 0.97
+
+Level = str  # "human" | "likely_human" | "unsure" | "mixed" | "likely_ai" | "ai"
+
+
+def _window_disagreement(p_ai: list[float], window: int = 6, hi: float = 0.8, lo: float = 0.2) -> tuple[float, float, float]:
+    """Share of rolling windows of sentences that read AI, share that read human, and the smaller of the two.
+    A text whose windows split between the two is mixed even when its overall score is high."""
+    n = len(p_ai)
+    if n < window:
+        return 0.0, 0.0, 0.0
+    means = [sum(p_ai[i : i + window]) / window for i in range(n - window + 1)]
+    ra = sum(m > hi for m in means) / len(means)
+    rh = sum(m < lo for m in means) / len(means)
+    return ra, rh, min(ra, rh)
+
+
+def six_level(score: float, p: dict, p_ai_sentences: list[float | None]) -> tuple[Level, str | None]:
+    """The pv10 verdict and, for "unsure" and "mixed", which way the model leans ("human" or "ai", else None)."""
+    sp = [x for x in p_ai_sentences if x is not None]
+    n = len(sp)
+    ra, rh, mn = _window_disagreement(sp)
+    if p["mixed"] >= PV10_MIXED_P or (n >= PV10_MIXT_MIN_SENTENCES and mn >= PV10_MIXT):
+        lean_ai = ra >= rh if n >= 6 else p["ai"] >= p["human"]
+        return "mixed", "ai" if lean_ai else "human"
+    if score > PV10_HI:
+        return "ai", None
+    if score <= PV10_HUMAN:
+        return "human", None
+    if score <= PV10_LIKELY_HUMAN:
+        return "likely_human", None
+    if score <= PV10_UNSURE_AI_FROM:
+        return "unsure", "human"
+    if score <= PV10_LIKELY_AI:
+        return "unsure", "ai"
+    return "likely_ai", None
+
+
+# What the older three-way field `verdict` says for each level, so an app that has not learned the new levels yet keeps working.
+_LEGACY_VERDICT = {
+    "human": "likely_human", "likely_human": "likely_human", "unsure": "uncertain",
+    "mixed": "uncertain", "likely_ai": "likely_ai", "ai": "likely_ai",
+}
 
 # Look-alike letters (mostly Cyrillic and Greek) that people use to make a text read the same but look different to a
 # detector, and characters that are invisible. On the RAID benchmark, text with look-alike letters was caught 0% of the
@@ -249,9 +321,9 @@ class CheckerService:
                 if isinstance(seen, int) and seen >= minimum:
                     raise _too_few_sentences(seen)
                 raise _too_short(minimum)
-            verdict = _VERDICTS[payload["verdict"]]
             score = float(payload["score"])
-            mixed = float(payload["p"]["mixed"])
+            p = {k: float(payload["p"][k]) for k in ("human", "ai", "mixed")}
+            mixed = p["mixed"]
             sentences = [
                 {
                     "text": str(item["text"]),
@@ -260,7 +332,13 @@ class CheckerService:
                 for item in payload["sentences"]
             ]
             words = int(payload["words"])
-            verdict = _hold_back_unsupported_ai(verdict, sentences)
+            new_rules = str(payload.get("model", "")).startswith(PV10_MODEL_PREFIX)
+            if new_rules:
+                level, lean = six_level(score, p, [item["ai_score"] for item in sentences])
+                verdict = _LEGACY_VERDICT[level]
+            else:
+                level, lean = None, None
+                verdict = _hold_back_unsupported_ai(_VERDICTS[payload["verdict"]], sentences)
         except AppError:
             raise
         except (KeyError, TypeError, ValueError) as exc:
@@ -268,11 +346,14 @@ class CheckerService:
             logger.error("checker_malformed_response")
             raise _unavailable() from None
 
+        cuts = (PV10_SENTENCE_HUMAN_MAX, PV10_SENTENCE_AI_MIN) if new_rules else (SENTENCE_HUMAN_MAX, SENTENCE_AI_MIN)
         return {
             "verdict": verdict,
+            "level": level,
+            "lean": lean,
             "ai_score": round(score, 4),
             "mixed_probability": round(mixed, 4),
             "word_count": words,
-            "sentences": [{**item, "label": _sentence_label(item["ai_score"])} for item in sentences],
-            "disclaimer": DISCLAIMER,
+            "sentences": [{**item, "label": _sentence_label(item["ai_score"], *cuts)} for item in sentences],
+            "disclaimer": DISCLAIMER_PV10 if new_rules else DISCLAIMER,
         }

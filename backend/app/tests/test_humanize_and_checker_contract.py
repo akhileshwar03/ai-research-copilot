@@ -85,7 +85,7 @@ def test_checker_text_success(client, auth_headers):
 # `response_model` silently drops, so this asserts the real HTTP shape round-trips.
 def test_checker_text_response_keeps_every_declared_field(client, auth_headers):
     body = client.post("/api/v1/checker/text", json={"text": "some text to analyze"}, headers=auth_headers).json()
-    assert set(body) == {"verdict", "ai_score", "mixed_probability", "word_count", "sentences", "disclaimer"}
+    assert set(body) == {"verdict", "level", "lean", "ai_score", "mixed_probability", "word_count", "sentences", "disclaimer"}
     assert set(body["sentences"][0]) == {"text", "ai_score", "label"}
 
 

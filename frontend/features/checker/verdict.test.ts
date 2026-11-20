@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { countWords, formatFileSize, presentVerdict, splitOf, trimToLimit } from "@/features/checker/verdict";
+import { countWords, formatFileSize, headlineOf, presentVerdict, splitOf, trimToLimit } from "@/features/checker/verdict";
 import type { CheckResult } from "@/services/api/checker-api";
 
 const result = (over: Partial<CheckResult>): CheckResult => ({
@@ -79,5 +79,59 @@ describe("splitOf", () => {
     expect(s.mixed).toBeCloseTo(0.3);
     expect(s.ai).toBeCloseTo(0.6);
     expect(s.human + s.mixed + s.ai).toBeCloseTo(1);
+  });
+});
+
+describe("headlineOf", () => {
+  it("shows the human share for a likely-human verdict", () => {
+    const h = headlineOf(result({ verdict: "likely_human", ai_score: 0.12, mixed_probability: 0.03 }));
+    expect(h).toEqual({ percent: 88, side: "Human", position: 0.12, capped: false });
+  });
+  it("shows the AI-only share for a likely-AI verdict", () => {
+    const h = headlineOf(result({ verdict: "likely_ai", ai_score: 0.97, mixed_probability: 0.02 }));
+    expect(h.side).toBe("AI");
+    expect(h.percent).toBe(95);
+    expect(h.capped).toBe(true);
+  });
+  it("never shows more than 95% for AI, however sure the model is", () => {
+    const h = headlineOf(result({ level: "ai", ai_score: 0.9999, mixed_probability: 0 }));
+    expect(h.percent).toBe(95);
+    expect(h.capped).toBe(true);
+  });
+  it("leaves a lower AI number alone and does not cap the human side", () => {
+    const a = headlineOf(result({ level: "likely_ai", ai_score: 0.8, mixed_probability: 0 }));
+    expect(a).toMatchObject({ percent: 80, capped: false });
+    expect(headlineOf(result({ level: "human", verdict: "likely_human", ai_score: 0.001, mixed_probability: 0 }))).toMatchObject({ percent: 100, capped: false });
+  });
+  it("shows no number for an unsure result", () => {
+    expect(headlineOf(result({ verdict: "uncertain", ai_score: 0.6, mixed_probability: 0.1 })).percent).toBeNull();
+  });
+  it("shows no number when the top answer is a mix", () => {
+    expect(headlineOf(result({ verdict: "likely_ai", ai_score: 0.95, mixed_probability: 0.8 })).percent).toBeNull();
+  });
+});
+
+describe("six-level verdicts from the newer model", () => {
+  const lvl = (level: NonNullable<CheckResult["level"]>, over: Partial<CheckResult> = {}) => result({ level, ...over });
+  it("names the strong levels", () => {
+    expect(presentVerdict(lvl("human", { verdict: "likely_human", ai_score: 0.03 })).label).toBe("Human");
+    expect(presentVerdict(lvl("ai", { ai_score: 0.999 })).label).toBe("AI");
+  });
+  it("keeps likely human and likely AI", () => {
+    expect(presentVerdict(lvl("likely_human", { verdict: "likely_human", ai_score: 0.4 })).label).toBe("Likely human");
+    expect(presentVerdict(lvl("likely_ai", { ai_score: 0.997 })).label).toBe("Likely AI");
+  });
+  it("says mixed for mixed and uses the server's lean for unsure", () => {
+    expect(presentVerdict(lvl("mixed", { verdict: "uncertain" })).label).toBe("Mixed");
+    const u = presentVerdict(lvl("unsure", { verdict: "uncertain", lean: "ai", word_count: 400 }));
+    expect(u.label).toBe("Unsure");
+    expect(u.headline).toContain("towards AI");
+    expect(presentVerdict(lvl("unsure", { verdict: "uncertain", lean: "human" })).headline).toBe("The checker can't decide.");
+  });
+  it("shows a number only for the four clear levels", () => {
+    expect(headlineOf(lvl("human", { verdict: "likely_human", ai_score: 0.03, mixed_probability: 0.01 })).side).toBe("Human");
+    expect(headlineOf(lvl("ai", { ai_score: 0.999, mixed_probability: 0.01 })).side).toBe("AI");
+    expect(headlineOf(lvl("unsure", { verdict: "uncertain" })).percent).toBeNull();
+    expect(headlineOf(lvl("mixed", { verdict: "uncertain" })).percent).toBeNull();
   });
 });
