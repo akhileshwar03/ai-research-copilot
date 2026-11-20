@@ -118,6 +118,16 @@ class EmailService:
             )
 
         # ── 4. Dev mode (no delivery configured) ──────────────────────────────
+        # Handing the code back in the API response is an account takeover for anyone who can call
+        # the endpoint, so it is only ever done in development. A production deploy that lost its
+        # email settings fails closed instead of leaking codes.
+        if not self.settings.is_development:
+            logger.error("otp_delivery_not_configured environment=%s", self.settings.environment)
+            raise AppError(
+                code="EMAIL_DELIVERY_FAILED",
+                message="We couldn't send the verification email. Please try again in a moment.",
+                status_code=503,
+            )
         logger.warning(
             "\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"

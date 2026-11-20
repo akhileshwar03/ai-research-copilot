@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 
 from app.api.dependencies.services import get_health_service
 from app.api.routes.admin import router as admin_router
@@ -42,4 +43,6 @@ def healthcheck(service: HealthService = Depends(get_health_service)):
 
 @api_v1_router.get("/readiness")
 def readiness(service: HealthService = Depends(get_health_service)):
-    return service.readiness()
+    result = service.readiness()
+    # See app/main.py's /readiness for why this returns a real non-2xx status on "degraded".
+    return JSONResponse(content=result, status_code=200 if result["status"] == "ok" else 503)

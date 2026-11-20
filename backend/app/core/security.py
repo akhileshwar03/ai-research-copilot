@@ -2,9 +2,17 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 
 from app.core.config import get_settings
+
+# PyJWT, not python-jose: python-jose has an open, unfixed CVE and pulls in `ecdsa` (also
+# unfixed) purely to support RS/ES algorithms this app never uses -- it only ever signs with
+# HS256 (see settings.jwt_algorithm). PyJWT does the same HS256 encode/decode with no need for
+# `ecdsa` at all, and has no open advisories. Same call shapes: encode(payload, key,
+# algorithm=...), decode(token, key, algorithms=[...]), and a PyJWTError base exception in
+# place of jose's JWTError.
 
 # No password-based auth in this app — sign-in is email OTP or OAuth only,
 # so there is deliberately no hash_password/verify_password here.
@@ -57,7 +65,7 @@ def decode_access_token(token: str) -> dict:
         if payload.get("type") != TokenKind.ACCESS:
             raise ValueError("Invalid token type")
         return payload
-    except (JWTError, ValueError) as exc:
+    except (PyJWTError, ValueError) as exc:
         raise ValueError("Invalid access token") from exc
 
 
@@ -67,7 +75,7 @@ def decode_refresh_token(token: str) -> dict:
         if payload.get("type") != TokenKind.REFRESH:
             raise ValueError("Invalid token type")
         return payload
-    except (JWTError, ValueError) as exc:
+    except (PyJWTError, ValueError) as exc:
         raise ValueError("Invalid refresh token") from exc
 
 

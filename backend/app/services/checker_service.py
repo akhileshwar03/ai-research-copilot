@@ -197,6 +197,12 @@ def _is_configured() -> bool:
     return all([s.checker_url, s.checker_token, s.cf_access_client_id, s.cf_access_client_secret])
 
 
+def checker_configured() -> bool:
+    """Public wrapper so other modules (health_service's /readiness) can tell "intentionally not
+    set up here" (dev/test, expected) apart from "configured but unreachable" (a real outage)."""
+    return _is_configured()
+
+
 def _access_headers() -> dict[str, str]:
     s = get_settings()
     return {"CF-Access-Client-Id": s.cf_access_client_id, "CF-Access-Client-Secret": s.cf_access_client_secret}

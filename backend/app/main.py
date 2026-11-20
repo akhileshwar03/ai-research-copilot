@@ -438,7 +438,11 @@ def health(service: HealthService = Depends(get_health_service)):
 
 @app.get("/readiness")
 def readiness(service: HealthService = Depends(get_health_service)):
-    return service.readiness()
+    result = service.readiness()
+    # A plain "is this 200?" uptime check (the simplest, most common kind) only catches a real
+    # outage if a bad result actually comes back as a non-2xx status -- a 200 with "degraded"
+    # buried in the JSON body is invisible to that style of monitor. See HealthService._check_checker.
+    return JSONResponse(content=result, status_code=200 if result["status"] == "ok" else 503)
 
 
 if settings.auto_create_tables and settings.is_development:

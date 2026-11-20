@@ -35,7 +35,7 @@ class _FakeAsyncClient:
     async def __aexit__(self, *args):
         return False
 
-    async def get(self, url, headers=None):
+    async def get(self, url, headers=None, extensions=None):
         if self._exc:
             raise self._exc
         return self._response
@@ -72,10 +72,17 @@ def test_extract_text_from_url_adds_scheme_if_missing(monkeypatch):
     captured = {}
 
     class _CapturingClient(_FakeAsyncClient):
-        async def get(self, url, headers=None):
+        async def get(self, url, headers=None, extensions=None):
             captured["url"] = url
+            captured["headers"] = headers
+            captured["extensions"] = extensions
             return self._response
 
+    monkeypatch.setattr(
+        extraction_module.socket,
+        "getaddrinfo",
+        lambda host, port: [(None, None, None, None, ("93.184.216.34", 0))],
+    )
     monkeypatch.setattr(
         extraction_module.httpx,
         "AsyncClient",
@@ -83,7 +90,10 @@ def test_extract_text_from_url_adds_scheme_if_missing(monkeypatch):
     )
 
     _run(extract_text_from_url("example.com/article"))
-    assert captured["url"] == "https://example.com/article"
+    # Connects to the resolved IP literal, not the hostname — see _resolve_validated_ip.
+    assert captured["url"] == "https://93.184.216.34/article"
+    assert captured["headers"]["Host"] == "example.com"
+    assert captured["extensions"]["sni_hostname"] == "example.com"
 
 
 def test_extract_text_from_url_rejects_empty():
@@ -133,6 +143,27 @@ def test_extract_text_from_url_blocks_ssrf_to_private_addresses(monkeypatch, url
     with pytest.raises(AppError) as exc_info:
         _run(extract_text_from_url(url))
     assert exc_info.value.code == "URL_FETCH_FAILED"
+
+
+def test_extract_text_from_url_resolves_host_exactly_once(monkeypatch):
+    """DNS-rebinding regression: the host must be resolved once and that same IP connected
+    to directly, never resolved a second time at connect — a second, independent lookup is
+    exactly what would let a public-at-check / private-at-connect host slip through."""
+    calls = []
+
+    def _getaddrinfo(host, port):
+        calls.append(host)
+        return [(None, None, None, None, ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(extraction_module.socket, "getaddrinfo", _getaddrinfo)
+    monkeypatch.setattr(
+        extraction_module.httpx,
+        "AsyncClient",
+        lambda **kwargs: _FakeAsyncClient(response=_FakeResponse(text=HTML_PAGE, headers={"content-type": "text/html"})),
+    )
+
+    _run(extract_text_from_url("https://example.com/article"))
+    assert calls == ["example.com"]
 
 
 def test_extract_text_from_url_follows_redirect_and_rechecks_host(monkeypatch):

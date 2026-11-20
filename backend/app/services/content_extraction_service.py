@@ -37,29 +37,30 @@ any commentary of your own. If there is no readable text in the image, respond w
 NO_TEXT_FOUND"""
 
 
-def _assert_public_host(url: str) -> None:
-    """Block SSRF: refuse to fetch a URL whose host resolves to a private, loopback,
-    link-local (this covers the 169.254.169.254 cloud metadata endpoint), or otherwise
-    non-public address. Re-checked on every redirect hop, not just the initial URL, so a
-    public host that 302s to an internal address (or DNS-rebinds between check and
-    connect) can't slip through — this is why redirects are followed manually below
-    instead of via httpx's follow_redirects, which would only ever see the first URL."""
-    host = urlsplit(url).hostname
-    if not host:
-        raise AppError(code="INVALID_URL", message="Enter a valid URL", status_code=400)
+def _resolve_validated_ip(host: str) -> str:
+    """Block SSRF: resolve *host* and return a single IP literal that is public — never
+    private, loopback, link-local (this covers the 169.254.169.254 cloud metadata
+    endpoint), or otherwise non-global. Resolving once here and connecting to that exact
+    IP literal (below), instead of letting httpx resolve *host* again when it opens the
+    socket, is what the redirect-recheck alone can't close: a hostname can be made to
+    resolve to a public IP for this lookup and a private one a moment later for the
+    connect (DNS rebinding) — a second, independent lookup is exactly the gap that lets
+    through. Returning one pinned IP and connecting to it directly removes that second
+    lookup instead of merely re-running the same race."""
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
         raise AppError(code="URL_FETCH_FAILED", message="Couldn't resolve that URL's host.", status_code=422)
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global or ip.is_multicast:
-            logger.warning("url_import_blocked_private_ip host=%s ip=%s", host, ip)
-            raise AppError(
-                code="URL_FETCH_FAILED",
-                message="Couldn't fetch that URL. Check it's correct and publicly accessible.",
-                status_code=422,
-            )
+        if ip.is_global and not ip.is_multicast:
+            return str(ip)
+    logger.warning("url_import_blocked_private_ip host=%s", host)
+    raise AppError(
+        code="URL_FETCH_FAILED",
+        message="Couldn't fetch that URL. Check it's correct and publicly accessible.",
+        status_code=422,
+    )
 
 
 async def extract_text_from_url(url: str) -> str:
@@ -72,8 +73,23 @@ async def extract_text_from_url(url: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT_SECONDS, follow_redirects=False) as client:
             for _ in range(_MAX_REDIRECTS + 1):
-                _assert_public_host(url)
-                response = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; QuerexBot/1.0)"})
+                parsed = urlsplit(url)
+                host = parsed.hostname
+                if not host:
+                    raise AppError(code="INVALID_URL", message="Enter a valid URL", status_code=400)
+                ip = _resolve_validated_ip(host)
+                ip_literal = f"[{ip}]" if ":" in ip else ip
+                port_suffix = f":{parsed.port}" if parsed.port else ""
+                # Connect to the validated IP literal directly — not *host* — so the TLS/TCP
+                # layer never re-resolves the hostname. `sni_hostname` keeps the TLS SNI and
+                # certificate-hostname check (and the Host header keeps virtual hosting) on the
+                # real hostname, so this is transparent to the server on the other end.
+                connect_url = parsed._replace(netloc=f"{ip_literal}{port_suffix}").geturl()
+                response = await client.get(
+                    connect_url,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; QuerexBot/1.0)", "Host": host},
+                    extensions={"sni_hostname": host},
+                )
                 if response.is_redirect:
                     next_url = response.headers.get("location")
                     if not next_url:

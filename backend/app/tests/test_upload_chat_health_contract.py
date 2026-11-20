@@ -125,3 +125,68 @@ def test_health_and_readiness(client):
         r = client.get(path)
         assert r.status_code == 200
         assert "checks" in r.json()
+
+
+def _real_health_service():
+    """The real HealthService (not the test suite's FakeHealthService), with simple always-ok
+    vector_store/ai_service stand-ins, so only the checker's behavior is under test here."""
+    from types import SimpleNamespace
+
+    from app.services.health_service import HealthService
+
+    return HealthService(
+        vector_store=SimpleNamespace(ping=lambda: True),
+        ai_service=SimpleNamespace(ping=lambda: True),
+    )
+
+
+def test_readiness_checker_not_configured_counts_as_healthy(client):
+    from app.api.dependencies import services as service_deps
+    from app.main import app
+
+    app.dependency_overrides[service_deps.get_health_service] = _real_health_service
+    try:
+        # In dev/test, the checker is deliberately unconfigured -- that must not look like an outage.
+        for path in ["/readiness", "/api/v1/readiness"]:
+            r = client.get(path)
+            assert r.status_code == 200
+            assert r.json()["checks"]["checker"] == {"ok": True, "configured": False}
+    finally:
+        del app.dependency_overrides[service_deps.get_health_service]
+
+
+def test_readiness_returns_503_when_checker_configured_but_unreachable(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.api.dependencies import services as service_deps
+    from app.main import app
+    from app.services import checker_service as cs
+
+    monkeypatch.setattr(
+        cs,
+        "get_settings",
+        lambda: SimpleNamespace(
+            checker_url="https://checker.example.test",
+            checker_token="t" * 40,
+            cf_access_client_id="id",
+            cf_access_client_secret="secret",
+        ),
+    )
+
+    def boom(url, headers, timeout):
+        raise Exception("connection refused")
+
+    monkeypatch.setattr(cs.httpx, "get", boom)
+
+    app.dependency_overrides[service_deps.get_health_service] = _real_health_service
+    try:
+        for path in ["/readiness", "/api/v1/readiness"]:
+            r = client.get(path)
+            assert r.status_code == 503
+            body = r.json()
+            assert body["status"] == "degraded"
+            assert body["checks"]["checker"] == {"ok": False, "configured": True}
+            # the other checks are unaffected -- only the checker is down
+            assert body["checks"]["database"]["ok"] is True
+    finally:
+        del app.dependency_overrides[service_deps.get_health_service]

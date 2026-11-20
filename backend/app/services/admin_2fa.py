@@ -15,7 +15,7 @@ from datetime import timedelta
 from urllib.parse import quote
 
 from cryptography.fernet import Fernet, InvalidToken
-from jose import JWTError
+from jwt import PyJWTError
 
 from app.core.config import get_settings
 from app.core.security import create_jwt_token, decode_token
@@ -99,6 +99,6 @@ def step_up_token_valid(token: str | None, email: str) -> bool:
         return False
     try:
         payload = decode_token(token)
-    except JWTError:
+    except PyJWTError:
         return False
     return payload.get("type") == STEP_UP_TOKEN_TYPE and payload.get("sub") == email

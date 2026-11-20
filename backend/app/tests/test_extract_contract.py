@@ -34,7 +34,7 @@ class _FakeAsyncClient:
     async def __aexit__(self, *args):
         return False
 
-    async def get(self, url, headers=None):
+    async def get(self, url, headers=None, extensions=None):
         return self._response
 
 
