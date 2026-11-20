@@ -8,11 +8,11 @@ import { TONE_COLOR, type Tone } from "@/features/checker/verdict";
 const R = 52;
 const HALF = Math.PI * R;
 
-/** A half-dial from Human (left) to AI (right). The arc is filled by how confident the verdict is, from the end the
- *  verdict points at: a human result fills green from the Human end, an AI result fills red from the AI end. The needle
- *  sits at where the text falls between the two. It is only drawn for the two clear verdicts; "Unsure" and "Mixed" have no
- *  honest place on a human-to-AI line. */
-function Dial({ position, fillPct, from, color, label }: { position: number; fillPct: number; from: "left" | "right"; color: string; label: string }) {
+/** A half-dial with Human on the left and AI on the right. The fill grows from the end opposite the verdict and the needle
+ *  rides its leading edge, so a human result sweeps right to left in green and lands at the Human end, and an AI result
+ *  sweeps left to right in red and lands at the AI end. A result that is only 60% sure stops part of the way. It is only
+ *  drawn for the clear verdicts; "Unsure" and "Mixed" have no honest place on a human-to-AI line. */
+function Dial({ side, fillPct, color, label }: { side: "Human" | "AI"; fillPct: number; color: string; label: string }) {
   const [shown, setShown] = useState(0);
   useEffect(() => {
     // setTimeout, not requestAnimationFrame: rAF never fires in a backgrounded tab (see ProbabilityGauge).
@@ -20,11 +20,14 @@ function Dial({ position, fillPct, from, color, label }: { position: number; fil
     return () => clearTimeout(id);
   }, [fillPct]);
 
-  const angle = -90 + Math.min(1, Math.max(0, position)) * 180;
+  const fromRight = side === "Human";
+  // Where the leading edge is along the arc, 0 = Human end (left), 1 = AI end (right).
+  const edge = fromRight ? 1 - shown : shown;
+  const angle = -90 + edge * 180;
   return (
     <svg viewBox="0 0 130 78" role="img" aria-label={label} className="h-[72px] w-[120px] shrink-0">
       <path d="M13 65 A52 52 0 0 1 117 65" fill="none" stroke="var(--border-subtle)" strokeWidth="8" strokeLinecap="round" />
-      <g transform={from === "right" ? "translate(130 0) scale(-1 1)" : undefined}>
+      <g transform={fromRight ? "translate(130 0) scale(-1 1)" : undefined}>
         <path
           d="M13 65 A52 52 0 0 1 117 65"
           fill="none"
@@ -65,7 +68,6 @@ export function VerdictMeter({
   detail,
   percent,
   side,
-  position,
   capped = false,
   tip,
 }: {
@@ -76,8 +78,6 @@ export function VerdictMeter({
   /** Whole-number confidence for the side the verdict picked, or null to show no number. */
   percent: number | null;
   side: "Human" | "AI" | null;
-  /** 0 = fully human end of the dial, 1 = fully AI end. */
-  position: number;
   /** True when the AI number was held at its cap, so it reads "95%+". */
   capped?: boolean;
   tip: string;
@@ -102,14 +102,8 @@ export function VerdictMeter({
             </p>
           )}
         </div>
-        {showNumber && (
-          <Dial
-            position={position}
-            fillPct={percent ?? 0}
-            from={side === "AI" ? "right" : "left"}
-            color={color.fill}
-            label={`Dial: ${side} confidence ${percent} percent${capped ? " or more" : ""}`}
-          />
+        {showNumber && side && (
+          <Dial side={side} fillPct={percent ?? 0} color={color.fill} label={`Dial: ${side} confidence ${percent} percent${capped ? " or more" : ""}`} />
         )}
       </div>
       <p className="text-[14px] leading-relaxed text-zinc-300">
