@@ -32,7 +32,14 @@ CLEANUP_INTERVAL_HOURS = 24
 _LAST_RUN_KEY = "retention_last_run_at"
 
 # In-process throttle: consult the database claim at most this often.
-_LOCAL_CHECK_INTERVAL_SECONDS = 600
+#
+# Was 600s (10 minutes) -- which happened to match the keep-warm cron ping almost exactly, so nearly
+# every single ping opened a real connection to the database. On a database that bills by active
+# compute time (e.g. Neon's free tier), that's enough traffic to keep it from ever auto-suspending,
+# burning real compute-hours around the clock for a check that, 23 times out of 24, has nothing to
+# do. The actual cleanup only needs to happen once every CLEANUP_INTERVAL_HOURS (24); checking once
+# an hour still gives 24 chances a day to catch that window, at 1/6th the database touches.
+_LOCAL_CHECK_INTERVAL_SECONDS = 3600
 _local_lock = threading.Lock()
 _last_local_check = 0.0
 
