@@ -436,6 +436,21 @@ def health(service: HealthService = Depends(get_health_service)):
     return service.health()
 
 
+# For an external uptime monitor that should alert when the AI Checker server is down. Deliberately
+# NOT /readiness: that also queries the database and calls OpenAI on every hit, so polling it every
+# few minutes keeps a billed-by-compute-time database awake around the clock. This touches only the
+# checker (one small call to its /health) and returns a real 503 when it is unreachable.
+@app.api_route("/health/checker", methods=["GET", "HEAD"])
+@limiter.limit("30/minute")
+def checker_health(request: Request):
+    from app.services.checker_service import checker_configured, ping_checker
+
+    if not checker_configured():
+        return JSONResponse(content={"status": "ok", "configured": False}, status_code=200)
+    ok = ping_checker()
+    return JSONResponse(content={"status": "ok" if ok else "down", "configured": True}, status_code=200 if ok else 503)
+
+
 @app.get("/readiness")
 def readiness(service: HealthService = Depends(get_health_service)):
     result = service.readiness()

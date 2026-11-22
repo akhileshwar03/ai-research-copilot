@@ -190,3 +190,27 @@ def test_readiness_returns_503_when_checker_configured_but_unreachable(client, m
             assert body["checks"]["database"]["ok"] is True
     finally:
         del app.dependency_overrides[service_deps.get_health_service]
+
+
+def test_checker_health_endpoint(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from app.services import checker_service as cs
+
+    # Unconfigured (dev/test): healthy, and it must not touch the network.
+    r = client.get("/health/checker")
+    assert r.status_code == 200 and r.json() == {"status": "ok", "configured": False}
+
+    monkeypatch.setattr(
+        cs, "get_settings",
+        lambda: SimpleNamespace(checker_url="https://checker.example.test", checker_token="t" * 40,
+                                cf_access_client_id="id", cf_access_client_secret="secret"),
+    )
+    monkeypatch.setattr(cs.httpx, "get", lambda url, headers, timeout: (_ for _ in ()).throw(Exception("down")))
+    r = client.get("/health/checker")
+    assert r.status_code == 503 and r.json() == {"status": "down", "configured": True}
+    assert client.head("/health/checker").status_code == 503
+
+    import httpx
+    monkeypatch.setattr(cs.httpx, "get", lambda url, headers, timeout: httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", url)))
+    assert client.get("/health/checker").status_code == 200
