@@ -4,7 +4,6 @@ import os
 import uuid
 
 from fastapi import UploadFile
-from pypdf.errors import PyPdfError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import get_settings
@@ -214,17 +213,22 @@ class DocumentService:
                 result.vision_truncated,
             )
 
-        except PyPdfError:
+        except Exception as exc:
+            # (pypdf is imported lazily -- it is ~20 MB that is only needed once a PDF is processed --
+            # so the corrupt-file check below is an isinstance test inside a general handler.)
+            from pypdf.errors import PyPdfError
+
+            if not isinstance(exc, PyPdfError):
+                db.rollback()
+                self._mark_ingestion_failed(db, stored_filename, "Ingestion failed")
+                logger.exception("background_ingestion_failed stored=%s", stored_filename)
+                return
             # The user's own file is corrupt/truncated: an expected outcome, not a server fault, so
             # it must not log at ERROR (that raised a Sentry alert per bad upload) and the user
             # gets a message that says what's wrong instead of a generic "Ingestion failed".
             db.rollback()
             self._mark_ingestion_failed(db, stored_filename, "Could not read this PDF (it may be corrupt)")
             logger.warning("background_ingestion_unreadable_pdf stored=%s", stored_filename)
-        except Exception:
-            db.rollback()
-            self._mark_ingestion_failed(db, stored_filename, "Ingestion failed")
-            logger.exception("background_ingestion_failed stored=%s", stored_filename)
         finally:
             db.close()
 

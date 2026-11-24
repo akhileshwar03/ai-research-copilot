@@ -5,10 +5,7 @@ import io
 import logging
 import uuid
 
-import pymupdf  # PyMuPDF — pure-Python wheel, no system binary dependency. The
-# older `import fitz` alias still works but is deprecated in favour of this.
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from pypdf import PdfReader
 
 from app.core.config import get_settings
 from app.modules.rag.embedding_service import EmbeddingService
@@ -185,6 +182,12 @@ class IngestionService:
         for drawing-path analysis on every page of every upload when the
         result can never be used.
         """
+        # PDF libraries are imported here, not at module top: together they cost ~55 MB of RAM, and on
+        # Render's 512 MB free instance that is paid at every startup even if nobody uploads a PDF.
+        # (pymupdf is PyMuPDF; the older `import fitz` alias is deprecated in favour of it.)
+        import pymupdf
+        from pypdf import PdfReader
+
         reader = PdfReader(io.BytesIO(content))
         total_pages = len(reader.pages)
         splitter = RecursiveCharacterTextSplitter(

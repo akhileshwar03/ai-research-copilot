@@ -15,8 +15,6 @@ import statistics
 from collections import Counter
 from dataclasses import dataclass
 
-import pdfplumber
-
 from app.core.exceptions import AppError
 from app.services.runtime_settings import runtime_settings
 
@@ -466,6 +464,8 @@ class PaperAnalyzerService:
                 status_code=400,
             )
         rubric = _RUBRICS[style]
+
+        import pdfplumber  # lazy: ~10 MB, only needed when a paper is actually analysed
 
         try:
             pdf = pdfplumber.open(io.BytesIO(pdf_bytes))

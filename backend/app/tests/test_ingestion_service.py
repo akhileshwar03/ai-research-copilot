@@ -405,7 +405,7 @@ def test_nul_characters_in_extracted_text_never_reach_the_database(monkeypatch):
         def __init__(self, *_a, **_k):
             self.pages = [_Page(), _Page()]
 
-    monkeypatch.setattr(ingestion_module, "PdfReader", _Reader)
+    monkeypatch.setattr("pypdf.PdfReader", _Reader)  # imported lazily inside process_pdf
     store = FakeVectorStore()
     service = IngestionService(embedding_service=FakeEmbeddingService(), vector_store=store)
 
