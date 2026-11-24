@@ -1,3 +1,4 @@
+import asyncio
 import os
 import logging
 from contextlib import asynccontextmanager
@@ -35,6 +36,7 @@ from app.db.models import (  # noqa: F401
 )
 from app.db.session import Base, engine
 from app.services.health_service import HealthService
+from app.services.memory_monitor import run_memory_monitor
 
 settings = get_settings()
 
@@ -351,7 +353,11 @@ def _run_startup_migrations() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _run_startup_migrations()
-    yield
+    memory_task = asyncio.create_task(run_memory_monitor())
+    try:
+        yield
+    finally:
+        memory_task.cancel()
 
 
 def _docs_kwargs(is_development: bool) -> dict:
