@@ -35,6 +35,8 @@ from app.services.usage_tracking import record_usage_event, tool_for_request
 
 logger = logging.getLogger("app.request")
 
+_PROBE_PATHS = {"/", "/health", "/health/checker", "/readiness"}
+
 # Client-supplied request IDs are echoed into log lines and response headers, so they
 # must be sanitized first — otherwise a caller can inject newlines/control characters
 # to forge fake log entries, or send an arbitrarily long value to pad log volume.
@@ -178,6 +180,19 @@ class RequestContextMiddleware:
             status_code,
             duration_ms,
         )
+        # Who is calling? Only for the monitoring probes and for rate-limited (429) responses, so ordinary
+        # users' addresses are never logged. Added 2026-11-24 to identify the source of a burst on
+        # /health/checker and of the once-a-minute GET / seen in the Render logs.
+        if path in _PROBE_PATHS or status_code == 429:
+            forwarded = _header(scope, b"x-forwarded-for")
+            client = (forwarded.split(",")[0].strip() if forwarded else None) or (scope.get("client") or ("?",))[0]
+            logger.info(
+                "probe_caller path=%s status=%s client=%s user_agent=%s",
+                path,
+                status_code,
+                client,
+                (_header(scope, b"user-agent") or "-")[:80],
+            )
 
         tool = tool_for_request(method, path, api_prefix)
         if tool is not None:

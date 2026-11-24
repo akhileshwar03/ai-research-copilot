@@ -18,6 +18,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 LOG_INTERVAL_SECONDS = 120
+GROWTH_EVERY_N_LOGS = 5  # every 10 minutes at the default interval
+GROWTH_TOP_N = 8
 
 _CGROUP_FILES = (
     Path("/sys/fs/cgroup/memory.current"),  # cgroup v2
@@ -65,11 +67,36 @@ def log_memory_usage() -> None:
     )
 
 
+def object_growth_report() -> str:
+    """Top object types by count, with the change since the previous call.
+
+    The point is to find what is growing: a steady rise in one type across reports is the leak.
+    Walks every tracked object (a few tens of ms), so it runs only every GROWTH_EVERY_N_LOGS logs.
+    Search the Render logs for ``object_growth``."""
+    import gc
+    from collections import Counter
+
+    counts = Counter(type(o).__name__ for o in gc.get_objects())
+    previous = getattr(object_growth_report, "_previous", None) or {}
+    object_growth_report._previous = dict(counts)  # type: ignore[attr-defined]
+    # Rank by growth since last time (first call: by size), then show size and delta.
+    ranked = sorted(counts, key=lambda k: (counts[k] - previous.get(k, 0)) if previous else counts[k], reverse=True)
+    parts = [f"{k}={counts[k]}({counts[k] - previous.get(k, 0):+d})" for k in ranked[:GROWTH_TOP_N]]
+    # gc.get_objects() skips containers holding only plain numbers/strings, and every str/bytes. The
+    # allocator-block total sees them all: if RSS climbs while py_blocks stays flat, the growth is native
+    # memory or allocator fragmentation, not Python objects.
+    return f"py_blocks={sys.getallocatedblocks()} " + " ".join(parts)
+
+
 async def run_memory_monitor(interval_seconds: int = LOG_INTERVAL_SECONDS) -> None:
     """Log memory immediately, then every interval, until cancelled. Never raises."""
+    tick = 0
     while True:
         try:
             log_memory_usage()
+            if tick % GROWTH_EVERY_N_LOGS == 0:
+                logger.info("object_growth %s", object_growth_report())
         except Exception:
             logger.exception("memory_usage_log_failed")
+        tick += 1
         await asyncio.sleep(interval_seconds)
