@@ -23,7 +23,7 @@ pymupdf==1.28.2
 pdfplumber==0.11.10
 tiktoken==0.14.0
 beautifulsoup4==4.15.0
-soupsieve==2.10  # security: bs4 lets this float, and the default resolves to a lower, CVE'd version.
+soupsieve==4.1.3  # security: bs4 lets this float, and the default resolves to a lower, CVE'd version.
                  # 2.10 is the newest fix available for Python 3.10; the rest of soupsieve's open CVEs are
                  # fixed only in 3.x/4.x, which need Python >=3.11
 
