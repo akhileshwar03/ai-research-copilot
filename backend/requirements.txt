@@ -32,7 +32,7 @@ boto3==1.43.111
 # runs 3.10) -- can't patch in place without a separate Python runtime upgrade. Every call site
 # (admin/settings.py's background-image and founder-photo uploads) sits behind require_admin, so
 # exploiting one of these needs an already-compromised admin account, not a new entry point.
-Pillow==12.3.0  # admin background-image upload: resize/recompress to a size budget before storing
+Pillow==13.0.0  # admin background-image upload: resize/recompress to a size budget before storing
 
 # Stay on 2.0.x: SQLAlchemy 2.1 makes a plain postgresql:// URL load psycopg3 (not installed), so
 # `alembic upgrade head` fails at startup. Move to 2.1 only with an explicit +psycopg2 URL, tested on Postgres.
